@@ -2474,6 +2474,26 @@ class Rifnote_Search_Admin {
         exit;
     }
 
+    private static function format_cron_status($status) {
+        $status = is_array($status) ? $status : array();
+        $next = (int) ($status['next_run'] ?? 0);
+
+        if (!$next) {
+            return __('not scheduled', 'rifnote-search');
+        }
+
+        $when = get_date_from_gmt(gmdate('Y-m-d H:i:s', $next), 'M j, Y H:i');
+
+        if (!empty($status['is_overdue'])) {
+            $overdue = $status['overdue_label'] ?? '';
+            return $overdue
+                ? sprintf(__('overdue by %1$s; queued time was %2$s', 'rifnote-search'), $overdue, $when)
+                : sprintf(__('overdue; queued time was %s', 'rifnote-search'), $when);
+        }
+
+        return sprintf(__('next run %s', 'rifnote-search'), $when);
+    }
+
     public static function render_page() {
         self::maybe_export_ads_report();
         self::maybe_save_trending();
@@ -2566,6 +2586,7 @@ class Rifnote_Search_Admin {
         $football_usage = Rifnote_Search_Football_API::usage_summary(7);
         $football_recent_usage = Rifnote_Search_Football_API::recent_usage(12);
         $next_ingestion = wp_next_scheduled(Rifnote_Search_Ingestion::CRON_HOOK);
+        $rss_schedule_status = Rifnote_Search_Ingestion::schedule_status();
         $next_thenewsapi = wp_next_scheduled(Rifnote_Search_News_API::CRON_HOOK);
         $thenewsapi_last_run = get_option('rifnote_thenewsapi_last_run', array());
         $customgpt_settings = Rifnote_Search_CustomGPT_Import::settings();
@@ -2620,7 +2641,10 @@ class Rifnote_Search_Admin {
                 <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start;margin-top:16px;">
                     <div class="card">
                         <h2><?php esc_html_e('Today', 'rifnote-search'); ?></h2>
-                        <p><?php echo esc_html(sprintf(__('Next RSS ingestion: %s.', 'rifnote-search'), $next_ingestion ? get_date_from_gmt(gmdate('Y-m-d H:i:s', $next_ingestion), 'M j, H:i') : __('not scheduled', 'rifnote-search'))); ?></p>
+                        <p><?php echo esc_html(sprintf(__('RSS ingestion: %s.', 'rifnote-search'), self::format_cron_status($rss_schedule_status))); ?></p>
+                        <?php if (!empty($rss_schedule_status['is_overdue'])) : ?>
+                            <p style="color:#b32d2e;"><?php esc_html_e('WP-Cron is overdue. Confirm your server cron is calling wp-cron.php and that DISABLE_WP_CRON is not blocking manual runs without a real server cron.', 'rifnote-search'); ?></p>
+                        <?php endif; ?>
                         <p><?php echo esc_html(sprintf(__('Queued notifications: %d. Open Growth to process alerts, newsletters and push.', 'rifnote-search'), (int) $retention_summary['queued_notifications'])); ?></p>
                         <p><?php echo esc_html(sprintf(__('Sponsor requests waiting: %d.', 'rifnote-search'), (int) $launch_summary['sponsor_requests'])); ?></p>
                     </div>
@@ -2824,13 +2848,13 @@ class Rifnote_Search_Admin {
                 $smart_rss_logs = Rifnote_Search_Ingestion::recent_logs(8);
                 ?>
                 <p class="description">
-                    <?php echo esc_html(sprintf(__('Smart RSS queue: %1$d feed(s), cursor %2$d, next run %3$s.', 'rifnote-search'), $smart_rss_total, (int) get_option('rifnote_smart_rss_cursor', 0), $next_ingestion ? get_date_from_gmt(gmdate('Y-m-d H:i:s', (int) $next_ingestion), 'M j, H:i') : __('not scheduled', 'rifnote-search'))); ?>
+                    <?php echo esc_html(sprintf(__('Smart RSS queue: %1$d feed(s), cursor %2$d, schedule %3$s.', 'rifnote-search'), $smart_rss_total, (int) get_option('rifnote_smart_rss_cursor', 0), self::format_cron_status($smart_rss_preview['schedule'] ?? Rifnote_Search_Ingestion::schedule_status()))); ?>
                 </p>
                 <div class="rifnote-admin-card" style="max-width:1120px;margin:12px 0 18px;padding:14px 16px;border:1px solid #dcdcde;background:#fff;border-radius:10px;">
                     <h3 style="margin-top:0;"><?php esc_html_e('Next RSS run preview', 'rifnote-search'); ?></h3>
                     <p>
-                        <strong><?php esc_html_e('Next run:', 'rifnote-search'); ?></strong>
-                        <?php echo esc_html(!empty($smart_rss_preview['next_run']) ? get_date_from_gmt(gmdate('Y-m-d H:i:s', (int) $smart_rss_preview['next_run']), 'M j, Y H:i') : __('not scheduled', 'rifnote-search')); ?>
+                        <strong><?php esc_html_e('Schedule:', 'rifnote-search'); ?></strong>
+                        <?php echo esc_html(self::format_cron_status($smart_rss_preview['schedule'] ?? array())); ?>
                         &nbsp;·&nbsp;
                         <strong><?php esc_html_e('Expected max items:', 'rifnote-search'); ?></strong>
                         <?php echo esc_html(number_format_i18n((int) ($smart_rss_preview['expected_max_items'] ?? 0))); ?>
@@ -2838,6 +2862,9 @@ class Rifnote_Search_Admin {
                         <strong><?php esc_html_e('Feeds this pass:', 'rifnote-search'); ?></strong>
                         <?php echo esc_html(number_format_i18n(count($smart_rss_preview['feeds'] ?? array()))); ?>
                     </p>
+                    <?php if (!empty($smart_rss_preview['schedule']['is_overdue'])) : ?>
+                        <p style="color:#b32d2e;margin-top:0;"><?php esc_html_e('This RSS event is overdue, so WordPress has not fired the queue. Check your real server cron and the wp-cron.php request response.', 'rifnote-search'); ?></p>
+                    <?php endif; ?>
                     <?php if (!empty($smart_rss_preview['feeds'])) : ?>
                         <table class="widefat striped" style="margin-top:10px;">
                             <thead><tr><th><?php esc_html_e('Expected source', 'rifnote-search'); ?></th><th><?php esc_html_e('Expected URL to pull', 'rifnote-search'); ?></th><th><?php esc_html_e('Category', 'rifnote-search'); ?></th><th><?php esc_html_e('Mode', 'rifnote-search'); ?></th><th><?php esc_html_e('Max items', 'rifnote-search'); ?></th></tr></thead>

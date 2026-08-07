@@ -26,6 +26,22 @@ class Rifnote_Search_Ingestion {
         wp_clear_scheduled_hook(self::CRON_HOOK);
     }
 
+    public static function schedule_status() {
+        $next = wp_next_scheduled(self::CRON_HOOK);
+        $now = time();
+        $overdue = $next && $next < $now;
+        $overdue_seconds = $overdue ? $now - (int) $next : 0;
+
+        return array(
+            'next_run' => $next ? (int) $next : 0,
+            'next_run_gmt' => $next ? gmdate(DATE_ATOM, (int) $next) : '',
+            'is_overdue' => (bool) $overdue,
+            'overdue_seconds' => (int) $overdue_seconds,
+            'overdue_label' => $overdue ? self::human_duration($overdue_seconds) : '',
+            'is_locked' => (bool) get_transient('rifnote_rss_ingestion_lock'),
+        );
+    }
+
     public static function cron_schedules($schedules) {
         if (!isset($schedules['rifnote_every_five_minutes'])) {
             $schedules['rifnote_every_five_minutes'] = array(
@@ -42,6 +58,27 @@ class Rifnote_Search_Ingestion {
         }
 
         return $schedules;
+    }
+
+    private static function human_duration($seconds) {
+        $seconds = max(0, (int) $seconds);
+
+        if ($seconds < MINUTE_IN_SECONDS) {
+            return sprintf(_n('%s second', '%s seconds', $seconds, 'rifnote-search'), number_format_i18n($seconds));
+        }
+
+        $minutes = (int) floor($seconds / MINUTE_IN_SECONDS);
+        if ($minutes < 60) {
+            return sprintf(_n('%s minute', '%s minutes', $minutes, 'rifnote-search'), number_format_i18n($minutes));
+        }
+
+        $hours = (int) floor($minutes / 60);
+        if ($hours < 48) {
+            return sprintf(_n('%s hour', '%s hours', $hours, 'rifnote-search'), number_format_i18n($hours));
+        }
+
+        $days = (int) floor($hours / 24);
+        return sprintf(_n('%s day', '%s days', $days, 'rifnote-search'), number_format_i18n($days));
     }
 
     public static function sanitize_smart_rss_list($value) {
@@ -232,6 +269,7 @@ class Rifnote_Search_Ingestion {
         }
 
         return array(
+            'schedule' => self::schedule_status(),
             'next_run' => wp_next_scheduled(self::CRON_HOOK),
             'next_run_gmt' => wp_next_scheduled(self::CRON_HOOK) ? gmdate(DATE_ATOM, (int) wp_next_scheduled(self::CRON_HOOK)) : '',
             'total_feeds' => $total,
