@@ -6,7 +6,7 @@ if (!defined('ABSPATH')) {
 
 class Rifnote_Search_Trending {
     const CRON_HOOK = 'rifnote_search_refresh_trending_topics';
-    const SNAPSHOT_OPTION = 'rifnote_search_trending_snapshot_v3';
+    const SNAPSHOT_OPTION = 'rifnote_search_trending_snapshot_v4';
     const SNAPSHOT_TTL = 900;
     const INTERNET_FEEDS_OPTION = 'rifnote_trending_internet_feeds';
 
@@ -316,6 +316,12 @@ class Rifnote_Search_Trending {
 
     private static function add_score(&$scores, $term, $score, $source = 'generated', $context = array()) {
         $term = self::canonical_topic(self::clean_topic($term));
+        $word_count = count(array_filter(preg_split('/\s+/', $term)));
+
+        if (strlen($term) > 54 || $word_count > 5) {
+            return;
+        }
+
         $slug = self::normalize_slug($term);
         $scope_text = $term . ' ' . (string) ($context['scope'] ?? '');
         $lane = self::trend_lane($scope_text);
@@ -525,16 +531,162 @@ class Rifnote_Search_Trending {
                 }
 
                 $rank_score = max(0.25, ($count - $index) / $count);
-                $terms[] = array(
-                    'topic' => $item['title'],
-                    'scope' => $lane['key'],
-                    'score' => $rank_score * (float) $feed['weight'],
-                    'feed' => $feed['scope'],
-                );
+                $keywords = self::internet_keyword_topics($item['title'], $item['summary'], $feed['scope']);
+
+                foreach ($keywords as $keyword_index => $keyword) {
+                    $terms[] = array(
+                        'topic' => $keyword,
+                        'scope' => $lane['key'],
+                        'score' => $rank_score * (float) $feed['weight'] * max(0.45, 1 - ($keyword_index * 0.18)),
+                        'feed' => $feed['scope'],
+                    );
+                }
             }
         }
 
         return $terms;
+    }
+
+    private static function internet_keyword_topics($title, $summary = '', $scope = '') {
+        $title = self::strip_trend_source_suffix(self::clean_topic($title));
+        $summary = self::strip_trend_source_suffix(self::clean_topic($summary));
+        $text = trim($title . ' ' . $summary . ' ' . self::clean_topic($scope));
+        $found = array();
+
+        foreach (self::trend_keyword_dictionary() as $pattern => $label) {
+            if (preg_match($pattern, $text)) {
+                $found[self::normalize_slug($label)] = $label;
+            }
+        }
+
+        foreach (self::internet_named_terms($title) as $term) {
+            $term = self::compact_trend_phrase($term);
+            if (self::trend_keyword_ok($term)) {
+                $found[self::normalize_slug($term)] = $term;
+            }
+        }
+
+        if (!$found) {
+            $fallback = self::compact_trend_phrase($title);
+            if (self::trend_keyword_ok($fallback)) {
+                $found[self::normalize_slug($fallback)] = $fallback;
+            }
+        }
+
+        return array_slice(array_values($found), 0, 4);
+    }
+
+    private static function internet_named_terms($title) {
+        $title = self::strip_trend_source_suffix($title);
+        $terms = array();
+
+        if (!preg_match_all('/\b[A-Z][a-zA-Z0-9\'-]{2,}(?:\s+[A-Z][a-zA-Z0-9\'-]{2,}){0,2}\b/', $title, $matches)) {
+            return $terms;
+        }
+
+        $blocked = array_flip(array(
+            'BBC', 'Sky Sports', 'The Guardian', 'Channels Television', 'Planet Football', 'Ars Technica',
+            'New Official', 'Premier League', 'World Cup', 'Champions League', 'Carabao Cup',
+        ));
+
+        foreach ($matches[0] as $match) {
+            $match = self::clean_topic($match);
+            if (!$match || isset($blocked[$match])) {
+                continue;
+            }
+
+            $terms[] = $match;
+        }
+
+        return array_values(array_unique($terms));
+    }
+
+    private static function trend_keyword_dictionary() {
+        return array(
+            '/\bfootball\s+gossip\b/i' => 'Football gossip',
+            '/\bscottish\s+football\b/i' => 'Scottish football',
+            '/\bworld\s+cup\b/i' => 'World Cup',
+            '/\bpremier\s+league\b/i' => 'Premier League',
+            '/\bchampions\s+league\b/i' => 'Champions League',
+            '/\bcarabao\s+cup\b/i' => 'Carabao Cup',
+            '/\btransfer(?:\s+news|\s+window)?\b/i' => 'Transfer news',
+            '/\bman(?:chester)?\s+utd\b/i' => 'Man Utd',
+            '/\bmanchester\s+united\b/i' => 'Man Utd',
+            '/\bman\s+city\b/i' => 'Man City',
+            '/\breal\s+madrid\b/i' => 'Real Madrid',
+            '/\bbarcelona\b/i' => 'Barcelona',
+            '/\bliverpool\b/i' => 'Liverpool',
+            '/\barsenal\b/i' => 'Arsenal',
+            '/\bchelsea\b/i' => 'Chelsea',
+            '/\bwrexham\b/i' => 'Wrexham',
+            '/\bpsg\b/i' => 'PSG',
+            '/\bmbappe\b/i' => 'Mbappe',
+            '/\bmessi\b/i' => 'Messi',
+            '/\bosimhen\b/i' => 'Osimhen',
+            '/\bhaaland\b/i' => 'Haaland',
+            '/\bsaka\b/i' => 'Saka',
+            '/\bsuper\s+eagles\b/i' => 'Super Eagles',
+            '/\btinubu\b/i' => 'Tinubu',
+            '/\bpeter\s+obi\b/i' => 'Peter Obi',
+            '/\bigp\b/i' => 'IGP',
+            '/\bosun\b/i' => 'Osun',
+            '/\blagos\b/i' => 'Lagos',
+            '/\bnaira\b/i' => 'Naira',
+            '/\btrump\b/i' => 'Trump',
+            '/\bwhite\s+house\b/i' => 'White House',
+            '/\bnew\s+york\b/i' => 'New York',
+            '/\bgaza\b/i' => 'Gaza',
+            '/\bukraine\b/i' => 'Ukraine',
+            '/\bquake\b/i' => 'Quake',
+            '/\bapple\b/i' => 'Apple',
+            '/\bopenai\b/i' => 'OpenAI',
+            '/\bgoogle\b/i' => 'Google',
+        );
+    }
+
+    private static function strip_trend_source_suffix($text) {
+        $text = self::clean_topic($text);
+        $text = preg_replace('/\s+[-–—|]\s+(BBC|Sky Sports|The Guardian|Channels Television|Planet Football|Ars Technica|Reuters|AP|CNN|Fox News|NBC News|CBS News|Al Jazeera|ESPN|Goal\.com|Daily Post|Punch|Vanguard|Premium Times)$/i', '', $text);
+
+        return trim((string) $text);
+    }
+
+    private static function compact_trend_phrase($text) {
+        $text = self::strip_trend_source_suffix($text);
+        $text = preg_replace('/^[\'"“”‘’][^\'"“”‘’]+[\'"“”‘’]\s*/u', '', $text);
+        $text = preg_replace('/\b\d+\s*[-–]\s*\d+\b/u', ' ', $text);
+        $text = preg_replace('/[^\p{L}\p{N}\s\'-]/u', ' ', $text);
+        $words = preg_split('/\s+/', trim((string) $text));
+        $stop = array_flip(array('a', 'an', 'and', 'are', 'as', 'at', 'be', 'by', 'called', 'for', 'from', 'future', 'how', 'in', 'into', 'is', 'it', 'its', 'live', 'new', 'news', 'of', 'on', 'over', 'says', 'the', 'this', 'to', 'with'));
+        $picked = array();
+
+        foreach ($words as $word) {
+            $clean = trim($word, "'-");
+            if ('' === $clean || isset($stop[strtolower($clean)])) {
+                continue;
+            }
+            $picked[] = $clean;
+            if (count($picked) >= 4) {
+                break;
+            }
+        }
+
+        return self::clean_topic(implode(' ', $picked));
+    }
+
+    private static function trend_keyword_ok($term) {
+        $term = self::clean_topic($term);
+        if (!$term || strlen($term) > 42) {
+            return false;
+        }
+
+        $words = preg_split('/\s+/', $term);
+        if (count($words) > 4) {
+            return false;
+        }
+
+        $slug = self::normalize_slug($term);
+        return $slug && !self::is_stop_topic($slug);
     }
 
     private static function parse_internet_feeds() {

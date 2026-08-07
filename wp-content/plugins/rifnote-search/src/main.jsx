@@ -5772,10 +5772,10 @@ function TrendingTopics({ state, live = false }) {
 
   return (
     <Card className={live ? 'rs-live-card' : ''}>
-      <CardHeader title="Trending topics" action={<LiveBadge label={live ? 'Live' : 'Hot'} date={updatedAt} />} />
+      <CardHeader title="Trending" action={<LiveBadge label={live ? 'Live' : 'Hot'} date={updatedAt} />} />
       <div className="rs-pills">
         {topics.map((topic) => <button key={topic.slug || topic.topic} type="button" onClick={() => state?.setQuery?.(topic.topic)}>{topic.topic}</button>)}
-        {!topics.length ? <span className="rs-empty-mini">{loading ? 'Checking the latest topics...' : 'No trending topics saved yet.'}</span> : null}
+        {!topics.length ? <span className="rs-empty-mini">{loading ? 'Checking the latest keywords...' : 'No trending keywords saved yet.'}</span> : null}
       </div>
     </Card>
   );

@@ -238,10 +238,10 @@ class Rifnote_Search_Ingestion {
             return $result;
         }
 
+        $robots_warning = '';
         if (!Rifnote_Search_Legal::robots_allowed($feed_url)) {
-            $result['error'] = __('Feed blocked by robots.txt for RifnoteBot.', 'rifnote-search');
-            self::update_feed_health($publisher, 'robots_blocked', $result['error'], 0);
-            return $result;
+            $robots_warning = __('RSS robots.txt warning recorded; continuing because this is a syndication feed.', 'rifnote-search');
+            $result['warning'] = $robots_warning;
         }
 
         $response = wp_remote_get($feed_url, array(
@@ -274,8 +274,28 @@ class Rifnote_Search_Ingestion {
 
         $items_per_feed = max(1, min(30, absint(get_option('rifnote_smart_rss_items_per_feed', 10))));
         foreach (array_slice($items, 0, $items_per_feed) as $item) {
-            if (self::already_exists($item['link'], $item['title'])) {
+            $existing = self::existing_item($item['link'], $item['title']);
+
+            if (!empty($existing['post_id'])) {
                 $result['duplicates']++;
+                continue;
+            }
+
+            if (!empty($existing['submission'])) {
+                $recovered = self::recover_existing_submission($publisher, $existing['submission']);
+
+                if (is_wp_error($recovered)) {
+                    $result['error'] = $recovered->get_error_message();
+                    continue;
+                }
+
+                $result['duplicates']++;
+
+                if (!empty($recovered['published'])) {
+                    $result['published']++;
+                    $result['recovered'] = (int) ($result['recovered'] ?? 0) + 1;
+                }
+
                 continue;
             }
 
@@ -294,7 +314,7 @@ class Rifnote_Search_Ingestion {
         }
 
         $result['ok'] = true;
-        self::update_feed_health($publisher, 'ok', '', $result['created']);
+        self::update_feed_health($publisher, $robots_warning ? 'robots_warning' : 'ok', $robots_warning, $result['created']);
 
         return $result;
     }
@@ -453,6 +473,76 @@ class Rifnote_Search_Ingestion {
         }
 
         return false;
+    }
+
+    private static function existing_item($url, $headline = '') {
+        global $wpdb;
+
+        $url = esc_url_raw((string) $url);
+        $normalized = Rifnote_Search_Source_Meta::normalize_headline($headline);
+        $result = array(
+            'post_id' => 0,
+            'submission' => null,
+        );
+
+        if ($url) {
+            $post_id = $wpdb->get_var($wpdb->prepare(
+                "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = 'original_url' AND meta_value = %s LIMIT 1",
+                $url
+            ));
+
+            if ($post_id) {
+                $result['post_id'] = (int) $post_id;
+                return $result;
+            }
+
+            $submission = $wpdb->get_row($wpdb->prepare(
+                "SELECT * FROM " . Rifnote_Search_Publishers::submissions_table() . " WHERE original_url = %s ORDER BY id DESC LIMIT 1",
+                $url
+            ), ARRAY_A);
+
+            if ($submission) {
+                $result['submission'] = $submission;
+                return $result;
+            }
+        }
+
+        if ($normalized) {
+            $post_id = $wpdb->get_var($wpdb->prepare(
+                "SELECT post_id FROM {$wpdb->postmeta} WHERE meta_key = 'normalized_headline' AND meta_value = %s LIMIT 1",
+                $normalized
+            ));
+
+            if ($post_id) {
+                $result['post_id'] = (int) $post_id;
+            }
+        }
+
+        return $result;
+    }
+
+    private static function recover_existing_submission($publisher, $submission) {
+        if (empty($publisher['auto_approve'])) {
+            return array('published' => false);
+        }
+
+        if (!empty($submission['wp_post_id']) && 'publish' === get_post_status((int) $submission['wp_post_id'])) {
+            return array('published' => false);
+        }
+
+        $post_id = Rifnote_Search_Publishers::approve_submission((int) $submission['id'], 'publish', 'rss');
+
+        if (is_wp_error($post_id)) {
+            return $post_id;
+        }
+
+        Rifnote_Search_Clustering::assign_post_cluster($post_id, get_post($post_id), true);
+        Rifnote_Search_Index::index_post($post_id);
+
+        return array(
+            'published' => true,
+            'post_id' => (int) $post_id,
+        );
     }
 
     public static function create_submission_from_feed_item($publisher, $item) {

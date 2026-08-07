@@ -920,6 +920,18 @@ class Rifnote_Search_Publishers {
 
         if (!empty($submission['wp_post_id'])) {
             $post_id = (int) $submission['wp_post_id'];
+            $target_status = in_array($post_status, array('draft', 'publish', 'pending'), true) ? $post_status : 'draft';
+
+            if ($target_status !== get_post_status($post_id)) {
+                $updated_post_id = wp_update_post(array(
+                    'ID' => $post_id,
+                    'post_status' => $target_status,
+                ), true);
+
+                if (is_wp_error($updated_post_id)) {
+                    return $updated_post_id;
+                }
+            }
         } else {
             $post_id = wp_insert_post(array(
                 'post_type' => 'post',
