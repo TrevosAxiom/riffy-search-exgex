@@ -136,11 +136,9 @@ class Rifnote_Search_GitHub_Updater {
         }
 
         $settings = self::settings();
-        $url = 'https://api.github.com/repos/' . self::api_repo_path($settings['repo']) . '/releases/latest';
-        $response = wp_remote_get($url, array(
-            'timeout' => 15,
-            'headers' => self::github_headers(),
-        ));
+        $repo_path = self::api_repo_path($settings['repo']);
+        $url = 'https://api.github.com/repos/' . $repo_path . '/releases/latest';
+        $response = self::github_get($url);
 
         if (is_wp_error($response)) {
             self::store_error($response->get_error_message());
@@ -151,8 +149,38 @@ class Rifnote_Search_GitHub_Updater {
         $code = (int) wp_remote_retrieve_response_code($response);
         $body = json_decode((string) wp_remote_retrieve_body($response), true);
 
+        if (404 === $code) {
+            $fallback = self::github_get('https://api.github.com/repos/' . $repo_path . '/releases?per_page=5');
+
+            if (is_wp_error($fallback)) {
+                self::store_error($fallback->get_error_message());
+                set_site_transient(self::TRANSIENT_KEY, $fallback, 5 * MINUTE_IN_SECONDS);
+                return $fallback;
+            }
+
+            $fallback_code = (int) wp_remote_retrieve_response_code($fallback);
+            $fallback_body = json_decode((string) wp_remote_retrieve_body($fallback), true);
+
+            if (200 === $fallback_code && is_array($fallback_body) && !empty($fallback_body[0]) && is_array($fallback_body[0])) {
+                $body = $fallback_body[0];
+                $code = 200;
+            } elseif (200 === $fallback_code && is_array($fallback_body) && empty($fallback_body)) {
+                $message = sprintf(__('GitHub can see %s, but no Releases exist yet. Push a v* tag and let the release workflow attach %s.', 'rifnote-search'), $settings['repo'], $settings['asset_name']);
+                self::store_error($message);
+                $error = new WP_Error('rifnote_github_no_releases', $message);
+                set_site_transient(self::TRANSIENT_KEY, $error, 5 * MINUTE_IN_SECONDS);
+                return $error;
+            } else {
+                $message = self::github_http_error_message($fallback_code, $settings);
+                self::store_error($message);
+                $error = new WP_Error('rifnote_github_release_error', $message);
+                set_site_transient(self::TRANSIENT_KEY, $error, 5 * MINUTE_IN_SECONDS);
+                return $error;
+            }
+        }
+
         if (200 !== $code || !is_array($body)) {
-            $message = sprintf(__('GitHub returned HTTP %d while checking releases.', 'rifnote-search'), $code);
+            $message = self::github_http_error_message($code, $settings);
             self::store_error($message);
             $error = new WP_Error('rifnote_github_release_error', $message);
             set_site_transient(self::TRANSIENT_KEY, $error, 5 * MINUTE_IN_SECONDS);
@@ -182,6 +210,31 @@ class Rifnote_Search_GitHub_Updater {
         update_option('rifnote_github_last_error', '', false);
         set_site_transient(self::TRANSIENT_KEY, $release, 15 * MINUTE_IN_SECONDS);
         return $release;
+    }
+
+    private static function github_get($url) {
+        return wp_remote_get($url, array(
+            'timeout' => 15,
+            'headers' => self::github_headers(),
+        ));
+    }
+
+    private static function github_http_error_message($code, $settings) {
+        $repo = $settings['repo'] ?? self::DEFAULT_REPO;
+
+        if (404 === (int) $code) {
+            if (empty($settings['access_token'])) {
+                return sprintf(__('GitHub returned HTTP 404 for %s. If this repository is private, add a GitHub access token with contents read access. If it is public, confirm the repo name and that a Release exists.', 'rifnote-search'), $repo);
+            }
+
+            return sprintf(__('GitHub returned HTTP 404 for %s even with a token. Confirm the token can access the repository and that a Release exists.', 'rifnote-search'), $repo);
+        }
+
+        if (401 === (int) $code || 403 === (int) $code) {
+            return sprintf(__('GitHub returned HTTP %d for %s. Check the access token permissions and API rate limits.', 'rifnote-search'), (int) $code, $repo);
+        }
+
+        return sprintf(__('GitHub returned HTTP %d while checking releases for %s.', 'rifnote-search'), (int) $code, $repo);
     }
 
     private static function find_asset($release, $asset_name) {

@@ -671,7 +671,7 @@ class Rifnote_Search_Admin {
 
     private static function render_settings_family_field($option, $field) {
         $type = $field['type'] ?? 'text';
-        $value = get_option($option, '');
+        $value = self::settings_option_value($option);
         echo '<tr><th scope="row"><label for="' . esc_attr($option) . '">' . esc_html($field['label']) . '</label></th><td>';
 
         if ('checkbox' === $type) {
@@ -722,8 +722,34 @@ class Rifnote_Search_Admin {
                 continue;
             }
 
-            self::render_hidden_option_field($option, get_option($option, ''));
+            self::render_hidden_option_field($option, self::settings_option_value($option));
         }
+    }
+
+    private static function settings_option_value($option) {
+        $missing = '__rifnote_missing_option__';
+        $value = get_option($option, $missing);
+
+        if ($missing === $value) {
+            return self::settings_option_default($option);
+        }
+
+        if (in_array($option, array('rifnote_github_repo', 'rifnote_github_asset_name'), true) && '' === trim((string) $value)) {
+            return self::settings_option_default($option);
+        }
+
+        return $value;
+    }
+
+    private static function settings_option_default($option) {
+        $defaults = array(
+            'rifnote_github_updater_enabled' => true,
+            'rifnote_github_repo' => Rifnote_Search_GitHub_Updater::DEFAULT_REPO,
+            'rifnote_github_asset_name' => Rifnote_Search_GitHub_Updater::DEFAULT_ASSET,
+            'rifnote_github_access_token' => '',
+        );
+
+        return array_key_exists($option, $defaults) ? $defaults[$option] : '';
     }
 
     private static function registered_options_for_group($group) {
