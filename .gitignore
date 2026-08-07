@@ -1,0 +1,47 @@
+# Track the Rifnote project code, not the full local WordPress install.
+/*
+
+# Keep repository metadata.
+!.gitignore
+
+# Track the Rifnote Search plugin.
+!wp-content/
+wp-content/*
+!wp-content/plugins/
+wp-content/plugins/*
+!wp-content/plugins/rifnote-search/
+!wp-content/plugins/rifnote-search/**
+
+# Optional: uncomment if this theme must be versioned later.
+# !wp-content/themes/
+# wp-content/themes/*
+# !wp-content/themes/wp-plugin-mobile-theme/
+# !wp-content/themes/wp-plugin-mobile-theme/**
+
+# Local/system files.
+.DS_Store
+local-*.php
+*.log
+*.sql
+*.sqlite
+*.zip
+
+# WordPress/user-generated content.
+wp-config.php
+wp-content/uploads/
+wp-content/cache/
+wp-content/upgrade/
+wp-content/backup*/
+wp-content/backups*/
+wp-content/debug.log
+
+# Dependency caches.
+node_modules/
+vendor/
+.env
+.env.*
+
+# Keep plugin build output versioned for WordPress deployment, but ignore heavy deps.
+wp-content/plugins/rifnote-search/node_modules/
+wp-content/plugins/rifnote-search/.env
+wp-content/plugins/rifnote-search/.env.*
