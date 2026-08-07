@@ -2820,10 +2820,78 @@ class Rifnote_Search_Admin {
                 <?php
                 $smart_rss_statuses = Rifnote_Search_Ingestion::smart_statuses(8);
                 $smart_rss_total = count(Rifnote_Search_Ingestion::smart_feeds());
+                $smart_rss_preview = Rifnote_Search_Ingestion::queue_preview();
+                $smart_rss_logs = Rifnote_Search_Ingestion::recent_logs(8);
                 ?>
                 <p class="description">
                     <?php echo esc_html(sprintf(__('Smart RSS queue: %1$d feed(s), cursor %2$d, next run %3$s.', 'rifnote-search'), $smart_rss_total, (int) get_option('rifnote_smart_rss_cursor', 0), $next_ingestion ? get_date_from_gmt(gmdate('Y-m-d H:i:s', (int) $next_ingestion), 'M j, H:i') : __('not scheduled', 'rifnote-search'))); ?>
                 </p>
+                <div class="rifnote-admin-card" style="max-width:1120px;margin:12px 0 18px;padding:14px 16px;border:1px solid #dcdcde;background:#fff;border-radius:10px;">
+                    <h3 style="margin-top:0;"><?php esc_html_e('Next RSS run preview', 'rifnote-search'); ?></h3>
+                    <p>
+                        <strong><?php esc_html_e('Next run:', 'rifnote-search'); ?></strong>
+                        <?php echo esc_html(!empty($smart_rss_preview['next_run']) ? get_date_from_gmt(gmdate('Y-m-d H:i:s', (int) $smart_rss_preview['next_run']), 'M j, Y H:i') : __('not scheduled', 'rifnote-search')); ?>
+                        &nbsp;·&nbsp;
+                        <strong><?php esc_html_e('Expected max items:', 'rifnote-search'); ?></strong>
+                        <?php echo esc_html(number_format_i18n((int) ($smart_rss_preview['expected_max_items'] ?? 0))); ?>
+                        &nbsp;·&nbsp;
+                        <strong><?php esc_html_e('Feeds this pass:', 'rifnote-search'); ?></strong>
+                        <?php echo esc_html(number_format_i18n(count($smart_rss_preview['feeds'] ?? array()))); ?>
+                    </p>
+                    <?php if (!empty($smart_rss_preview['feeds'])) : ?>
+                        <table class="widefat striped" style="margin-top:10px;">
+                            <thead><tr><th><?php esc_html_e('Expected source', 'rifnote-search'); ?></th><th><?php esc_html_e('Expected URL to pull', 'rifnote-search'); ?></th><th><?php esc_html_e('Category', 'rifnote-search'); ?></th><th><?php esc_html_e('Mode', 'rifnote-search'); ?></th><th><?php esc_html_e('Max items', 'rifnote-search'); ?></th></tr></thead>
+                            <tbody>
+                                <?php foreach (array_slice($smart_rss_preview['feeds'], 0, 12) as $feed) : ?>
+                                    <tr>
+                                        <td><?php echo esc_html($feed['name'] ?: wp_parse_url($feed['feed_url'], PHP_URL_HOST)); ?></td>
+                                        <td><code><?php echo esc_html($feed['feed_url']); ?></code></td>
+                                        <td><?php echo esc_html($feed['category'] ?: __('Auto', 'rifnote-search')); ?></td>
+                                        <td><?php echo esc_html($feed['mode'] ?? 'publish'); ?></td>
+                                        <td><?php echo esc_html(number_format_i18n((int) ($smart_rss_preview['items_per_feed'] ?? 0))); ?></td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                        <?php if (count($smart_rss_preview['feeds']) > 12) : ?>
+                            <p class="description"><?php echo esc_html(sprintf(__('Showing first 12 of %d feeds expected in the next pass.', 'rifnote-search'), count($smart_rss_preview['feeds']))); ?></p>
+                        <?php endif; ?>
+                    <?php endif; ?>
+                </div>
+                <?php if ($smart_rss_logs) : ?>
+                    <h3><?php esc_html_e('Recent RSS run log', 'rifnote-search'); ?></h3>
+                    <table class="widefat striped" style="max-width:1120px;margin:10px 0 22px;">
+                        <thead><tr><th><?php esc_html_e('Time', 'rifnote-search'); ?></th><th><?php esc_html_e('Status', 'rifnote-search'); ?></th><th><?php esc_html_e('Summary', 'rifnote-search'); ?></th><th><?php esc_html_e('Expected URLs', 'rifnote-search'); ?></th></tr></thead>
+                        <tbody>
+                            <?php foreach ($smart_rss_logs as $log) : $summary = is_array($log['summary'] ?? null) ? $log['summary'] : array(); ?>
+                                <tr>
+                                    <td><?php echo esc_html(!empty($log['created_at']) ? get_date_from_gmt($log['created_at'], 'M j, Y H:i') : ''); ?></td>
+                                    <td><?php echo esc_html($log['status'] ?? 'info'); ?></td>
+                                    <td>
+                                        <strong><?php echo esc_html($log['message'] ?? ''); ?></strong><br />
+                                        <small>
+                                            <?php echo esc_html(sprintf(
+                                                __('Checked %1$d · Created %2$d · Published %3$d · Recovered %4$d · Duplicates %5$d · Errors %6$d · Expected max %7$d', 'rifnote-search'),
+                                                (int) ($summary['checked'] ?? 0),
+                                                (int) ($summary['created'] ?? 0),
+                                                (int) ($summary['published'] ?? 0),
+                                                (int) ($summary['recovered'] ?? 0),
+                                                (int) ($summary['duplicates'] ?? 0),
+                                                (int) ($summary['errors'] ?? 0),
+                                                (int) ($summary['expected_max_items'] ?? 0)
+                                            )); ?>
+                                        </small>
+                                    </td>
+                                    <td>
+                                        <?php foreach (array_slice($summary['expected_urls'] ?? array(), 0, 4) as $expected) : ?>
+                                            <code style="display:block;margin-bottom:4px;"><?php echo esc_html($expected['feed_url'] ?? ''); ?></code>
+                                        <?php endforeach; ?>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                <?php endif; ?>
                 <?php if ($smart_rss_statuses) : ?>
                     <table class="widefat striped" style="max-width:1120px;margin:10px 0 22px;">
                         <thead><tr><th><?php esc_html_e('Feed', 'rifnote-search'); ?></th><th><?php esc_html_e('Status', 'rifnote-search'); ?></th><th><?php esc_html_e('Indexed', 'rifnote-search'); ?></th><th><?php esc_html_e('Last checked', 'rifnote-search'); ?></th><th><?php esc_html_e('Error', 'rifnote-search'); ?></th></tr></thead>

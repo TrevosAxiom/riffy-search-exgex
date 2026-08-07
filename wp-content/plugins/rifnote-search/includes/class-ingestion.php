@@ -7,6 +7,7 @@ if (!defined('ABSPATH')) {
 class Rifnote_Search_Ingestion {
     const CRON_HOOK = 'rifnote_search_ingest_feeds';
     const SMART_STATUS_OPTION = 'rifnote_smart_rss_feed_status';
+    const LOG_OPTION = 'rifnote_smart_rss_run_log';
 
     public static function schedule() {
         $schedule = get_option('rifnote_smart_rss_enabled', true) ? 'rifnote_every_five_minutes' : 'rifnote_every_fifteen_minutes';
@@ -143,7 +144,13 @@ class Rifnote_Search_Ingestion {
 
     public static function run_once($limit = 0) {
         if (get_transient('rifnote_rss_ingestion_lock')) {
-            return array('locked' => true, 'ran_at' => gmdate(DATE_ATOM));
+            $locked = array('locked' => true, 'ran_at' => gmdate(DATE_ATOM));
+            self::append_log(array(
+                'status' => 'locked',
+                'message' => __('RSS run skipped because another run is still locked.', 'rifnote-search'),
+                'summary' => $locked,
+            ));
+            return $locked;
         }
 
         set_transient('rifnote_rss_ingestion_lock', 1, 4 * MINUTE_IN_SECONDS);
@@ -152,33 +159,88 @@ class Rifnote_Search_Ingestion {
         $limit = max(1, min(100, $limit));
         $feeds = self::queue_feeds();
         $publishers = self::next_feed_batch($feeds, $limit);
+        $items_per_feed = max(1, min(30, absint(get_option('rifnote_smart_rss_items_per_feed', 10))));
         $summary = array(
             'checked' => 0,
             'created' => 0,
             'published' => 0,
             'duplicates' => 0,
             'errors' => 0,
+            'recovered' => 0,
             'total_feeds' => count($feeds),
             'batch_size' => $limit,
+            'items_per_feed' => $items_per_feed,
+            'expected_max_items' => count($publishers) * $items_per_feed,
+            'expected_urls' => array_map(array(__CLASS__, 'feed_log_item'), $publishers),
             'cursor' => (int) get_option('rifnote_smart_rss_cursor', 0),
             'feeds' => array(),
             'ran_at' => gmdate(DATE_ATOM),
         );
 
-        foreach ($publishers as $publisher) {
-            $result = self::ingest_publisher($publisher);
-            $summary['checked']++;
-            $summary['created'] += (int) $result['created'];
-            $summary['published'] += (int) $result['published'];
-            $summary['duplicates'] += (int) $result['duplicates'];
-            $summary['errors'] += !empty($result['ok']) ? 0 : 1;
-            $summary['feeds'][] = $result;
+        try {
+            foreach ($publishers as $publisher) {
+                $result = self::ingest_publisher($publisher);
+                $summary['checked']++;
+                $summary['created'] += (int) $result['created'];
+                $summary['published'] += (int) $result['published'];
+                $summary['duplicates'] += (int) $result['duplicates'];
+                $summary['recovered'] += (int) ($result['recovered'] ?? 0);
+                $summary['errors'] += !empty($result['ok']) ? 0 : 1;
+                $summary['feeds'][] = $result;
+            }
+        } catch (Throwable $error) {
+            $summary['errors']++;
+            $summary['fatal_error'] = $error->getMessage();
+        } finally {
+            update_option('rifnote_search_ingestion_last_run', $summary, false);
+            self::append_log(array(
+                'status' => !empty($summary['fatal_error']) ? 'error' : ($summary['errors'] ? 'warning' : 'ok'),
+                'message' => !empty($summary['fatal_error'])
+                    ? sprintf(__('RSS run stopped unexpectedly: %s', 'rifnote-search'), $summary['fatal_error'])
+                    : sprintf(
+                        /* translators: 1: checked feeds, 2: created stories, 3: published stories. */
+                        __('Checked %1$d feed(s), created %2$d, published %3$d.', 'rifnote-search'),
+                        (int) $summary['checked'],
+                        (int) $summary['created'],
+                        (int) $summary['published']
+                    ),
+                'summary' => $summary,
+            ));
+            delete_transient('rifnote_rss_ingestion_lock');
         }
 
-        update_option('rifnote_search_ingestion_last_run', $summary, false);
-        delete_transient('rifnote_rss_ingestion_lock');
-
         return $summary;
+    }
+
+    public static function queue_preview($limit = 0) {
+        $limit = $limit ? absint($limit) : absint(get_option('rifnote_smart_rss_batch_size', 25));
+        $limit = max(1, min(100, $limit));
+        $feeds = self::queue_feeds();
+        $total = count($feeds);
+        $cursor = (int) get_option('rifnote_smart_rss_cursor', 0);
+        $items_per_feed = max(1, min(30, absint(get_option('rifnote_smart_rss_items_per_feed', 10))));
+        $batch = array();
+
+        if ($total) {
+            if ($cursor < 0 || $cursor >= $total) {
+                $cursor = 0;
+            }
+
+            for ($i = 0; $i < min($limit, $total); $i++) {
+                $batch[] = $feeds[($cursor + $i) % $total];
+            }
+        }
+
+        return array(
+            'next_run' => wp_next_scheduled(self::CRON_HOOK),
+            'next_run_gmt' => wp_next_scheduled(self::CRON_HOOK) ? gmdate(DATE_ATOM, (int) wp_next_scheduled(self::CRON_HOOK)) : '',
+            'total_feeds' => $total,
+            'cursor' => $cursor,
+            'batch_size' => $limit,
+            'items_per_feed' => $items_per_feed,
+            'expected_max_items' => count($batch) * $items_per_feed,
+            'feeds' => array_map(array(__CLASS__, 'feed_log_item'), $batch),
+        );
     }
 
     private static function queue_feeds() {
@@ -213,6 +275,15 @@ class Rifnote_Search_Ingestion {
         return $batch;
     }
 
+    private static function feed_log_item($publisher) {
+        return array(
+            'name' => Rifnote_Search_Source_Meta::normalize_text($publisher['publisher_name'] ?? ''),
+            'feed_url' => esc_url_raw($publisher['rss_feed_url'] ?? ''),
+            'category' => Rifnote_Search_Source_Meta::normalize_text($publisher['categories'] ?? ''),
+            'mode' => !empty($publisher['auto_approve']) ? 'publish' : 'review',
+        );
+    }
+
     public static function ingest_publisher($publisher) {
         $feed_url = esc_url_raw((string) ($publisher['rss_feed_url'] ?? ''));
         $result = array(
@@ -223,6 +294,9 @@ class Rifnote_Search_Ingestion {
             'created' => 0,
             'published' => 0,
             'duplicates' => 0,
+            'recovered' => 0,
+            'fetched_items' => 0,
+            'expected_items' => max(1, min(30, absint(get_option('rifnote_smart_rss_items_per_feed', 10)))),
             'error' => '',
         );
 
@@ -273,6 +347,7 @@ class Rifnote_Search_Ingestion {
         }
 
         $items_per_feed = max(1, min(30, absint(get_option('rifnote_smart_rss_items_per_feed', 10))));
+        $result['fetched_items'] = count($items);
         foreach (array_slice($items, 0, $items_per_feed) as $item) {
             $existing = self::existing_item($item['link'], $item['title']);
 
@@ -293,7 +368,7 @@ class Rifnote_Search_Ingestion {
 
                 if (!empty($recovered['published'])) {
                     $result['published']++;
-                    $result['recovered'] = (int) ($result['recovered'] ?? 0) + 1;
+                    $result['recovered']++;
                 }
 
                 continue;
@@ -609,6 +684,27 @@ class Rifnote_Search_Ingestion {
             'submission_id' => $submission_id,
             'published' => $published,
         );
+    }
+
+    public static function recent_logs($limit = 12) {
+        $logs = get_option(self::LOG_OPTION, array());
+        $logs = is_array($logs) ? $logs : array();
+
+        return array_slice($logs, 0, max(1, min(50, absint($limit))));
+    }
+
+    private static function append_log($entry) {
+        $logs = get_option(self::LOG_OPTION, array());
+        $logs = is_array($logs) ? $logs : array();
+        $entry = array(
+            'created_at' => current_time('mysql', true),
+            'status' => sanitize_key($entry['status'] ?? 'info'),
+            'message' => sanitize_text_field($entry['message'] ?? ''),
+            'summary' => is_array($entry['summary'] ?? null) ? $entry['summary'] : array(),
+        );
+
+        array_unshift($logs, $entry);
+        update_option(self::LOG_OPTION, array_slice($logs, 0, 50), false);
     }
 
     private static function update_feed_health($publisher, $status, $error, $created) {

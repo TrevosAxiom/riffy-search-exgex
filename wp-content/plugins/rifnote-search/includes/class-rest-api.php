@@ -1419,6 +1419,8 @@ class Rifnote_Search_REST_API {
             'feeds' => Rifnote_Search_Ingestion::feed_health_summary(50),
             'last_run' => get_option('rifnote_search_ingestion_last_run', array()),
             'next_run' => wp_next_scheduled(Rifnote_Search_Ingestion::CRON_HOOK),
+            'queue_preview' => Rifnote_Search_Ingestion::queue_preview(),
+            'recent_logs' => Rifnote_Search_Ingestion::recent_logs(12),
             'smart_rss' => array(
                 'enabled' => (bool) get_option('rifnote_smart_rss_enabled', true),
                 'total_feeds' => count(Rifnote_Search_Ingestion::smart_feeds()),
