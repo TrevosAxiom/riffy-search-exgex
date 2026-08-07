@@ -4,6 +4,11 @@
 # Keep repository metadata.
 !.gitignore
 
+# Track release automation.
+!.github/
+!.github/workflows/
+!.github/workflows/**
+
 # Track the Rifnote Search plugin.
 !wp-content/
 wp-content/*

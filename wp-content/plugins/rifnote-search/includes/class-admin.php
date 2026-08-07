@@ -376,6 +376,7 @@ class Rifnote_Search_Admin {
             'rifnote-search-settings-feeds' => array('title' => __('Feeds & API Settings', 'rifnote-search'), 'menu' => __('Settings: Feeds & APIs', 'rifnote-search'), 'section' => 'settings-feeds'),
             'rifnote-search-settings-live' => array('title' => __('Live Data Settings', 'rifnote-search'), 'menu' => __('Settings: Live Data', 'rifnote-search'), 'section' => 'settings-live'),
             'rifnote-search-settings-delivery' => array('title' => __('Delivery & App Settings', 'rifnote-search'), 'menu' => __('Settings: Delivery & App', 'rifnote-search'), 'section' => 'settings-delivery'),
+            'rifnote-search-settings-deployment' => array('title' => __('Deployment & Updates Settings', 'rifnote-search'), 'menu' => __('Settings: Deployment', 'rifnote-search'), 'section' => 'settings-deployment'),
             'rifnote-search-source-logos' => array('title' => __('Source Logos', 'rifnote-search'), 'menu' => __('Source Logos', 'rifnote-search'), 'section' => 'source-logos'),
             'rifnote-search-discovery' => array('title' => __('Search & Discovery', 'rifnote-search'), 'menu' => __('Search & Discovery', 'rifnote-search'), 'section' => 'discovery'),
             'rifnote-search-aggregation' => array('title' => __('Manual Aggregation', 'rifnote-search'), 'menu' => __('Manual Aggregation', 'rifnote-search'), 'section' => 'aggregation'),
@@ -566,6 +567,17 @@ class Rifnote_Search_Admin {
                     'rifnote_release_notes' => array('label' => __('Release notes', 'rifnote-search'), 'type' => 'textarea', 'rows' => 6),
                 ),
             ),
+            'deployment' => array(
+                'title' => __('Deployment & Updates', 'rifnote-search'),
+                'description' => __('Let WordPress update Rifnote Search from tagged GitHub Releases instead of manual plugin uploads.', 'rifnote-search'),
+                'section' => 'settings-deployment',
+                'fields' => array(
+                    'rifnote_github_updater_enabled' => array('label' => __('Enable GitHub updater', 'rifnote-search'), 'type' => 'checkbox', 'description' => __('When enabled, WordPress plugin updates will check the configured GitHub Releases feed.', 'rifnote-search')),
+                    'rifnote_github_repo' => array('label' => __('GitHub repository', 'rifnote-search'), 'type' => 'text', 'description' => __('Use owner/repo, for example TrevosAxiom/riffy-search-exgex.', 'rifnote-search')),
+                    'rifnote_github_asset_name' => array('label' => __('Release zip asset name', 'rifnote-search'), 'type' => 'text', 'description' => __('The release must include this zip asset. The bundled workflow creates rifnote-search.zip.', 'rifnote-search')),
+                    'rifnote_github_access_token' => array('label' => __('GitHub access token', 'rifnote-search'), 'type' => 'password', 'description' => __('Optional. Use a fine-grained token with repository contents read access if the repo is private.', 'rifnote-search')),
+                ),
+            ),
         );
     }
 
@@ -600,6 +612,9 @@ class Rifnote_Search_Admin {
         }
 
         echo '<div class="card" style="max-width:1120px;"><h2>' . esc_html($family['title']) . '</h2><p>' . esc_html($family['description']) . '</p></div>';
+        if ('settings-deployment' === $section) {
+            self::render_github_updater_status();
+        }
         echo '<form method="post" action="options.php" style="max-width:1120px;margin-top:16px;">';
         settings_fields('rifnote_search_settings');
         self::render_preserved_settings_fields(array_keys($family['fields']));
@@ -610,6 +625,48 @@ class Rifnote_Search_Admin {
         echo '</tbody></table></div>';
         submit_button(__('Save settings', 'rifnote-search'));
         echo '</form>';
+    }
+
+    private static function render_github_updater_status() {
+        if (isset($_POST['rifnote_github_check_now']) && check_admin_referer('rifnote_github_check_now')) {
+            delete_site_transient(Rifnote_Search_GitHub_Updater::TRANSIENT_KEY);
+            Rifnote_Search_GitHub_Updater::latest_release(true);
+        }
+
+        $release = Rifnote_Search_GitHub_Updater::latest_release(false);
+        $settings = Rifnote_Search_GitHub_Updater::settings();
+        $last_checked = get_option('rifnote_github_last_checked', '');
+        $last_error = get_option('rifnote_github_last_error', '');
+
+        echo '<div class="card" style="max-width:1120px;margin-top:16px;">';
+        echo '<h2 style="margin-top:0;">' . esc_html__('GitHub updater health', 'rifnote-search') . '</h2>';
+        echo '<p><strong>' . esc_html__('Current plugin version:', 'rifnote-search') . '</strong> ' . esc_html(RIFNOTE_SEARCH_VERSION) . '</p>';
+        echo '<p><strong>' . esc_html__('Repository:', 'rifnote-search') . '</strong> ' . esc_html($settings['repo']) . '</p>';
+
+        if (is_wp_error($release)) {
+            echo '<p style="color:#b42318;"><strong>' . esc_html__('Latest check:', 'rifnote-search') . '</strong> ' . esc_html($release->get_error_message()) . '</p>';
+        } elseif (is_array($release) && !empty($release['version'])) {
+            echo '<p><strong>' . esc_html__('Latest release:', 'rifnote-search') . '</strong> ' . esc_html($release['tag_name']) . ' (' . esc_html($release['asset_name']) . ')</p>';
+            if (version_compare($release['version'], RIFNOTE_SEARCH_VERSION, '>')) {
+                echo '<p style="color:#047857;"><strong>' . esc_html__('Update available.', 'rifnote-search') . '</strong> ' . esc_html__('Open Plugins to run the update through WordPress.', 'rifnote-search') . '</p>';
+            } else {
+                echo '<p style="color:#047857;"><strong>' . esc_html__('Up to date.', 'rifnote-search') . '</strong></p>';
+            }
+        } elseif ($last_error) {
+            echo '<p style="color:#b42318;"><strong>' . esc_html__('Latest check:', 'rifnote-search') . '</strong> ' . esc_html($last_error) . '</p>';
+        } else {
+            echo '<p>' . esc_html__('No GitHub release check has run yet.', 'rifnote-search') . '</p>';
+        }
+
+        if ($last_checked) {
+            echo '<p class="description">' . esc_html(sprintf(__('Last checked: %s', 'rifnote-search'), $last_checked)) . '</p>';
+        }
+
+        echo '<form method="post" style="margin-top:12px;">';
+        wp_nonce_field('rifnote_github_check_now');
+        submit_button(__('Check GitHub now', 'rifnote-search'), 'secondary', 'rifnote_github_check_now', false);
+        echo '</form>';
+        echo '</div>';
     }
 
     private static function render_settings_family_field($option, $field) {
@@ -1756,6 +1813,15 @@ class Rifnote_Search_Admin {
         return trim(sanitize_text_field((string) $value));
     }
 
+    public static function sanitize_github_repo($value) {
+        return Rifnote_Search_GitHub_Updater::normalize_repo($value);
+    }
+
+    public static function sanitize_release_asset_name($value) {
+        $value = sanitize_file_name((string) $value);
+        return $value ? $value : Rifnote_Search_GitHub_Updater::DEFAULT_ASSET;
+    }
+
     public static function sanitize_synonyms($value) {
         $lines = array();
 
@@ -2286,6 +2352,10 @@ class Rifnote_Search_Admin {
         register_setting('rifnote_search_settings', 'rifnote_native_ios_bundle_id', array('type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => ''));
         register_setting('rifnote_search_settings', 'rifnote_native_android_package', array('type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => ''));
         register_setting('rifnote_search_settings', 'rifnote_release_notes', array('type' => 'string', 'sanitize_callback' => 'sanitize_textarea_field', 'default' => ''));
+        register_setting('rifnote_search_settings', 'rifnote_github_updater_enabled', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true));
+        register_setting('rifnote_search_settings', 'rifnote_github_repo', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_github_repo'), 'default' => Rifnote_Search_GitHub_Updater::DEFAULT_REPO));
+        register_setting('rifnote_search_settings', 'rifnote_github_asset_name', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_release_asset_name'), 'default' => Rifnote_Search_GitHub_Updater::DEFAULT_ASSET));
+        register_setting('rifnote_search_settings', 'rifnote_github_access_token', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_secret'), 'default' => ''));
         register_setting('rifnote_customgpt_settings', 'rifnote_customgpt_import_enabled', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => false));
         register_setting('rifnote_customgpt_settings', 'rifnote_customgpt_import_default_mode', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_customgpt_mode'), 'default' => 'draft'));
         register_setting('rifnote_customgpt_settings', 'rifnote_customgpt_import_max_batch', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_customgpt_max_batch'), 'default' => Rifnote_Search_CustomGPT_Import::DEFAULT_MAX_BATCH));

@@ -8,6 +8,7 @@
  * Requires PHP: 7.4
  * Author: Rifnote
  * Text Domain: rifnote-search
+ * Update URI: https://github.com/TrevosAxiom/riffy-search-exgex
  */
 
 if (!defined('ABSPATH')) {
@@ -44,6 +45,7 @@ require_once RIFNOTE_SEARCH_DIR . 'includes/class-live-data.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-news-api.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-social.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-customgpt-import.php';
+require_once RIFNOTE_SEARCH_DIR . 'includes/class-github-updater.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-search.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-ai.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-rest-api.php';
@@ -75,6 +77,7 @@ final class Rifnote_Search_Plugin {
         add_action('plugins_loaded', array('Rifnote_Search_Editorial', 'maybe_install'));
         add_action('plugins_loaded', array('Rifnote_Search_Retention', 'maybe_install'));
         add_action('plugins_loaded', array('Rifnote_Search_Launch_Readiness', 'maybe_install'));
+        add_action('plugins_loaded', array('Rifnote_Search_GitHub_Updater', 'init'));
         add_action('plugins_loaded', array('Rifnote_Search_Football_API', 'maybe_install'));
         add_action('plugins_loaded', array('Rifnote_Search_Live_Data', 'maybe_install'));
         add_action('plugins_loaded', array('Rifnote_Search_Aggregation', 'ensure_categories'));

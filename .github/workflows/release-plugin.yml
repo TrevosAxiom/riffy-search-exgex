@@ -1,0 +1,50 @@
+name: Release Rifnote Search plugin
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    name: Build plugin zip
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: wp-content/plugins/rifnote-search/package-lock.json
+
+      - name: Build frontend assets
+        working-directory: wp-content/plugins/rifnote-search
+        run: |
+          npm ci
+          npm run build
+
+      - name: Create plugin archive
+        run: |
+          mkdir -p build/rifnote-search
+          rsync -a wp-content/plugins/rifnote-search/ build/rifnote-search/ \
+            --exclude node_modules \
+            --exclude .env \
+            --exclude ".env.*" \
+            --exclude "*.log" \
+            --exclude ".DS_Store"
+          cd build
+          zip -r ../rifnote-search.zip rifnote-search
+
+      - name: Publish GitHub release asset
+        uses: softprops/action-gh-release@v2
+        with:
+          files: rifnote-search.zip
+          generate_release_notes: true
