@@ -17,27 +17,29 @@ class Rifnote_Search_Ingestion {
             wp_clear_scheduled_hook(self::CRON_HOOK);
         }
 
-        self::maybe_repair_overdue_schedule($schedule);
+        self::repair_schedule(false);
 
         if (!wp_next_scheduled(self::CRON_HOOK)) {
             wp_schedule_event(time() + 2 * MINUTE_IN_SECONDS, $schedule, self::CRON_HOOK);
         }
     }
 
-    private static function maybe_repair_overdue_schedule($schedule) {
+    public static function repair_schedule($force = false) {
+        $schedule = get_option('rifnote_smart_rss_enabled', true) ? 'rifnote_every_five_minutes' : 'rifnote_every_fifteen_minutes';
+
         if (wp_doing_cron()) {
-            return;
+            return false;
         }
 
         $next = wp_next_scheduled(self::CRON_HOOK);
         if (!$next) {
-            return;
+            wp_schedule_event(time() + MINUTE_IN_SECONDS, $schedule, self::CRON_HOOK);
+            return true;
         }
 
         $now = time();
-        $grace = 'rifnote_every_five_minutes' === $schedule ? 12 * MINUTE_IN_SECONDS : 30 * MINUTE_IN_SECONDS;
-        if ($next >= ($now - $grace)) {
-            return;
+        if ($next >= $now) {
+            return false;
         }
 
         wp_clear_scheduled_hook(self::CRON_HOOK);
@@ -55,6 +57,8 @@ class Rifnote_Search_Ingestion {
                 'schedule' => $schedule,
             ),
         ));
+
+        return true;
     }
 
     public static function clear_schedule() {
@@ -287,6 +291,8 @@ class Rifnote_Search_Ingestion {
     }
 
     public static function queue_preview($limit = 0) {
+        self::repair_schedule(true);
+
         $limit = $limit ? absint($limit) : absint(get_option('rifnote_smart_rss_batch_size', 25));
         $limit = max(1, min(100, $limit));
         $feeds = self::queue_feeds();

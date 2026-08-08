@@ -615,6 +615,9 @@ class Rifnote_Search_Admin {
         if ('settings-deployment' === $section) {
             self::render_github_updater_status();
         }
+        if ('settings-feeds' === $section) {
+            Rifnote_Search_Ingestion::repair_schedule(true);
+        }
         echo '<form method="post" action="options.php" style="max-width:1120px;margin-top:16px;">';
         settings_fields('rifnote_search_settings');
         self::render_preserved_settings_fields(array_keys($family['fields']));
@@ -1150,6 +1153,16 @@ class Rifnote_Search_Admin {
     }
 
     public static function maybe_run_ingestion() {
+        if (isset($_GET['rifnote_rss_repair'], $_GET['rifnote_rss_repair_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['rifnote_rss_repair_nonce'])), 'rifnote_repair_rss_schedule')) {
+            if (!current_user_can('manage_options')) {
+                return;
+            }
+
+            $repaired = Rifnote_Search_Ingestion::repair_schedule(true);
+            echo '<div class="notice notice-' . esc_attr($repaired ? 'success' : 'info') . ' is-dismissible"><p>' . esc_html($repaired ? __('Smart RSS schedule repaired. The next run is queued for the next minute.', 'rifnote-search') : __('Smart RSS schedule is already queued in the future.', 'rifnote-search')) . '</p></div>';
+            return;
+        }
+
         if (!isset($_POST['rifnote_ingestion_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['rifnote_ingestion_nonce'])), 'rifnote_run_ingestion')) {
             return;
         }
@@ -2611,6 +2624,7 @@ class Rifnote_Search_Admin {
         $football_health = Rifnote_Search_Football_API::admin_health();
         $football_usage = Rifnote_Search_Football_API::usage_summary(7);
         $football_recent_usage = Rifnote_Search_Football_API::recent_usage(12);
+        Rifnote_Search_Ingestion::repair_schedule(true);
         $next_ingestion = wp_next_scheduled(Rifnote_Search_Ingestion::CRON_HOOK);
         $rss_schedule_status = Rifnote_Search_Ingestion::schedule_status();
         $next_thenewsapi = wp_next_scheduled(Rifnote_Search_News_API::CRON_HOOK);
@@ -2889,8 +2903,11 @@ class Rifnote_Search_Admin {
                         <?php echo esc_html(number_format_i18n(count($smart_rss_preview['feeds'] ?? array()))); ?>
                     </p>
                     <?php if (!empty($smart_rss_preview['schedule']['is_overdue'])) : ?>
-                        <p style="color:#b32d2e;margin-top:0;"><?php esc_html_e('This Smart RSS event is overdue. If the rest of cron is running, the RSS hook was likely stale or interrupted; Rifnote now clears and reschedules only this RSS hook after the grace window.', 'rifnote-search'); ?></p>
+                        <p style="color:#b32d2e;margin-top:0;"><?php esc_html_e('This Smart RSS event is overdue. Click repair to clear only the RSS hook and queue it for the next minute.', 'rifnote-search'); ?></p>
                     <?php endif; ?>
+                    <p style="margin:10px 0 0;">
+                        <a class="button button-secondary" href="<?php echo esc_url(wp_nonce_url(add_query_arg('rifnote_rss_repair', '1'), 'rifnote_repair_rss_schedule', 'rifnote_rss_repair_nonce')); ?>"><?php esc_html_e('Repair RSS schedule', 'rifnote-search'); ?></a>
+                    </p>
                     <?php if (!empty($smart_rss_preview['feeds'])) : ?>
                         <table class="widefat striped" style="margin-top:10px;">
                             <thead><tr><th><?php esc_html_e('Expected source', 'rifnote-search'); ?></th><th><?php esc_html_e('Expected URL to pull', 'rifnote-search'); ?></th><th><?php esc_html_e('Category', 'rifnote-search'); ?></th><th><?php esc_html_e('Mode', 'rifnote-search'); ?></th><th><?php esc_html_e('Max items', 'rifnote-search'); ?></th></tr></thead>
