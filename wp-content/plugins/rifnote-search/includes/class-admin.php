@@ -523,15 +523,9 @@ class Rifnote_Search_Admin {
             ),
             'feeds' => array(
                 'title' => __('Feeds & APIs', 'rifnote-search'),
-                'description' => __('RSS queue and TheNewsAPI import controls, grouped for the newsroom workflow.', 'rifnote-search'),
+                'description' => __('TheNewsAPI import controls. RSS has moved into its own Rifnote RSS warehouse menu with queue, logs and feed health.', 'rifnote-search'),
                 'section' => 'settings-feeds',
                 'fields' => array(
-                    'rifnote_smart_rss_enabled' => array('label' => __('Enable Smart RSS', 'rifnote-search'), 'type' => 'checkbox'),
-                    'rifnote_smart_rss_list' => array('label' => __('Smart RSS list', 'rifnote-search'), 'type' => 'textarea', 'rows' => 10),
-                    'rifnote_smart_rss_batch_size' => array('label' => __('RSS batch size', 'rifnote-search'), 'type' => 'number'),
-                    'rifnote_smart_rss_items_per_feed' => array('label' => __('Items per feed pass', 'rifnote-search'), 'type' => 'number'),
-                    'rifnote_smart_rss_timeout' => array('label' => __('RSS timeout', 'rifnote-search'), 'type' => 'number', 'suffix' => __('seconds', 'rifnote-search')),
-                    'rifnote_smart_rss_auto_publish' => array('label' => __('Auto-publish RSS items', 'rifnote-search'), 'type' => 'checkbox'),
                     'rifnote_thenewsapi_enabled' => array('label' => __('Enable TheNewsAPI', 'rifnote-search'), 'type' => 'checkbox'),
                     'rifnote_thenewsapi_key' => array('label' => __('TheNewsAPI key', 'rifnote-search'), 'type' => 'password'),
                     'rifnote_thenewsapi_locale' => array('label' => __('Locales', 'rifnote-search'), 'type' => 'text'),

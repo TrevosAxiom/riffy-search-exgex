@@ -771,7 +771,7 @@ class Rifnote_Search_Ingestion {
         $logs = get_option(self::LOG_OPTION, array());
         $logs = is_array($logs) ? $logs : array();
 
-        return array_slice($logs, 0, max(1, min(50, absint($limit))));
+        return array_slice($logs, 0, max(1, min(200, absint($limit))));
     }
 
     private static function append_log($entry) {
@@ -785,7 +785,36 @@ class Rifnote_Search_Ingestion {
         );
 
         array_unshift($logs, $entry);
-        update_option(self::LOG_OPTION, array_slice($logs, 0, 50), false);
+        update_option(self::LOG_OPTION, array_slice($logs, 0, 250), false);
+        self::persist_log_file($entry);
+    }
+
+    private static function persist_log_file($entry) {
+        if (!defined('WP_CONTENT_DIR') || !function_exists('wp_mkdir_p')) {
+            return;
+        }
+
+        $timestamp = !empty($entry['created_at']) ? strtotime($entry['created_at'] . ' UTC') : time();
+        $timestamp = $timestamp ? $timestamp : time();
+        $month = gmdate('Y-m', $timestamp);
+        $day = gmdate('Y-m-d', $timestamp);
+        $dir = trailingslashit(WP_CONTENT_DIR) . 'rifnote-rss-warehouse/' . $month;
+
+        if (!wp_mkdir_p($dir) || !is_writable($dir)) {
+            return;
+        }
+
+        $file = trailingslashit($dir) . 'rss-' . $day . '.json';
+        $entries = array();
+
+        if (file_exists($file) && is_readable($file)) {
+            $decoded = json_decode((string) file_get_contents($file), true);
+            $entries = is_array($decoded) ? $decoded : array();
+        }
+
+        $entries[] = $entry;
+        $entries = array_slice($entries, -1000);
+        file_put_contents($file, wp_json_encode($entries, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
     }
 
     private static function update_feed_health($publisher, $status, $error, $created) {
