@@ -773,6 +773,35 @@ class Rifnote_Search_Admin {
         echo '<input type="hidden" name="' . esc_attr($name) . '" value="' . esc_attr((string) $value) . '" />';
     }
 
+    public static function preserve_missing_settings_on_options_save() {
+        if (empty($_POST['option_page']) || empty($_POST['action']) || 'update' !== $_POST['action']) {
+            return;
+        }
+
+        $group = sanitize_key(wp_unslash($_POST['option_page']));
+        $rifnote_groups = array(
+            'rifnote_search_settings',
+            'rifnote_home_notes_settings',
+            'rifnote_search_football_settings',
+            'rifnote_customgpt_settings',
+            'rifnote_social_settings',
+            'rifnote_source_logo_settings',
+        );
+
+        if (!in_array($group, $rifnote_groups, true)) {
+            return;
+        }
+
+        foreach (self::registered_options_for_group($group) as $option) {
+            if (!$option || array_key_exists($option, $_POST)) {
+                continue;
+            }
+
+            $current = get_option($option, self::settings_option_default($option));
+            $_POST[$option] = wp_slash($current);
+        }
+    }
+
     private static function source_logo_rows($limit = 500) {
         $ids = get_posts(array(
             'post_type' => 'post',
