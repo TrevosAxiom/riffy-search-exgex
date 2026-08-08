@@ -2669,7 +2669,7 @@ class Rifnote_Search_Admin {
                         <h2><?php esc_html_e('Today', 'rifnote-search'); ?></h2>
                         <p><?php echo esc_html(sprintf(__('RSS ingestion: %s.', 'rifnote-search'), self::format_cron_status($rss_schedule_status))); ?></p>
                         <?php if (!empty($rss_schedule_status['is_overdue'])) : ?>
-                            <p style="color:#b32d2e;"><?php esc_html_e('WP-Cron is overdue. Confirm your server cron is calling wp-cron.php and that DISABLE_WP_CRON is not blocking manual runs without a real server cron.', 'rifnote-search'); ?></p>
+                            <p style="color:#b32d2e;"><?php esc_html_e('The Smart RSS hook is overdue. Other cron jobs may still be fine; Rifnote will repair this RSS schedule on the next normal admin/site request if it is stale beyond the grace window.', 'rifnote-search'); ?></p>
                         <?php endif; ?>
                         <p><?php echo esc_html(sprintf(__('Queued notifications: %d. Open Growth to process alerts, newsletters and push.', 'rifnote-search'), (int) $retention_summary['queued_notifications'])); ?></p>
                         <p><?php echo esc_html(sprintf(__('Sponsor requests waiting: %d.', 'rifnote-search'), (int) $launch_summary['sponsor_requests'])); ?></p>
@@ -2889,7 +2889,7 @@ class Rifnote_Search_Admin {
                         <?php echo esc_html(number_format_i18n(count($smart_rss_preview['feeds'] ?? array()))); ?>
                     </p>
                     <?php if (!empty($smart_rss_preview['schedule']['is_overdue'])) : ?>
-                        <p style="color:#b32d2e;margin-top:0;"><?php esc_html_e('This RSS event is overdue, so WordPress has not fired the queue. Check your real server cron and the wp-cron.php request response.', 'rifnote-search'); ?></p>
+                        <p style="color:#b32d2e;margin-top:0;"><?php esc_html_e('This Smart RSS event is overdue. If the rest of cron is running, the RSS hook was likely stale or interrupted; Rifnote now clears and reschedules only this RSS hook after the grace window.', 'rifnote-search'); ?></p>
                     <?php endif; ?>
                     <?php if (!empty($smart_rss_preview['feeds'])) : ?>
                         <table class="widefat striped" style="margin-top:10px;">

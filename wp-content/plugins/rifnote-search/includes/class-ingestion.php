@@ -17,9 +17,44 @@ class Rifnote_Search_Ingestion {
             wp_clear_scheduled_hook(self::CRON_HOOK);
         }
 
+        self::maybe_repair_overdue_schedule($schedule);
+
         if (!wp_next_scheduled(self::CRON_HOOK)) {
             wp_schedule_event(time() + 2 * MINUTE_IN_SECONDS, $schedule, self::CRON_HOOK);
         }
+    }
+
+    private static function maybe_repair_overdue_schedule($schedule) {
+        if (wp_doing_cron()) {
+            return;
+        }
+
+        $next = wp_next_scheduled(self::CRON_HOOK);
+        if (!$next) {
+            return;
+        }
+
+        $now = time();
+        $grace = 'rifnote_every_five_minutes' === $schedule ? 12 * MINUTE_IN_SECONDS : 30 * MINUTE_IN_SECONDS;
+        if ($next >= ($now - $grace)) {
+            return;
+        }
+
+        wp_clear_scheduled_hook(self::CRON_HOOK);
+        wp_schedule_event($now + MINUTE_IN_SECONDS, $schedule, self::CRON_HOOK);
+        self::append_log(array(
+            'status' => 'repaired',
+            'message' => sprintf(
+                /* translators: %s: human-readable overdue duration. */
+                __('RSS schedule was stale by %s, so Rifnote cleared and rescheduled only the RSS hook.', 'rifnote-search'),
+                self::human_duration($now - (int) $next)
+            ),
+            'summary' => array(
+                'previous_next_run' => gmdate(DATE_ATOM, (int) $next),
+                'new_next_run' => gmdate(DATE_ATOM, $now + MINUTE_IN_SECONDS),
+                'schedule' => $schedule,
+            ),
+        ));
     }
 
     public static function clear_schedule() {
@@ -35,6 +70,8 @@ class Rifnote_Search_Ingestion {
         return array(
             'next_run' => $next ? (int) $next : 0,
             'next_run_gmt' => $next ? gmdate(DATE_ATOM, (int) $next) : '',
+            'next_run_local' => $next ? wp_date('Y-m-d H:i:s', (int) $next) : '',
+            'schedule' => wp_get_schedule(self::CRON_HOOK) ?: '',
             'is_overdue' => (bool) $overdue,
             'overdue_seconds' => (int) $overdue_seconds,
             'overdue_label' => $overdue ? self::human_duration($overdue_seconds) : '',
