@@ -10,7 +10,12 @@ class Rifnote_Search_Ingestion {
     const LOG_OPTION = 'rifnote_smart_rss_run_log';
 
     public static function schedule() {
-        $schedule = get_option('rifnote_smart_rss_enabled', true) ? 'rifnote_every_five_minutes' : 'rifnote_every_fifteen_minutes';
+        if (!get_option('rifnote_smart_rss_enabled', true)) {
+            self::clear_schedule();
+            return;
+        }
+
+        $schedule = self::schedule_slug();
         $current = wp_get_schedule(self::CRON_HOOK);
 
         if ($current && $current !== $schedule) {
@@ -25,7 +30,12 @@ class Rifnote_Search_Ingestion {
     }
 
     public static function repair_schedule($force = false) {
-        $schedule = get_option('rifnote_smart_rss_enabled', true) ? 'rifnote_every_five_minutes' : 'rifnote_every_fifteen_minutes';
+        if (!get_option('rifnote_smart_rss_enabled', true)) {
+            self::clear_schedule();
+            return false;
+        }
+
+        $schedule = self::schedule_slug();
 
         if (wp_doing_cron()) {
             return false;
@@ -39,6 +49,11 @@ class Rifnote_Search_Ingestion {
 
         $now = time();
         if ($next >= $now) {
+            return false;
+        }
+
+        $grace = $force ? 0 : max(2 * MINUTE_IN_SECONDS, self::interval_seconds());
+        if (($now - (int) $next) < $grace) {
             return false;
         }
 
@@ -65,6 +80,20 @@ class Rifnote_Search_Ingestion {
         wp_clear_scheduled_hook(self::CRON_HOOK);
     }
 
+    public static function maybe_reschedule_on_settings_update($option, $old_value, $value) {
+        $watched = array(
+            'rifnote_smart_rss_enabled',
+            'rifnote_smart_rss_interval_minutes',
+        );
+
+        if (!in_array($option, $watched, true)) {
+            return;
+        }
+
+        self::clear_schedule();
+        self::schedule();
+    }
+
     public static function schedule_status() {
         $next = wp_next_scheduled(self::CRON_HOOK);
         $now = time();
@@ -76,6 +105,7 @@ class Rifnote_Search_Ingestion {
             'next_run_gmt' => $next ? gmdate(DATE_ATOM, (int) $next) : '',
             'next_run_local' => $next ? wp_date('Y-m-d H:i:s', (int) $next) : '',
             'schedule' => wp_get_schedule(self::CRON_HOOK) ?: '',
+            'interval_minutes' => self::interval_minutes(),
             'is_overdue' => (bool) $overdue,
             'overdue_seconds' => (int) $overdue_seconds,
             'overdue_label' => $overdue ? self::human_duration($overdue_seconds) : '',
@@ -84,6 +114,18 @@ class Rifnote_Search_Ingestion {
     }
 
     public static function cron_schedules($schedules) {
+        $minutes = self::interval_minutes();
+        $slug = self::schedule_slug($minutes);
+
+        $schedules[$slug] = array(
+            'interval' => $minutes * MINUTE_IN_SECONDS,
+            'display' => sprintf(
+                /* translators: %s: number of minutes. */
+                _n('Every %s minute', 'Every %s minutes', $minutes, 'rifnote-search'),
+                number_format_i18n($minutes)
+            ),
+        );
+
         if (!isset($schedules['rifnote_every_five_minutes'])) {
             $schedules['rifnote_every_five_minutes'] = array(
                 'interval' => 5 * MINUTE_IN_SECONDS,
@@ -99,6 +141,19 @@ class Rifnote_Search_Ingestion {
         }
 
         return $schedules;
+    }
+
+    public static function interval_minutes() {
+        return max(1, min(1440, absint(get_option('rifnote_smart_rss_interval_minutes', 5))));
+    }
+
+    public static function interval_seconds() {
+        return self::interval_minutes() * MINUTE_IN_SECONDS;
+    }
+
+    public static function schedule_slug($minutes = null) {
+        $minutes = null === $minutes ? self::interval_minutes() : max(1, min(1440, absint($minutes)));
+        return 'rifnote_rss_every_' . $minutes . '_minutes';
     }
 
     private static function human_duration($seconds) {
@@ -217,10 +272,18 @@ class Rifnote_Search_Ingestion {
     }
 
     public static function run_cron() {
+        if (!get_option('rifnote_smart_rss_enabled', true)) {
+            return array('skipped' => true, 'reason' => 'disabled');
+        }
+
         return self::run_once();
     }
 
-    public static function run_once($limit = 0) {
+    public static function run_once($limit = 0, $force = false) {
+        if ($force) {
+            delete_transient('rifnote_rss_ingestion_lock');
+        }
+
         if (get_transient('rifnote_rss_ingestion_lock')) {
             $locked = array('locked' => true, 'ran_at' => gmdate(DATE_ATOM));
             self::append_log(array(
@@ -253,7 +316,14 @@ class Rifnote_Search_Ingestion {
             'cursor' => (int) get_option('rifnote_smart_rss_cursor', 0),
             'feeds' => array(),
             'ran_at' => gmdate(DATE_ATOM),
+            'forced' => (bool) $force,
+            'interval_minutes' => self::interval_minutes(),
         );
+
+        if (empty($feeds)) {
+            $summary['empty_queue'] = true;
+            $summary['empty_queue_message'] = __('No RSS feeds are configured. Add Smart RSS feed URLs or verified publisher RSS feeds before running ingestion.', 'rifnote-search');
+        }
 
         try {
             foreach ($publishers as $publisher) {
@@ -271,17 +341,19 @@ class Rifnote_Search_Ingestion {
             $summary['fatal_error'] = $error->getMessage();
         } finally {
             update_option('rifnote_search_ingestion_last_run', $summary, false);
+            update_option('rifnote_smart_rss_last_run_at', time(), false);
+            update_option('rifnote_smart_rss_next_due_at', time() + self::interval_seconds(), false);
             self::append_log(array(
                 'status' => !empty($summary['fatal_error']) ? 'error' : ($summary['errors'] ? 'warning' : 'ok'),
                 'message' => !empty($summary['fatal_error'])
                     ? sprintf(__('RSS run stopped unexpectedly: %s', 'rifnote-search'), $summary['fatal_error'])
-                    : sprintf(
+                    : (!empty($summary['empty_queue']) ? $summary['empty_queue_message'] : sprintf(
                         /* translators: 1: checked feeds, 2: created stories, 3: published stories. */
                         __('Checked %1$d feed(s), created %2$d, published %3$d.', 'rifnote-search'),
                         (int) $summary['checked'],
                         (int) $summary['created'],
                         (int) $summary['published']
-                    ),
+                    )),
                 'summary' => $summary,
             ));
             delete_transient('rifnote_rss_ingestion_lock');
@@ -291,8 +363,6 @@ class Rifnote_Search_Ingestion {
     }
 
     public static function queue_preview($limit = 0) {
-        self::repair_schedule(true);
-
         $limit = $limit ? absint($limit) : absint(get_option('rifnote_smart_rss_batch_size', 25));
         $limit = max(1, min(100, $limit));
         $feeds = self::queue_feeds();

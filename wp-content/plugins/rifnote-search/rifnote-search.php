@@ -3,7 +3,7 @@
  * Plugin Name: Rifnote Search
  * Plugin URI: https://rifnote.com/
  * Description: AI-powered news search and publisher discovery plugin for Rifnote.
- * Version: 0.1.8
+ * Version: 0.1.9
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Rifnote
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RIFNOTE_SEARCH_VERSION', '0.1.8');
+define('RIFNOTE_SEARCH_VERSION', '0.1.9');
 define('RIFNOTE_SEARCH_FILE', __FILE__);
 define('RIFNOTE_SEARCH_DIR', plugin_dir_path(__FILE__));
 define('RIFNOTE_SEARCH_URL', plugin_dir_url(__FILE__));
@@ -130,6 +130,7 @@ final class Rifnote_Search_Plugin {
         add_action('admin_init', array('Rifnote_Search_Admin', 'register_settings'));
         add_action('admin_init', array('Rifnote_Search_Admin', 'preserve_missing_settings_on_options_save'), 20);
         add_action('updated_option', array('Rifnote_Search_Trending', 'maybe_clear_snapshot_on_update'), 10, 3);
+        add_action('updated_option', array('Rifnote_Search_Ingestion', 'maybe_reschedule_on_settings_update'), 10, 3);
         add_action('updated_option', array('Rifnote_Search_Admin', 'maybe_clear_football_cache_on_update'), 10, 3);
         add_action('admin_init', array('Rifnote_Search_Pages', 'ensure_pages'));
         add_action('init', array('Rifnote_Search_Pages', 'register_rewrites'));

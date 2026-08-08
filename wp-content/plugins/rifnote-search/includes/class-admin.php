@@ -2322,6 +2322,10 @@ class Rifnote_Search_Admin {
         return max(3, min(20, absint($value)));
     }
 
+    public static function sanitize_smart_rss_interval($value) {
+        return max(1, min(1440, absint($value)));
+    }
+
     public static function sanitize_social_region_code($value) {
         $value = strtoupper(preg_replace('/[^A-Z]/', '', (string) $value));
         return $value ? substr($value, 0, 2) : 'NG';
@@ -2396,6 +2400,7 @@ class Rifnote_Search_Admin {
         register_setting('rifnote_home_notes_settings', 'rifnote_home_pills', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_home_pills'), 'default' => self::default_home_pills()));
         register_setting('rifnote_search_settings', 'rifnote_smart_rss_enabled', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true));
         register_setting('rifnote_search_settings', 'rifnote_smart_rss_list', array('type' => 'string', 'sanitize_callback' => array('Rifnote_Search_Ingestion', 'sanitize_smart_rss_list'), 'default' => ''));
+        register_setting('rifnote_search_settings', 'rifnote_smart_rss_interval_minutes', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_interval'), 'default' => 5));
         register_setting('rifnote_search_settings', 'rifnote_smart_rss_batch_size', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_batch_size'), 'default' => 25));
         register_setting('rifnote_search_settings', 'rifnote_smart_rss_items_per_feed', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_items_per_feed'), 'default' => 10));
         register_setting('rifnote_search_settings', 'rifnote_smart_rss_timeout', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_timeout'), 'default' => 8));

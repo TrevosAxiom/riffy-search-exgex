@@ -101,7 +101,7 @@ class Rifnote_Search_RSS_Warehouse {
         $action = sanitize_key(wp_unslash($_POST['rifnote_rss_action']));
 
         if ('run_now' === $action) {
-            $summary = Rifnote_Search_Ingestion::run_once();
+            $summary = Rifnote_Search_Ingestion::run_once(0, true);
             echo '<div class="notice notice-success is-dismissible"><p>' . esc_html(sprintf(
                 __('RSS run finished: checked %1$d, created %2$d, published %3$d, duplicates %4$d, errors %5$d.', 'rifnote-search'),
                 (int) ($summary['checked'] ?? 0),
@@ -290,6 +290,7 @@ class Rifnote_Search_RSS_Warehouse {
         echo '<form method="post" action="options.php">';
         settings_fields('rifnote_search_settings');
         echo '<table class="form-table" role="presentation"><tbody>';
+        self::settings_number_row('rifnote_smart_rss_interval_minutes', __('Run frequency', 'rifnote-search'), 1, 1440, __('Minutes between RSS ingestion passes. Your server cron can run every minute; Rifnote RSS will only run when this interval is due.', 'rifnote-search'));
         self::settings_number_row('rifnote_smart_rss_batch_size', __('Feeds per run', 'rifnote-search'), 1, 100, __('Keep this low for cheap shared hosting; raise it on a dedicated server.', 'rifnote-search'));
         self::settings_number_row('rifnote_smart_rss_items_per_feed', __('Items per feed', 'rifnote-search'), 1, 30, __('Maximum stories pulled from each source per pass.', 'rifnote-search'));
         self::settings_number_row('rifnote_smart_rss_timeout', __('HTTP timeout', 'rifnote-search'), 3, 20, __('Seconds before a slow feed is skipped.', 'rifnote-search'));
@@ -300,7 +301,13 @@ class Rifnote_Search_RSS_Warehouse {
     }
 
     private static function settings_number_row($option, $label, $min, $max, $description) {
-        echo '<tr><th scope="row"><label for="' . esc_attr($option) . '">' . esc_html($label) . '</label></th><td><input id="' . esc_attr($option) . '" type="number" min="' . esc_attr($min) . '" max="' . esc_attr($max) . '" name="' . esc_attr($option) . '" value="' . esc_attr(get_option($option)) . '" /><p class="description">' . esc_html($description) . '</p></td></tr>';
+        $defaults = array(
+            'rifnote_smart_rss_interval_minutes' => 5,
+            'rifnote_smart_rss_batch_size' => 25,
+            'rifnote_smart_rss_items_per_feed' => 10,
+            'rifnote_smart_rss_timeout' => 8,
+        );
+        echo '<tr><th scope="row"><label for="' . esc_attr($option) . '">' . esc_html($label) . '</label></th><td><input id="' . esc_attr($option) . '" type="number" min="' . esc_attr($min) . '" max="' . esc_attr($max) . '" name="' . esc_attr($option) . '" value="' . esc_attr(get_option($option, $defaults[$option] ?? '')) . '" /><p class="description">' . esc_html($description) . '</p></td></tr>';
     }
 
     private static function action_button($action, $label, $type = 'secondary') {
