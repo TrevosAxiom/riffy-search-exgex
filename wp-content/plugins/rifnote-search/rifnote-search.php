@@ -45,6 +45,7 @@ require_once RIFNOTE_SEARCH_DIR . 'includes/class-live-data.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-news-api.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-social.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-customgpt-import.php';
+require_once RIFNOTE_SEARCH_DIR . 'includes/class-data-api.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-github-updater.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-rss-warehouse.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-search.php';

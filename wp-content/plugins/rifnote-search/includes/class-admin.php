@@ -526,6 +526,12 @@ class Rifnote_Search_Admin {
                 'description' => __('TheNewsAPI import controls. RSS has moved into its own Rifnote RSS warehouse menu with queue, logs and feed health.', 'rifnote-search'),
                 'section' => 'settings-feeds',
                 'fields' => array(
+                    'rifnote_data_api_enabled' => array('label' => __('Enable Data API bridge', 'rifnote-search'), 'type' => 'checkbox', 'description' => __('Read warehouse stories from the external Rifnote data engine.', 'rifnote-search')),
+                    'rifnote_data_api_merge_search' => array('label' => __('Merge Data API into search', 'rifnote-search'), 'type' => 'checkbox', 'description' => __('When enabled, WordPress search blends local posts with external warehouse results.', 'rifnote-search')),
+                    'rifnote_data_api_url' => array('label' => __('Data API URL', 'rifnote-search'), 'type' => 'url', 'description' => __('Example: https://data.rifnote.com', 'rifnote-search')),
+                    'rifnote_data_api_token' => array('label' => __('Data API token', 'rifnote-search'), 'type' => 'password'),
+                    'rifnote_data_api_timeout' => array('label' => __('Data API timeout', 'rifnote-search'), 'type' => 'number', 'min' => 3, 'max' => 20, 'suffix' => __('seconds', 'rifnote-search')),
+                    'rifnote_data_api_cache_ttl' => array('label' => __('Data API search cache', 'rifnote-search'), 'type' => 'number', 'min' => 0, 'max' => 900, 'suffix' => __('seconds', 'rifnote-search')),
                     'rifnote_thenewsapi_enabled' => array('label' => __('Enable TheNewsAPI', 'rifnote-search'), 'type' => 'checkbox'),
                     'rifnote_thenewsapi_key' => array('label' => __('TheNewsAPI key', 'rifnote-search'), 'type' => 'password'),
                     'rifnote_thenewsapi_locale' => array('label' => __('Locales', 'rifnote-search'), 'type' => 'text'),
@@ -744,6 +750,12 @@ class Rifnote_Search_Admin {
             'rifnote_github_repo' => Rifnote_Search_GitHub_Updater::DEFAULT_REPO,
             'rifnote_github_asset_name' => Rifnote_Search_GitHub_Updater::DEFAULT_ASSET,
             'rifnote_github_access_token' => '',
+            'rifnote_data_api_enabled' => false,
+            'rifnote_data_api_merge_search' => true,
+            'rifnote_data_api_url' => '',
+            'rifnote_data_api_token' => '',
+            'rifnote_data_api_timeout' => 8,
+            'rifnote_data_api_cache_ttl' => 120,
         );
 
         return array_key_exists($option, $defaults) ? $defaults[$option] : '';
@@ -1580,6 +1592,243 @@ class Rifnote_Search_Admin {
         if ('simulate_ranking' === $action) {
             update_option('rifnote_search_last_ranking_simulation_query', isset($_POST['rifnote_sim_query']) ? sanitize_text_field(wp_unslash($_POST['rifnote_sim_query'])) : '', false);
         }
+
+        if ('preview_imported_cleanup' === $action) {
+            $days = isset($_POST['rifnote_cleanup_days']) ? absint($_POST['rifnote_cleanup_days']) : 30;
+            $limit = isset($_POST['rifnote_cleanup_limit']) ? absint($_POST['rifnote_cleanup_limit']) : 500;
+            $include_customgpt = !empty($_POST['rifnote_cleanup_include_customgpt']);
+            $preview = self::cleanup_imported_posts_preview(array(
+                'days' => $days,
+                'limit' => $limit,
+                'include_customgpt' => $include_customgpt,
+            ));
+
+            set_transient('rifnote_cleanup_last_preview', array(
+                'preview' => $preview,
+                'days' => $days,
+                'limit' => $limit,
+                'include_customgpt' => $include_customgpt,
+                'created_at' => current_time('mysql'),
+            ), 15 * MINUTE_IN_SECONDS);
+
+            echo '<div class="notice notice-info is-dismissible"><p>' . esc_html(sprintf(__('Cleanup preview found %d imported post candidate(s). Nothing was deleted.', 'rifnote-search'), (int) $preview['count'])) . '</p></div>';
+        }
+
+        if ('cleanup_imported_posts' === $action) {
+            $days = isset($_POST['rifnote_cleanup_days']) ? absint($_POST['rifnote_cleanup_days']) : 30;
+            $limit = isset($_POST['rifnote_cleanup_limit']) ? absint($_POST['rifnote_cleanup_limit']) : 500;
+            $include_customgpt = !empty($_POST['rifnote_cleanup_include_customgpt']);
+            $hard_delete = !empty($_POST['rifnote_cleanup_hard_delete']);
+
+            $result = self::cleanup_imported_posts(array(
+                'days' => $days,
+                'limit' => $limit,
+                'include_customgpt' => $include_customgpt,
+                'hard_delete' => $hard_delete,
+            ));
+
+            if (is_wp_error($result)) {
+                echo '<div class="notice notice-error is-dismissible"><p>' . esc_html($result->get_error_message()) . '</p></div>';
+            } else {
+                echo '<div class="notice notice-success is-dismissible"><p>' . esc_html(sprintf(
+                    $hard_delete
+                        ? __('Deleted %d imported post(s). Manual Rifnote Admin posts were protected.', 'rifnote-search')
+                        : __('Moved %d imported post(s) to trash. Manual Rifnote Admin posts were protected.', 'rifnote-search'),
+                    (int) $result['affected']
+                )) . '</p></div>';
+            }
+        }
+    }
+
+    private static function cleanup_import_markers() {
+        return array(
+            'channels' => array('rss', 'news_api', 'customgpt', 'customgpt_social', 'customgpt_aggregation', 'publisher', 'manual_social', 'social'),
+            'models' => array('GPT', 'TheNewsAPI', 'RSS Feed', 'Publisher Submission', 'Social Import', 'Manual Social', 'CustomGPT'),
+            'source_types' => array('rss', 'submitted', 'social', 'video'),
+            'meta_keys' => array(
+                'thenewsapi_uuid',
+                'rifnote_customgpt_source',
+                'rifnote_customgpt_last_format_source',
+                'rifnote_social_platform',
+                'rifnote_social_post_url',
+                'rifnote_social_embed_html',
+                'publisher_id',
+            ),
+        );
+    }
+
+    private static function is_manual_admin_post($post_id) {
+        $model = (string) get_post_meta($post_id, 'rifnote_origin_model', true);
+        $channel = (string) get_post_meta($post_id, 'rifnote_origin_channel', true);
+
+        return 'admin' === $channel || 'Rifnote Admin' === $model;
+    }
+
+    private static function is_customgpt_post($post_id) {
+        $model = (string) get_post_meta($post_id, 'rifnote_origin_model', true);
+        $channel = (string) get_post_meta($post_id, 'rifnote_origin_channel', true);
+
+        return 'GPT' === $model
+            || false !== strpos($channel, 'customgpt')
+            || (bool) get_post_meta($post_id, 'rifnote_customgpt_source', true)
+            || (bool) get_post_meta($post_id, 'rifnote_customgpt_last_format_source', true);
+    }
+
+    private static function cleanup_import_reason($post_id) {
+        $markers = self::cleanup_import_markers();
+        $channel = (string) get_post_meta($post_id, 'rifnote_origin_channel', true);
+        $model = (string) get_post_meta($post_id, 'rifnote_origin_model', true);
+        $source_type = (string) get_post_meta($post_id, 'source_type', true);
+
+        if ($channel && in_array($channel, $markers['channels'], true)) {
+            return 'channel:' . $channel;
+        }
+
+        if ($model && in_array($model, $markers['models'], true)) {
+            return 'model:' . $model;
+        }
+
+        if ($source_type && in_array($source_type, $markers['source_types'], true)) {
+            return 'source_type:' . $source_type;
+        }
+
+        foreach ($markers['meta_keys'] as $meta_key) {
+            if (get_post_meta($post_id, $meta_key, true)) {
+                return 'meta:' . $meta_key;
+            }
+        }
+
+        return '';
+    }
+
+    private static function cleanup_candidate_ids($args = array()) {
+        $defaults = array(
+            'days' => 30,
+            'limit' => 500,
+            'include_customgpt' => true,
+        );
+        $args = wp_parse_args($args, $defaults);
+        $limit = max(1, min(5000, absint($args['limit'])));
+        $days = absint($args['days']);
+        $markers = self::cleanup_import_markers();
+        $marker_meta = array('relation' => 'OR');
+
+        foreach ($markers['channels'] as $channel) {
+            $marker_meta[] = array('key' => 'rifnote_origin_channel', 'value' => $channel, 'compare' => '=');
+        }
+
+        foreach ($markers['models'] as $model) {
+            $marker_meta[] = array('key' => 'rifnote_origin_model', 'value' => $model, 'compare' => '=');
+        }
+
+        foreach ($markers['source_types'] as $source_type) {
+            $marker_meta[] = array('key' => 'source_type', 'value' => $source_type, 'compare' => '=');
+        }
+
+        foreach ($markers['meta_keys'] as $meta_key) {
+            $marker_meta[] = array('key' => $meta_key, 'compare' => 'EXISTS');
+        }
+
+        $query_args = array(
+            'post_type' => 'post',
+            'post_status' => array('publish', 'draft', 'pending', 'future', 'private'),
+            'fields' => 'ids',
+            'posts_per_page' => min(3000, max($limit * 2, $limit)),
+            'orderby' => 'date',
+            'order' => 'ASC',
+            'no_found_rows' => true,
+            'meta_query' => array($marker_meta),
+        );
+
+        if ($days > 0) {
+            $query_args['date_query'] = array(array(
+                'before' => gmdate('Y-m-d H:i:s', time() - ($days * DAY_IN_SECONDS)),
+                'inclusive' => true,
+            ));
+        }
+
+        $candidate_ids = get_posts($query_args);
+        $filtered = array();
+
+        foreach ($candidate_ids as $post_id) {
+            $post_id = absint($post_id);
+
+            if (!$post_id || self::is_manual_admin_post($post_id)) {
+                continue;
+            }
+
+            if (empty($args['include_customgpt']) && self::is_customgpt_post($post_id)) {
+                continue;
+            }
+
+            if (!self::cleanup_import_reason($post_id)) {
+                continue;
+            }
+
+            $filtered[] = $post_id;
+
+            if (count($filtered) >= $limit) {
+                break;
+            }
+        }
+
+        return $filtered;
+    }
+
+    private static function cleanup_imported_posts_preview($args = array()) {
+        $ids = self::cleanup_candidate_ids($args);
+        $breakdown = array();
+        $samples = array();
+
+        foreach ($ids as $post_id) {
+            $reason = self::cleanup_import_reason($post_id);
+            $breakdown[$reason] = isset($breakdown[$reason]) ? $breakdown[$reason] + 1 : 1;
+
+            if (count($samples) < 8) {
+                $samples[] = array(
+                    'id' => $post_id,
+                    'title' => get_the_title($post_id),
+                    'date' => get_the_date('M j, Y', $post_id),
+                    'reason' => $reason,
+                    'edit_url' => get_edit_post_link($post_id, ''),
+                );
+            }
+        }
+
+        arsort($breakdown);
+
+        return array(
+            'count' => count($ids),
+            'breakdown' => $breakdown,
+            'samples' => $samples,
+        );
+    }
+
+    private static function cleanup_imported_posts($args = array()) {
+        if (!current_user_can('delete_posts')) {
+            return new WP_Error('rifnote_cleanup_forbidden', __('You do not have permission to delete posts.', 'rifnote-search'));
+        }
+
+        $ids = self::cleanup_candidate_ids($args);
+        $affected = 0;
+        $hard_delete = !empty($args['hard_delete']);
+
+        foreach ($ids as $post_id) {
+            $result = $hard_delete ? wp_delete_post($post_id, true) : wp_trash_post($post_id);
+
+            if ($result) {
+                $affected++;
+
+                if (class_exists('Rifnote_Search_Index')) {
+                    Rifnote_Search_Index::delete_post($post_id);
+                }
+            }
+        }
+
+        return array(
+            'affected' => $affected,
+            'requested' => count($ids),
+        );
     }
 
     public static function maybe_handle_launch_action() {
@@ -1873,6 +2122,14 @@ class Rifnote_Search_Admin {
 
     public static function sanitize_secret($value) {
         return trim(sanitize_text_field((string) $value));
+    }
+
+    public static function sanitize_data_api_timeout($value) {
+        return max(3, min(20, absint($value)));
+    }
+
+    public static function sanitize_data_api_cache_ttl($value) {
+        return max(0, min(900, absint($value)));
     }
 
     public static function sanitize_github_repo($value) {
@@ -2405,6 +2662,12 @@ class Rifnote_Search_Admin {
         register_setting('rifnote_search_settings', 'rifnote_smart_rss_items_per_feed', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_items_per_feed'), 'default' => 10));
         register_setting('rifnote_search_settings', 'rifnote_smart_rss_timeout', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_timeout'), 'default' => 8));
         register_setting('rifnote_search_settings', 'rifnote_smart_rss_auto_publish', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true));
+        register_setting('rifnote_search_settings', 'rifnote_data_api_enabled', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => false));
+        register_setting('rifnote_search_settings', 'rifnote_data_api_merge_search', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true));
+        register_setting('rifnote_search_settings', 'rifnote_data_api_url', array('type' => 'string', 'sanitize_callback' => 'esc_url_raw', 'default' => ''));
+        register_setting('rifnote_search_settings', 'rifnote_data_api_token', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_secret'), 'default' => ''));
+        register_setting('rifnote_search_settings', 'rifnote_data_api_timeout', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_data_api_timeout'), 'default' => 8));
+        register_setting('rifnote_search_settings', 'rifnote_data_api_cache_ttl', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_data_api_cache_ttl'), 'default' => 120));
         register_setting('rifnote_search_settings', 'rifnote_thenewsapi_enabled', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => false));
         register_setting('rifnote_search_settings', 'rifnote_thenewsapi_key', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_secret'), 'default' => ''));
         register_setting('rifnote_search_settings', 'rifnote_thenewsapi_locale', array('type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => 'ng,us,gb'));
@@ -2632,6 +2895,8 @@ class Rifnote_Search_Admin {
         $ranking_query = get_option('rifnote_search_last_ranking_simulation_query', '');
         $ranking_results = $ranking_query ? Rifnote_Search_Operations::ranking_simulation(array('query' => $ranking_query, 'category' => '', 'date_range' => 'all', 'sort' => 'relevance'), 8) : array();
         $daily_briefing = Rifnote_Search_Operations::daily_briefing(6);
+        $cleanup_preview_payload = self::is_section('operations') ? get_transient('rifnote_cleanup_last_preview') : false;
+        $cleanup_preview = is_array($cleanup_preview_payload) && isset($cleanup_preview_payload['preview']) ? $cleanup_preview_payload['preview'] : array('count' => 0, 'breakdown' => array(), 'samples' => array());
         $retention_summary = Rifnote_Search_Retention::admin_summary();
         $alerts_last_run = get_option('rifnote_search_alerts_last_run', array());
         $newsletter_last_run = get_option('rifnote_search_newsletter_last_run', array());
@@ -2862,6 +3127,74 @@ class Rifnote_Search_Admin {
                                 <label style="margin-left:12px;" for="rifnote_typography_body_weight"><?php esc_html_e('Weight', 'rifnote-search'); ?></label>
                                 <input id="rifnote_typography_body_weight" class="small-text" type="number" min="100" max="950" step="10" name="rifnote_typography_body_weight" value="<?php echo esc_attr(self::sanitize_font_weight(get_option('rifnote_typography_body_weight', 430))); ?>" />
                                 <p class="description"><?php esc_html_e('Controls the reading rhythm inside story pages and WordPress content views.', 'rifnote-search'); ?></p>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+
+                <?php
+                $force_data_api_check = !empty($_GET['rifnote_data_api_check']) && !empty($_GET['rifnote_data_api_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['rifnote_data_api_nonce'])), 'rifnote_data_api_check');
+                $data_api_health = class_exists('Rifnote_Search_Data_API') ? Rifnote_Search_Data_API::health($force_data_api_check) : array('ok' => false, 'message' => __('Data API bridge is not loaded.', 'rifnote-search'));
+                $data_api_last = get_option('rifnote_data_api_last_check', array());
+                ?>
+                <h2><?php esc_html_e('Rifnote Data Engine', 'rifnote-search'); ?></h2>
+                <p><?php esc_html_e('Connect WordPress to the external PostgreSQL warehouse for RSS, social, YouTube and high-volume imported content. Manual WordPress stories stay local.', 'rifnote-search'); ?></p>
+                <div class="rifnote-admin-card" style="max-width:1120px;margin:12px 0 18px;padding:14px 16px;border:1px solid #dcdcde;background:#fff;border-radius:10px;">
+                    <h3 style="margin-top:0;"><?php esc_html_e('Data API health', 'rifnote-search'); ?></h3>
+                    <p>
+                        <strong><?php esc_html_e('Status:', 'rifnote-search'); ?></strong>
+                        <span style="color:<?php echo !empty($data_api_health['ok']) ? '#047857' : '#b42318'; ?>;">
+                            <?php echo esc_html(!empty($data_api_health['ok']) ? __('Connected', 'rifnote-search') : __('Not connected', 'rifnote-search')); ?>
+                        </span>
+                        &nbsp;·&nbsp;
+                        <?php echo esc_html((string) ($data_api_health['message'] ?? ($data_api_health['ok'] ? 'OK' : ''))); ?>
+                    </p>
+                    <?php if (!empty($data_api_last['checked_at'])) : ?>
+                        <p class="description"><?php echo esc_html(sprintf(__('Last checked: %s', 'rifnote-search'), get_date_from_gmt(gmdate('Y-m-d H:i:s', strtotime($data_api_last['checked_at'])), 'M j, Y H:i'))); ?></p>
+                    <?php endif; ?>
+                    <p style="margin:10px 0 0;">
+                        <a class="button button-secondary" href="<?php echo esc_url(wp_nonce_url(add_query_arg('rifnote_data_api_check', '1'), 'rifnote_data_api_check', 'rifnote_data_api_nonce')); ?>"><?php esc_html_e('Check Data API now', 'rifnote-search'); ?></a>
+                    </p>
+                </div>
+                <table class="form-table" role="presentation">
+                    <tbody>
+                        <tr>
+                            <th scope="row"><?php esc_html_e('Data API bridge', 'rifnote-search'); ?></th>
+                            <td>
+                                <label>
+                                    <input type="hidden" name="rifnote_data_api_enabled" value="0" />
+                                    <input type="checkbox" name="rifnote_data_api_enabled" value="1" <?php checked((bool) get_option('rifnote_data_api_enabled', false)); ?> />
+                                    <?php esc_html_e('Enable the external Rifnote data engine.', 'rifnote-search'); ?>
+                                </label>
+                                <p>
+                                    <label>
+                                        <input type="hidden" name="rifnote_data_api_merge_search" value="0" />
+                                        <input type="checkbox" name="rifnote_data_api_merge_search" value="1" <?php checked((bool) get_option('rifnote_data_api_merge_search', true)); ?> />
+                                        <?php esc_html_e('Blend data engine stories into frontend search results.', 'rifnote-search'); ?>
+                                    </label>
+                                </p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="rifnote_data_api_url"><?php esc_html_e('Data API URL', 'rifnote-search'); ?></label></th>
+                            <td>
+                                <input id="rifnote_data_api_url" class="regular-text" type="url" name="rifnote_data_api_url" value="<?php echo esc_attr(get_option('rifnote_data_api_url', '')); ?>" placeholder="https://data.rifnote.com" />
+                                <p class="description"><?php esc_html_e('Use the public proxy URL. The API itself remains bound to localhost on the VPS.', 'rifnote-search'); ?></p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="rifnote_data_api_token"><?php esc_html_e('Data API token', 'rifnote-search'); ?></label></th>
+                            <td>
+                                <input id="rifnote_data_api_token" class="regular-text" type="password" name="rifnote_data_api_token" value="<?php echo esc_attr(get_option('rifnote_data_api_token', '')); ?>" autocomplete="off" />
+                                <p class="description"><?php esc_html_e('Bearer token from the data-engine env file. Prefer RIFNOTE_DATA_API_TOKEN in production when possible.', 'rifnote-search'); ?></p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><?php esc_html_e('Performance', 'rifnote-search'); ?></th>
+                            <td>
+                                <label><?php esc_html_e('Timeout', 'rifnote-search'); ?> <input type="number" min="3" max="20" name="rifnote_data_api_timeout" value="<?php echo esc_attr(get_option('rifnote_data_api_timeout', 8)); ?>" /> <?php esc_html_e('sec', 'rifnote-search'); ?></label>
+                                <label style="margin-left:12px;"><?php esc_html_e('Search cache', 'rifnote-search'); ?> <input type="number" min="0" max="900" name="rifnote_data_api_cache_ttl" value="<?php echo esc_attr(get_option('rifnote_data_api_cache_ttl', 120)); ?>" /> <?php esc_html_e('sec', 'rifnote-search'); ?></label>
+                                <p class="description"><?php esc_html_e('Short cache keeps search fresh without turning every keystroke or tab click into a VPS hit.', 'rifnote-search'); ?></p>
                             </td>
                         </tr>
                     </tbody>
@@ -3724,6 +4057,61 @@ class Rifnote_Search_Admin {
                         <input type="hidden" name="rifnote_ops_action" value="run_ingestion" />
                         <?php submit_button(__('Run ingestion now', 'rifnote-search'), 'secondary'); ?>
                     </form>
+                    <h3><?php esc_html_e('Imported content cleanup', 'rifnote-search'); ?></h3>
+                    <p><?php esc_html_e('Trash or delete old automated stories while protecting manually-added Rifnote Admin posts. CustomGPT/GPT stories are treated as imported content when the checkbox is enabled.', 'rifnote-search'); ?></p>
+                    <div class="card" style="max-width:none;">
+                        <h4 style="margin-top:0;"><?php echo esc_html(sprintf(__('Last preview: %d cleanup candidate(s)', 'rifnote-search'), (int) $cleanup_preview['count'])); ?></h4>
+                        <?php if (!empty($cleanup_preview_payload['created_at'])) : ?>
+                            <p class="description"><?php echo esc_html(sprintf(__('Preview generated %s. Page loads do not scan posts automatically.', 'rifnote-search'), get_date_from_gmt(gmdate('Y-m-d H:i:s', strtotime($cleanup_preview_payload['created_at'])), 'M j, H:i'))); ?></p>
+                        <?php else : ?>
+                            <p class="description"><?php esc_html_e('No preview has been generated yet. Use the preview button below before cleanup.', 'rifnote-search'); ?></p>
+                        <?php endif; ?>
+                        <?php if (!empty($cleanup_preview['breakdown'])) : ?>
+                            <p><strong><?php esc_html_e('Why they match:', 'rifnote-search'); ?></strong></p>
+                            <p>
+                                <?php foreach (array_slice($cleanup_preview['breakdown'], 0, 6, true) as $reason => $count) : ?>
+                                    <span style="display:inline-block;background:#f6f7f7;border:1px solid #dcdcde;border-radius:999px;padding:4px 9px;margin:0 4px 6px 0;"><?php echo esc_html($reason . ' ' . number_format_i18n((int) $count)); ?></span>
+                                <?php endforeach; ?>
+                            </p>
+                        <?php endif; ?>
+                        <?php if (!empty($cleanup_preview['samples'])) : ?>
+                            <table class="widefat striped" style="margin:10px 0;">
+                                <thead><tr><th><?php esc_html_e('Sample', 'rifnote-search'); ?></th><th><?php esc_html_e('Date', 'rifnote-search'); ?></th><th><?php esc_html_e('Marker', 'rifnote-search'); ?></th></tr></thead>
+                                <tbody>
+                                    <?php foreach ($cleanup_preview['samples'] as $sample) : ?>
+                                        <tr>
+                                            <td><a href="<?php echo esc_url($sample['edit_url']); ?>"><?php echo esc_html($sample['title']); ?></a></td>
+                                            <td><?php echo esc_html($sample['date']); ?></td>
+                                            <td><code><?php echo esc_html($sample['reason']); ?></code></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        <?php endif; ?>
+                        <form method="post">
+                            <?php wp_nonce_field('rifnote_ops_action', 'rifnote_ops_nonce'); ?>
+                            <p>
+                                <label>
+                                    <?php esc_html_e('Older than', 'rifnote-search'); ?>
+                                    <input type="number" min="0" max="3650" name="rifnote_cleanup_days" value="30" style="width:80px;" />
+                                    <?php esc_html_e('days', 'rifnote-search'); ?>
+                                </label>
+                                &nbsp;
+                                <label>
+                                    <?php esc_html_e('Max this run', 'rifnote-search'); ?>
+                                    <input type="number" min="1" max="5000" name="rifnote_cleanup_limit" value="500" style="width:90px;" />
+                                </label>
+                            </p>
+                            <p>
+                                <label><input type="checkbox" name="rifnote_cleanup_include_customgpt" value="1" checked /> <?php esc_html_e('Include CustomGPT/GPT imported stories', 'rifnote-search'); ?></label><br />
+                                <label><input type="checkbox" name="rifnote_cleanup_hard_delete" value="1" /> <?php esc_html_e('Hard delete instead of moving to trash', 'rifnote-search'); ?></label>
+                            </p>
+                            <p>
+                                <button class="button button-secondary" type="submit" name="rifnote_ops_action" value="preview_imported_cleanup"><?php esc_html_e('Preview cleanup candidates', 'rifnote-search'); ?></button>
+                                <button class="button button-primary button-link-delete" type="submit" name="rifnote_ops_action" value="cleanup_imported_posts"><?php esc_html_e('Clean imported posts', 'rifnote-search'); ?></button>
+                            </p>
+                        </form>
+                    </div>
                     <h3><?php esc_html_e('Editorial audit trail', 'rifnote-search'); ?></h3>
                     <table class="widefat striped">
                         <thead><tr><th><?php esc_html_e('Action', 'rifnote-search'); ?></th><th><?php esc_html_e('Object', 'rifnote-search'); ?></th><th><?php esc_html_e('Notes', 'rifnote-search'); ?></th><th><?php esc_html_e('Time', 'rifnote-search'); ?></th></tr></thead>

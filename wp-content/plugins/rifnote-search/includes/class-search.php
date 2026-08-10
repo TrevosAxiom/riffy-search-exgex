@@ -223,6 +223,30 @@ class Rifnote_Search_Engine {
             return self::result_payload($post_id, $request_args);
         }, $candidate_ids));
 
+        if (class_exists('Rifnote_Search_Data_API')) {
+            $data_results = Rifnote_Search_Data_API::search_payload($request_args, max(10, $per_page * 2));
+
+            if ($data_results) {
+                $seen = array();
+                foreach ($results as $result) {
+                    if (!empty($result['canonical_url'])) {
+                        $seen[md5(strtolower((string) $result['canonical_url']))] = true;
+                    }
+                    if (!empty($result['original_url'])) {
+                        $seen[md5(strtolower((string) $result['original_url']))] = true;
+                    }
+                }
+
+                foreach ($data_results as $result) {
+                    $key = !empty($result['canonical_url']) ? md5(strtolower((string) $result['canonical_url'])) : '';
+                    if ($key && isset($seen[$key])) {
+                        continue;
+                    }
+                    $results[] = $result;
+                }
+            }
+        }
+
         usort($results, function ($a, $b) use ($request_args) {
             if ('latest' === $request_args['sort']) {
                 return strcmp($b['published_at'], $a['published_at']);

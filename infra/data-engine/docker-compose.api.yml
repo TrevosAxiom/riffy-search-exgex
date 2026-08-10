@@ -1,0 +1,31 @@
+services:
+  api:
+    build:
+      context: ./api
+    container_name: rifnote-data-api
+    restart: unless-stopped
+    env_file:
+      - ./env.local
+    environment:
+      NODE_ENV: production
+      PORT: 3010
+      POSTGRES_HOST: ${POSTGRES_HOST:-postgres}
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: ${POSTGRES_DB:-rifnote_data}
+      POSTGRES_USER: ${POSTGRES_USER:-rifnote}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in env.local}
+      RIFNOTE_DATA_API_TOKEN: ${RIFNOTE_DATA_API_TOKEN:?Set RIFNOTE_DATA_API_TOKEN in env.local}
+    ports:
+      - "127.0.0.1:${RIFNOTE_DATA_API_PORT:-3010}:3010"
+    networks:
+      - rifnote_data_engine
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3010/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 6
+
+networks:
+  rifnote_data_engine:
+    external: true
+    name: rifnote-data-engine_default

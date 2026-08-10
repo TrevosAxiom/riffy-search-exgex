@@ -9,6 +9,10 @@
 !.github/workflows/
 !.github/workflows/**
 
+# Track infrastructure scaffolds.
+!infra/
+!infra/**
+
 # Track the Rifnote Search plugin.
 !wp-content/
 wp-content/*
@@ -45,6 +49,7 @@ node_modules/
 vendor/
 .env
 .env.*
+infra/data-engine/env.local
 
 # Keep plugin build output versioned for WordPress deployment, but ignore heavy deps.
 wp-content/plugins/rifnote-search/node_modules/
