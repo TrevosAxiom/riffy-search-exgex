@@ -95,7 +95,54 @@ class Rifnote_Search_Data_API {
         return $items;
     }
 
-    private static function request($path, $query = array(), $cache_key = '', $force = false) {
+    public static function stats($force = false) {
+        if (!self::enabled()) {
+            return array(
+                'ok' => false,
+                'message' => __('Data API is not enabled or is missing credentials.', 'rifnote-search'),
+            );
+        }
+
+        return self::request('/v1/admin/stats', array(), 'admin_stats', $force);
+    }
+
+    public static function ingest_rss_batch($feeds) {
+        if (!self::enabled()) {
+            return array(
+                'ok' => false,
+                'message' => __('Data API is not enabled or is missing credentials.', 'rifnote-search'),
+            );
+        }
+
+        $payload = array('feeds' => array());
+        foreach ((array) $feeds as $feed) {
+            if (empty($feed['feed_url']) && empty($feed['rss_feed_url'])) {
+                continue;
+            }
+
+            $payload['feeds'][] = array(
+                'name' => Rifnote_Search_Source_Meta::normalize_text((string) ($feed['name'] ?? $feed['publisher_name'] ?? '')),
+                'feed_url' => esc_url_raw((string) ($feed['feed_url'] ?? $feed['rss_feed_url'])),
+                'source_url' => esc_url_raw((string) ($feed['source_url'] ?? $feed['website_url'] ?? '')),
+                'category' => sanitize_key((string) ($feed['category'] ?? $feed['categories'] ?? 'news')),
+                'items_per_feed' => max(1, min(30, absint($feed['items_per_feed'] ?? get_option('rifnote_smart_rss_items_per_feed', 10)))),
+                'timeout' => max(3, min(20, absint($feed['timeout'] ?? get_option('rifnote_smart_rss_timeout', 8)))),
+                'language_code' => sanitize_key((string) ($feed['language_code'] ?? 'en')),
+                'country_code' => strtoupper(sanitize_key((string) ($feed['country_code'] ?? ''))),
+            );
+        }
+
+        if (empty($payload['feeds'])) {
+            return array(
+                'ok' => false,
+                'message' => __('No valid RSS feeds were prepared for the Data API.', 'rifnote-search'),
+            );
+        }
+
+        return self::request('/v1/ingest/rss/batch', array(), '', true, 'POST', $payload);
+    }
+
+    private static function request($path, $query = array(), $cache_key = '', $force = false, $method = 'GET', $body = null) {
         if (!self::base_url()) {
             return array('ok' => false, 'message' => __('Missing Data API URL.', 'rifnote-search'));
         }
@@ -105,11 +152,12 @@ class Rifnote_Search_Data_API {
         }
 
         $path = '/' . ltrim((string) $path, '/');
+        $method = strtoupper((string) $method);
         $url = add_query_arg(array_filter($query, function ($value) {
             return '' !== $value && null !== $value;
         }), self::base_url() . $path);
 
-        $transient_key = $cache_key ? 'rifnote_data_api_' . md5($cache_key . '|' . $url) : '';
+        $transient_key = ('GET' === $method && $cache_key) ? 'rifnote_data_api_' . md5($cache_key . '|' . $url) : '';
 
         if (!$force && $transient_key && self::cache_ttl() > 0) {
             $cached = get_transient($transient_key);
@@ -119,13 +167,21 @@ class Rifnote_Search_Data_API {
             }
         }
 
-        $response = wp_remote_get($url, array(
+        $args = array(
+            'method' => $method,
             'timeout' => self::timeout(),
             'headers' => array(
                 'Accept' => 'application/json',
                 'Authorization' => 'Bearer ' . self::token(),
             ),
-        ));
+        );
+
+        if ('GET' !== $method) {
+            $args['headers']['Content-Type'] = 'application/json';
+            $args['body'] = wp_json_encode(is_array($body) ? $body : array());
+        }
+
+        $response = wp_remote_request($url, $args);
 
         if (is_wp_error($response)) {
             $result = array('ok' => false, 'message' => $response->get_error_message());

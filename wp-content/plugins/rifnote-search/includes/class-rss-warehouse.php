@@ -101,7 +101,11 @@ class Rifnote_Search_RSS_Warehouse {
         $action = sanitize_key(wp_unslash($_POST['rifnote_rss_action']));
 
         if ('run_now' === $action) {
+            $preview = Rifnote_Search_Ingestion::queue_preview();
+            $warehouse_feeds = self::prepare_data_api_feeds($preview['feeds'] ?? array());
             $summary = Rifnote_Search_Ingestion::run_once(0, true);
+            $warehouse = class_exists('Rifnote_Search_Data_API') ? Rifnote_Search_Data_API::ingest_rss_batch($warehouse_feeds) : array('ok' => false, 'message' => __('Data API bridge is not loaded.', 'rifnote-search'));
+            update_option('rifnote_data_api_last_rss_ingest', $warehouse, false);
             echo '<div class="notice notice-success is-dismissible"><p>' . esc_html(sprintf(
                 __('RSS run finished: checked %1$d, created %2$d, published %3$d, duplicates %4$d, errors %5$d.', 'rifnote-search'),
                 (int) ($summary['checked'] ?? 0),
@@ -110,6 +114,7 @@ class Rifnote_Search_RSS_Warehouse {
                 (int) ($summary['duplicates'] ?? 0),
                 (int) ($summary['errors'] ?? 0)
             )) . '</p></div>';
+            echo '<div class="notice notice-' . esc_attr(!empty($warehouse['ok']) ? 'success' : 'warning') . ' is-dismissible"><p>' . esc_html(self::warehouse_notice($warehouse)) . '</p></div>';
             return;
         }
 
@@ -168,6 +173,9 @@ class Rifnote_Search_RSS_Warehouse {
         $summary = self::summary();
         $schedule = $summary['preview']['schedule'] ?? array();
         $last_summary = is_array($summary['last_log']['summary'] ?? null) ? $summary['last_log']['summary'] : array();
+        $warehouse_stats = class_exists('Rifnote_Search_Data_API') ? Rifnote_Search_Data_API::stats() : array('ok' => false);
+        $warehouse_counts = is_array($warehouse_stats['counts'] ?? null) ? $warehouse_stats['counts'] : array();
+        $last_warehouse = get_option('rifnote_data_api_last_rss_ingest', array());
 
         echo '<div style="display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:14px;max-width:1220px;">';
         self::metric_card(__('Total RSS feeds', 'rifnote-search'), number_format_i18n($summary['total_feeds']), __('Smart + approved publisher feeds', 'rifnote-search'));
@@ -200,6 +208,24 @@ class Rifnote_Search_RSS_Warehouse {
             echo '<p>' . esc_html__('No RSS warehouse run has been logged yet.', 'rifnote-search') . '</p>';
         }
         echo '</div></div>';
+
+        echo '<div class="card" style="max-width:1220px;margin-top:18px;"><h2>' . esc_html__('External warehouse status', 'rifnote-search') . '</h2>';
+        if (!empty($warehouse_stats['ok'])) {
+            echo '<p>' . esc_html(sprintf(
+                __('PostgreSQL now has %1$s source(s), %2$s feed channel(s), %3$s external item(s), and %4$s ingest run(s). %5$s item(s) arrived in the last 24 hours.', 'rifnote-search'),
+                number_format_i18n((int) ($warehouse_counts['sources'] ?? 0)),
+                number_format_i18n((int) ($warehouse_counts['feed_channels'] ?? 0)),
+                number_format_i18n((int) ($warehouse_counts['external_items'] ?? 0)),
+                number_format_i18n((int) ($warehouse_counts['ingest_runs'] ?? 0)),
+                number_format_i18n((int) ($warehouse_counts['items_24h'] ?? 0))
+            )) . '</p>';
+            if (!empty($last_warehouse)) {
+                echo '<p><strong>' . esc_html__('Last Data API push:', 'rifnote-search') . '</strong> ' . esc_html(self::warehouse_notice($last_warehouse)) . '</p>';
+            }
+        } else {
+            echo '<p>' . esc_html((string) ($warehouse_stats['message'] ?? __('Data API stats are not available yet. Configure and enable the Data API bridge to write RSS into Postgres.', 'rifnote-search'))) . '</p>';
+        }
+        echo '</div>';
 
         self::render_queue_table(array_slice($summary['preview']['feeds'] ?? array(), 0, 16), __('Feeds expected in the next pass', 'rifnote-search'));
     }
@@ -320,6 +346,39 @@ class Rifnote_Search_RSS_Warehouse {
 
     private static function metric_card($label, $value, $hint) {
         echo '<div class="card" style="max-width:none;"><p style="margin:0 0 8px;color:#646970;">' . esc_html($label) . '</p><h2 style="font-size:30px;margin:0 0 8px;">' . esc_html($value) . '</h2><p style="margin:0;color:#646970;">' . esc_html($hint) . '</p></div>';
+    }
+
+    private static function prepare_data_api_feeds($feeds) {
+        $items_per_feed = max(1, min(30, absint(get_option('rifnote_smart_rss_items_per_feed', 10))));
+        $timeout = max(3, min(20, absint(get_option('rifnote_smart_rss_timeout', 8))));
+
+        return array_map(function ($feed) use ($items_per_feed, $timeout) {
+            return array(
+                'name' => $feed['name'] ?? '',
+                'feed_url' => $feed['feed_url'] ?? '',
+                'category' => $feed['category'] ?? 'news',
+                'items_per_feed' => $items_per_feed,
+                'timeout' => $timeout,
+            );
+        }, (array) $feeds);
+    }
+
+    private static function warehouse_notice($warehouse) {
+        if (empty($warehouse) || !is_array($warehouse)) {
+            return __('Data API warehouse push did not return a response.', 'rifnote-search');
+        }
+
+        if (!empty($warehouse['ok'])) {
+            return sprintf(
+                __('Data API warehouse push: checked %1$d, inserted %2$d, duplicates %3$d, errors %4$d.', 'rifnote-search'),
+                (int) ($warehouse['checked'] ?? 0),
+                (int) ($warehouse['inserted'] ?? 0),
+                (int) ($warehouse['duplicates'] ?? 0),
+                (int) ($warehouse['errors'] ?? 0)
+            );
+        }
+
+        return sprintf(__('Data API warehouse push failed: %s', 'rifnote-search'), (string) ($warehouse['message'] ?? $warehouse['error'] ?? __('Unknown error', 'rifnote-search')));
     }
 
     private static function all_feeds() {

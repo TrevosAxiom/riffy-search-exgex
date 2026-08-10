@@ -3135,6 +3135,8 @@ class Rifnote_Search_Admin {
                 <?php
                 $force_data_api_check = !empty($_GET['rifnote_data_api_check']) && !empty($_GET['rifnote_data_api_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['rifnote_data_api_nonce'])), 'rifnote_data_api_check');
                 $data_api_health = class_exists('Rifnote_Search_Data_API') ? Rifnote_Search_Data_API::health($force_data_api_check) : array('ok' => false, 'message' => __('Data API bridge is not loaded.', 'rifnote-search'));
+                $data_api_stats = class_exists('Rifnote_Search_Data_API') ? Rifnote_Search_Data_API::stats($force_data_api_check) : array('ok' => false);
+                $data_api_counts = is_array($data_api_stats['counts'] ?? null) ? $data_api_stats['counts'] : array();
                 $data_api_last = get_option('rifnote_data_api_last_check', array());
                 ?>
                 <h2><?php esc_html_e('Rifnote Data Engine', 'rifnote-search'); ?></h2>
@@ -3155,6 +3157,15 @@ class Rifnote_Search_Admin {
                     <p style="margin:10px 0 0;">
                         <a class="button button-secondary" href="<?php echo esc_url(wp_nonce_url(add_query_arg('rifnote_data_api_check', '1'), 'rifnote_data_api_check', 'rifnote_data_api_nonce')); ?>"><?php esc_html_e('Check Data API now', 'rifnote-search'); ?></a>
                     </p>
+                    <?php if (!empty($data_api_stats['ok'])) : ?>
+                        <div style="display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:10px;margin-top:14px;">
+                            <p style="margin:0;padding:10px;background:#f6f7f7;border-radius:8px;"><strong><?php echo esc_html(number_format_i18n((int) ($data_api_counts['sources'] ?? 0))); ?></strong><br /><?php esc_html_e('Sources', 'rifnote-search'); ?></p>
+                            <p style="margin:0;padding:10px;background:#f6f7f7;border-radius:8px;"><strong><?php echo esc_html(number_format_i18n((int) ($data_api_counts['feed_channels'] ?? 0))); ?></strong><br /><?php esc_html_e('Feeds', 'rifnote-search'); ?></p>
+                            <p style="margin:0;padding:10px;background:#f6f7f7;border-radius:8px;"><strong><?php echo esc_html(number_format_i18n((int) ($data_api_counts['external_items'] ?? 0))); ?></strong><br /><?php esc_html_e('Items', 'rifnote-search'); ?></p>
+                            <p style="margin:0;padding:10px;background:#f6f7f7;border-radius:8px;"><strong><?php echo esc_html(number_format_i18n((int) ($data_api_counts['ingest_runs'] ?? 0))); ?></strong><br /><?php esc_html_e('Ingest runs', 'rifnote-search'); ?></p>
+                            <p style="margin:0;padding:10px;background:#f6f7f7;border-radius:8px;"><strong><?php echo esc_html(number_format_i18n((int) ($data_api_counts['items_24h'] ?? 0))); ?></strong><br /><?php esc_html_e('Last 24h', 'rifnote-search'); ?></p>
+                        </div>
+                    <?php endif; ?>
                 </div>
                 <table class="form-table" role="presentation">
                     <tbody>
