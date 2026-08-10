@@ -74,6 +74,36 @@ Primary endpoints:
 
 See [proxy/README.md](proxy/README.md).
 
+## 7. Optional: browser database GUI
+
+pgAdmin can run privately on the VPS and be exposed through a locked-down proxy.
+Postgres still stays bound to `127.0.0.1` and is not opened to the internet.
+
+Add these values to `env.local`:
+
+```bash
+PGADMIN_DEFAULT_EMAIL=admin@rifnote.com
+PGADMIN_DEFAULT_PASSWORD=change-this-long-pgadmin-password
+PGADMIN_PORT=5050
+```
+
+Start pgAdmin:
+
+```bash
+docker compose --env-file env.local -f docker-compose.pgadmin.yml up -d
+```
+
+Inside pgAdmin, add the server:
+
+- Host: `postgres`
+- Port: `5432`
+- Maintenance database: `rifnote_data`
+- Username: `rifnote`
+- Password: the `POSTGRES_PASSWORD` value from `env.local`
+
+For Webuzo/Apache, copy `proxy/apache/db-rifnote.conf` to Apache's `conf.d`
+folder and point `db.rifnote.com` at the VPS.
+
 ## Notes
 
 - Postgres and Redis are bound to `127.0.0.1`, so they are not publicly exposed.

@@ -1,0 +1,27 @@
+services:
+  pgadmin:
+    image: dpage/pgadmin4:8
+    container_name: rifnote-pgadmin
+    restart: unless-stopped
+    env_file:
+      - ./env.local
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:?Set PGADMIN_DEFAULT_EMAIL in env.local}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:?Set PGADMIN_DEFAULT_PASSWORD in env.local}
+      PGADMIN_DISABLE_POSTFIX: "true"
+      PGADMIN_CONFIG_ENHANCED_COOKIE_PROTECTION: "True"
+      PGADMIN_CONFIG_CONSOLE_LOG_LEVEL: "30"
+    ports:
+      - "127.0.0.1:${PGADMIN_PORT:-5050}:80"
+    volumes:
+      - rifnote_pgadmin_data:/var/lib/pgadmin
+    networks:
+      - rifnote_data_engine
+
+volumes:
+  rifnote_pgadmin_data:
+
+networks:
+  rifnote_data_engine:
+    external: true
+    name: rifnote-data-engine_default
