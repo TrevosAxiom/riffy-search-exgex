@@ -646,6 +646,7 @@ class Rifnote_Search_Admin {
         }
         if ('settings-feeds' === $section) {
             Rifnote_Search_Ingestion::repair_schedule(true);
+            self::render_data_api_status();
         }
         echo '<form method="post" action="options.php" style="max-width:1120px;margin-top:16px;">';
         settings_fields('rifnote_search_settings');
@@ -657,6 +658,49 @@ class Rifnote_Search_Admin {
         echo '</tbody></table></div>';
         submit_button(__('Save settings', 'rifnote-search'));
         echo '</form>';
+    }
+
+    private static function render_data_api_status() {
+        $force = !empty($_GET['rifnote_data_api_check']) && !empty($_GET['rifnote_data_api_nonce']) && wp_verify_nonce(sanitize_text_field(wp_unslash($_GET['rifnote_data_api_nonce'])), 'rifnote_data_api_check');
+        $health = class_exists('Rifnote_Search_Data_API') ? Rifnote_Search_Data_API::health($force) : array('ok' => false, 'message' => __('Data API bridge is not loaded.', 'rifnote-search'));
+        $stats = class_exists('Rifnote_Search_Data_API') ? Rifnote_Search_Data_API::stats($force) : array('ok' => false);
+        $counts = is_array($stats['counts'] ?? null) ? $stats['counts'] : array();
+        $last = get_option('rifnote_data_api_last_check', array());
+        $check_url = wp_nonce_url(add_query_arg('rifnote_data_api_check', '1'), 'rifnote_data_api_check', 'rifnote_data_api_nonce');
+        ?>
+        <div class="card" style="max-width:1120px;margin-top:16px;">
+            <h2><?php esc_html_e('Rifnote Data Engine', 'rifnote-search'); ?></h2>
+            <p><?php esc_html_e('Connection health for the PostgreSQL warehouse that powers RSS, social, YouTube and high-volume imported content.', 'rifnote-search'); ?></p>
+            <p>
+                <strong><?php esc_html_e('Status:', 'rifnote-search'); ?></strong>
+                <span style="color:<?php echo !empty($health['ok']) ? '#047857' : '#b42318'; ?>;">
+                    <?php echo esc_html(!empty($health['ok']) ? __('Connected', 'rifnote-search') : __('Not connected', 'rifnote-search')); ?>
+                </span>
+                &nbsp;·&nbsp;<?php echo esc_html((string) ($health['message'] ?? ($health['ok'] ? 'OK' : ''))); ?>
+            </p>
+            <?php if (class_exists('Rifnote_Search_Data_API')) : ?>
+                <p class="description">
+                    <?php
+                    $fingerprint = Rifnote_Search_Data_API::token_fingerprint();
+                    echo esc_html($fingerprint ? sprintf(__('Token saved · fingerprint %s', 'rifnote-search'), $fingerprint) : __('No Data API token is saved yet.', 'rifnote-search'));
+                    if (!empty($last['checked_at'])) {
+                        echo esc_html(' · ' . sprintf(__('Last checked: %s', 'rifnote-search'), get_date_from_gmt(gmdate('Y-m-d H:i:s', strtotime($last['checked_at'])), 'M j, Y H:i')));
+                    }
+                    ?>
+                </p>
+            <?php endif; ?>
+            <?php if (!empty($stats['ok'])) : ?>
+                <div style="display:grid;grid-template-columns:repeat(5,minmax(120px,1fr));gap:10px;margin:14px 0;">
+                    <p style="margin:0;padding:10px;background:#f6f7f7;border-radius:8px;"><strong><?php echo esc_html(number_format_i18n((int) ($counts['sources'] ?? 0))); ?></strong><br /><?php esc_html_e('Sources', 'rifnote-search'); ?></p>
+                    <p style="margin:0;padding:10px;background:#f6f7f7;border-radius:8px;"><strong><?php echo esc_html(number_format_i18n((int) ($counts['feed_channels'] ?? 0))); ?></strong><br /><?php esc_html_e('Feeds', 'rifnote-search'); ?></p>
+                    <p style="margin:0;padding:10px;background:#f6f7f7;border-radius:8px;"><strong><?php echo esc_html(number_format_i18n((int) ($counts['external_items'] ?? 0))); ?></strong><br /><?php esc_html_e('Items', 'rifnote-search'); ?></p>
+                    <p style="margin:0;padding:10px;background:#f6f7f7;border-radius:8px;"><strong><?php echo esc_html(number_format_i18n((int) ($counts['ingest_runs'] ?? 0))); ?></strong><br /><?php esc_html_e('Ingest runs', 'rifnote-search'); ?></p>
+                    <p style="margin:0;padding:10px;background:#f6f7f7;border-radius:8px;"><strong><?php echo esc_html(number_format_i18n((int) ($counts['items_24h'] ?? 0))); ?></strong><br /><?php esc_html_e('Last 24h', 'rifnote-search'); ?></p>
+                </div>
+            <?php endif; ?>
+            <p><a class="button button-secondary" href="<?php echo esc_url($check_url); ?>"><?php esc_html_e('Check Data API now', 'rifnote-search'); ?></a></p>
+        </div>
+        <?php
     }
 
     private static function render_github_updater_status() {
