@@ -43,6 +43,12 @@ class Rifnote_Search_Data_API {
         return trim($token);
     }
 
+    public static function token_fingerprint() {
+        $token = self::token();
+
+        return $token ? substr(hash('sha256', $token), 0, 12) : '';
+    }
+
     public static function timeout() {
         return max(3, min(20, absint(get_option('rifnote_data_api_timeout', self::DEFAULT_TIMEOUT))));
     }
@@ -167,13 +173,19 @@ class Rifnote_Search_Data_API {
             }
         }
 
+        $token = self::token();
+        $headers = array(
+            'Accept' => 'application/json',
+            'Authorization' => 'Bearer ' . $token,
+            'X-Rifnote-Token' => $token,
+            'X-API-Key' => $token,
+        );
+        $headers = apply_filters('rifnote_data_api_headers', $headers, $token, $path, $method);
+
         $args = array(
             'method' => $method,
             'timeout' => self::timeout(),
-            'headers' => array(
-                'Accept' => 'application/json',
-                'Authorization' => 'Bearer ' . self::token(),
-            ),
+            'headers' => $headers,
         );
 
         if ('GET' !== $method) {
@@ -190,9 +202,17 @@ class Rifnote_Search_Data_API {
             $body = json_decode((string) wp_remote_retrieve_body($response), true);
 
             if ($code < 200 || $code >= 300) {
+                $message = sprintf(__('Data API returned HTTP %d.', 'rifnote-search'), $code);
+
+                if (401 === $code) {
+                    $message = __('Data API rejected the token (HTTP 401). Re-save the warehouse token or sync it with the data engine token.', 'rifnote-search');
+                } elseif (403 === $code) {
+                    $message = __('Data API request was blocked (HTTP 403). Check Cloudflare/firewall rules and allow server-to-server API calls.', 'rifnote-search');
+                }
+
                 $result = array(
                     'ok' => false,
-                    'message' => sprintf(__('Data API returned HTTP %d.', 'rifnote-search'), $code),
+                    'message' => $message,
                     'status' => $code,
                 );
             } elseif (!is_array($body)) {
@@ -207,6 +227,10 @@ class Rifnote_Search_Data_API {
             'ok' => !empty($result['ok']),
             'message' => (string) ($result['message'] ?? ($result['ok'] ? 'OK' : 'Unknown response')),
             'url' => esc_url_raw($url),
+            'status' => isset($result['status']) ? absint($result['status']) : 0,
+            'token_present' => (bool) $token,
+            'token_fingerprint' => self::token_fingerprint(),
+            'auth_headers' => array_values(array_intersect(array_keys($headers), array('Authorization', 'X-Rifnote-Token', 'X-API-Key'))),
         ), false);
 
         if ($transient_key && self::cache_ttl() > 0) {

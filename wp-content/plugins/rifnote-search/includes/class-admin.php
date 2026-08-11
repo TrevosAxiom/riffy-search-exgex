@@ -2167,6 +2167,17 @@ class Rifnote_Search_Admin {
     }
 
     public static function sanitize_secret($value) {
+        $option = '';
+        $filter = current_filter();
+
+        if (is_string($filter) && 0 === strpos($filter, 'sanitize_option_')) {
+            $option = substr($filter, strlen('sanitize_option_'));
+        }
+
+        if ($option && (!isset($_POST[$option]) || null === $value)) {
+            return (string) get_option($option, '');
+        }
+
         return trim(sanitize_text_field((string) $value));
     }
 
@@ -3199,6 +3210,17 @@ class Rifnote_Search_Admin {
                     </p>
                     <?php if (!empty($data_api_last['checked_at'])) : ?>
                         <p class="description"><?php echo esc_html(sprintf(__('Last checked: %s', 'rifnote-search'), get_date_from_gmt(gmdate('Y-m-d H:i:s', strtotime($data_api_last['checked_at'])), 'M j, Y H:i'))); ?></p>
+                    <?php endif; ?>
+                    <?php if (class_exists('Rifnote_Search_Data_API')) : ?>
+                        <p class="description">
+                            <?php
+                            $token_fingerprint = Rifnote_Search_Data_API::token_fingerprint();
+                            echo esc_html($token_fingerprint ? sprintf(__('Token saved · fingerprint %s', 'rifnote-search'), $token_fingerprint) : __('No Data API token is saved yet.', 'rifnote-search'));
+                            if (!empty($data_api_last['auth_headers']) && is_array($data_api_last['auth_headers'])) {
+                                echo esc_html(' · ' . sprintf(__('Auth headers sent: %s', 'rifnote-search'), implode(', ', array_map('sanitize_text_field', $data_api_last['auth_headers']))));
+                            }
+                            ?>
+                        </p>
                     <?php endif; ?>
                     <p style="margin:10px 0 0;">
                         <a class="button button-secondary" href="<?php echo esc_url(wp_nonce_url(add_query_arg('rifnote_data_api_check', '1'), 'rifnote_data_api_check', 'rifnote_data_api_nonce')); ?>"><?php esc_html_e('Check Data API now', 'rifnote-search'); ?></a>
