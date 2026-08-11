@@ -134,6 +134,8 @@ $story_image_for_post = static function ($post_id) {
     return esc_url($image_url);
 };
 $latest_sidebar_posts = static function ($exclude = 0) {
+    global $wpdb;
+
     $exclude = absint($exclude);
     $cache_key = 'rifnote_public_latest_sidebar_' . $exclude;
     $cached_ids = get_transient($cache_key);
@@ -142,32 +144,37 @@ $latest_sidebar_posts = static function ($exclude = 0) {
         return array_values(array_filter(array_map('get_post', array_map('absint', $cached_ids))));
     }
 
-    $posts = get_posts(array(
-        'post_type' => 'post',
-        'post_status' => 'publish',
-        'posts_per_page' => 6,
-        'post__not_in' => $exclude ? array($exclude) : array(),
-        'orderby' => 'date',
-        'order' => 'DESC',
-        'ignore_sticky_posts' => true,
-        'meta_query' => array(
-            'relation' => 'OR',
-            array(
-                'key' => 'rifnote_origin_channel',
-                'value' => 'admin',
-            ),
-            array(
-                'key' => 'rifnote_origin_model',
-                'value' => 'Rifnote Admin',
-            ),
-        ),
-    ));
+    $where = "p.post_type = 'post'
+        AND p.post_status = 'publish'
+        AND (
+            (pm.meta_key = 'rifnote_origin_channel' AND pm.meta_value = 'admin')
+            OR (pm.meta_key = 'rifnote_origin_model' AND pm.meta_value = 'Rifnote Admin')
+        )";
+    $params = array();
 
-    set_transient($cache_key, wp_list_pluck($posts, 'ID'), 5 * MINUTE_IN_SECONDS);
+    if ($exclude) {
+        $where .= ' AND p.ID != %d';
+        $params[] = $exclude;
+    }
+
+    $sql = "
+        SELECT DISTINCT p.ID
+        FROM {$wpdb->posts} p
+        INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+        WHERE {$where}
+        ORDER BY p.post_date DESC
+        LIMIT 6
+    ";
+    $ids = $params ? $wpdb->get_col($wpdb->prepare($sql, $params)) : $wpdb->get_col($sql);
+    $posts = array_values(array_filter(array_map('get_post', array_map('absint', $ids))));
+
+    set_transient($cache_key, wp_list_pluck($posts, 'ID'), 30 * MINUTE_IN_SECONDS);
 
     return $posts;
 };
 $manual_adjacent_posts = static function ($post_id) {
+    global $wpdb;
+
     $post_id = absint($post_id);
     $cache_key = 'rifnote_public_adjacent_' . $post_id;
     $cached_ids = get_transient($cache_key);
@@ -180,61 +187,49 @@ $manual_adjacent_posts = static function ($post_id) {
     }
 
     $post_date = get_post_field('post_date', $post_id);
-    $manual_meta_query = array(
-        'relation' => 'OR',
-        array(
-            'key' => 'rifnote_origin_channel',
-            'value' => 'admin',
-        ),
-        array(
-            'key' => 'rifnote_origin_model',
-            'value' => 'Rifnote Admin',
-        ),
-    );
+    $previous_sql = "
+        SELECT DISTINCT p.ID
+        FROM {$wpdb->posts} p
+        INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+        WHERE p.post_type = 'post'
+          AND p.post_status = 'publish'
+          AND p.ID != %d
+          AND p.post_date < %s
+          AND (
+              (pm.meta_key = 'rifnote_origin_channel' AND pm.meta_value = 'admin')
+              OR (pm.meta_key = 'rifnote_origin_model' AND pm.meta_value = 'Rifnote Admin')
+          )
+        ORDER BY p.post_date DESC
+        LIMIT 1
+    ";
+    $next_sql = "
+        SELECT DISTINCT p.ID
+        FROM {$wpdb->posts} p
+        INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+        WHERE p.post_type = 'post'
+          AND p.post_status = 'publish'
+          AND p.ID != %d
+          AND p.post_date > %s
+          AND (
+              (pm.meta_key = 'rifnote_origin_channel' AND pm.meta_value = 'admin')
+              OR (pm.meta_key = 'rifnote_origin_model' AND pm.meta_value = 'Rifnote Admin')
+          )
+        ORDER BY p.post_date ASC
+        LIMIT 1
+    ";
 
-    $previous = get_posts(array(
-        'post_type' => 'post',
-        'post_status' => 'publish',
-        'posts_per_page' => 1,
-        'post__not_in' => array($post_id),
-        'orderby' => 'date',
-        'order' => 'DESC',
-        'ignore_sticky_posts' => true,
-        'date_query' => array(
-            array(
-                'before' => $post_date,
-                'inclusive' => false,
-            ),
-        ),
-        'meta_query' => $manual_meta_query,
-    ));
-
-    $next = get_posts(array(
-        'post_type' => 'post',
-        'post_status' => 'publish',
-        'posts_per_page' => 1,
-        'post__not_in' => array($post_id),
-        'orderby' => 'date',
-        'order' => 'ASC',
-        'ignore_sticky_posts' => true,
-        'date_query' => array(
-            array(
-                'after' => $post_date,
-                'inclusive' => false,
-            ),
-        ),
-        'meta_query' => $manual_meta_query,
-    ));
+    $previous_id = (int) $wpdb->get_var($wpdb->prepare($previous_sql, $post_id, $post_date));
+    $next_id = (int) $wpdb->get_var($wpdb->prepare($next_sql, $post_id, $post_date));
 
     $result = array(
-        'previous' => $previous ? $previous[0] : null,
-        'next' => $next ? $next[0] : null,
+        'previous' => $previous_id ? get_post($previous_id) : null,
+        'next' => $next_id ? get_post($next_id) : null,
     );
 
     set_transient($cache_key, array(
         'previous' => $result['previous'] ? $result['previous']->ID : 0,
         'next' => $result['next'] ? $result['next']->ID : 0,
-    ), 5 * MINUTE_IN_SECONDS);
+    ), HOUR_IN_SECONDS);
 
     return $result;
 };

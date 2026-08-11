@@ -7,6 +7,35 @@ if (!defined('ABSPATH')) {
 class Rifnote_Search_Admin {
     const ADS_REPORT_CRON_HOOK = 'rifnote_search_ads_scheduled_report';
     const HOME_PILL_META = '_rifnote_home_pill';
+    const PERFORMANCE_INDEX_VERSION = '2026-08-11-1';
+
+    public static function maybe_install_performance_indexes() {
+        global $wpdb;
+
+        if (!is_admin() || !current_user_can('manage_options')) {
+            return;
+        }
+
+        if (get_option('rifnote_performance_index_version') === self::PERFORMANCE_INDEX_VERSION) {
+            return;
+        }
+
+        $index_exists = (bool) $wpdb->get_var($wpdb->prepare(
+            "SELECT COUNT(1)
+             FROM information_schema.STATISTICS
+             WHERE TABLE_SCHEMA = DATABASE()
+               AND TABLE_NAME = %s
+               AND INDEX_NAME = %s",
+            $wpdb->postmeta,
+            'rifnote_meta_key_value'
+        ));
+
+        if (!$index_exists) {
+            $wpdb->query("ALTER TABLE {$wpdb->postmeta} ADD INDEX rifnote_meta_key_value (meta_key(191), meta_value(191))");
+        }
+
+        update_option('rifnote_performance_index_version', self::PERFORMANCE_INDEX_VERSION, false);
+    }
 
     public static function cron_schedules($schedules) {
         if (!isset($schedules['rifnote_weekly'])) {
@@ -1702,6 +1731,8 @@ class Rifnote_Search_Admin {
     }
 
     private static function cleanup_candidate_ids($args = array()) {
+        global $wpdb;
+
         $defaults = array(
             'days' => 30,
             'limit' => 500,
@@ -1711,43 +1742,58 @@ class Rifnote_Search_Admin {
         $limit = max(1, min(5000, absint($args['limit'])));
         $days = absint($args['days']);
         $markers = self::cleanup_import_markers();
-        $marker_meta = array('relation' => 'OR');
+        $statuses = array('publish', 'draft', 'pending', 'future', 'private');
+        $params = array();
+        $marker_sql = array();
+        $placeholder_list = static function ($items) {
+            return implode(', ', array_fill(0, count($items), '%s'));
+        };
 
-        foreach ($markers['channels'] as $channel) {
-            $marker_meta[] = array('key' => 'rifnote_origin_channel', 'value' => $channel, 'compare' => '=');
+        if (!empty($markers['channels'])) {
+            $marker_sql[] = "(pm.meta_key = 'rifnote_origin_channel' AND pm.meta_value IN (" . $placeholder_list($markers['channels']) . '))';
+            $params = array_merge($params, $markers['channels']);
         }
 
-        foreach ($markers['models'] as $model) {
-            $marker_meta[] = array('key' => 'rifnote_origin_model', 'value' => $model, 'compare' => '=');
+        if (!empty($markers['models'])) {
+            $marker_sql[] = "(pm.meta_key = 'rifnote_origin_model' AND pm.meta_value IN (" . $placeholder_list($markers['models']) . '))';
+            $params = array_merge($params, $markers['models']);
         }
 
-        foreach ($markers['source_types'] as $source_type) {
-            $marker_meta[] = array('key' => 'source_type', 'value' => $source_type, 'compare' => '=');
+        if (!empty($markers['source_types'])) {
+            $marker_sql[] = "(pm.meta_key = 'source_type' AND pm.meta_value IN (" . $placeholder_list($markers['source_types']) . '))';
+            $params = array_merge($params, $markers['source_types']);
         }
 
-        foreach ($markers['meta_keys'] as $meta_key) {
-            $marker_meta[] = array('key' => $meta_key, 'compare' => 'EXISTS');
+        if (!empty($markers['meta_keys'])) {
+            $marker_sql[] = 'pm.meta_key IN (' . $placeholder_list($markers['meta_keys']) . ')';
+            $params = array_merge($params, $markers['meta_keys']);
         }
 
-        $query_args = array(
-            'post_type' => 'post',
-            'post_status' => array('publish', 'draft', 'pending', 'future', 'private'),
-            'fields' => 'ids',
-            'posts_per_page' => min(3000, max($limit * 2, $limit)),
-            'orderby' => 'date',
-            'order' => 'ASC',
-            'no_found_rows' => true,
-            'meta_query' => array($marker_meta),
-        );
+        if (!$marker_sql) {
+            return array();
+        }
+
+        $fetch_limit = min(3000, max($limit * 2, $limit));
+        $status_placeholders = $placeholder_list($statuses);
+        $where = "p.post_type = 'post' AND p.post_status IN ({$status_placeholders})";
+        $where_params = $statuses;
 
         if ($days > 0) {
-            $query_args['date_query'] = array(array(
-                'before' => gmdate('Y-m-d H:i:s', time() - ($days * DAY_IN_SECONDS)),
-                'inclusive' => true,
-            ));
+            $where .= ' AND p.post_date_gmt <= %s';
+            $where_params[] = gmdate('Y-m-d H:i:s', time() - ($days * DAY_IN_SECONDS));
         }
 
-        $candidate_ids = get_posts($query_args);
+        $sql = "
+            SELECT DISTINCT p.ID
+            FROM {$wpdb->posts} p
+            INNER JOIN {$wpdb->postmeta} pm ON pm.post_id = p.ID
+            WHERE {$where}
+              AND (" . implode(' OR ', $marker_sql) . ")
+            ORDER BY p.post_date ASC
+            LIMIT {$fetch_limit}
+        ";
+
+        $candidate_ids = $wpdb->get_col($wpdb->prepare($sql, array_merge($where_params, $params)));
         $filtered = array();
 
         foreach ($candidate_ids as $post_id) {
