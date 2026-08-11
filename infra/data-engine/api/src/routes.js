@@ -21,6 +21,24 @@ function limitValue(value, fallback = 20) {
   return Math.min(parsed, MAX_LIMIT);
 }
 
+function offsetValue(value) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return 0;
+  }
+  return parsed;
+}
+
+function boolValue(value, fallback = true) {
+  if (value === undefined || value === null || value === '') {
+    return fallback;
+  }
+  if (typeof value === 'boolean') {
+    return value;
+  }
+  return ['1', 'true', 'yes', 'on', 'active'].includes(String(value).toLowerCase());
+}
+
 function serializeItem(row) {
   return {
     id: Number(row.id),
@@ -45,6 +63,45 @@ function serializeItem(row) {
     published_at: row.published_at,
     discovered_at: row.discovered_at,
     wp_post_id: row.wp_post_id ? Number(row.wp_post_id) : null
+  };
+}
+
+function serializeAdminItem(row) {
+  return {
+    ...serializeItem(row),
+    external_id: row.external_id || null,
+    content_text: row.content_text || null,
+    author_name: row.author_name || null,
+    editorial_status: row.editorial_status || 'raw',
+    raw_payload: row.raw_payload || {},
+    created_at: row.created_at,
+    updated_at: row.updated_at
+  };
+}
+
+function serializeFeed(row) {
+  return {
+    id: Number(row.id),
+    feed_url: row.feed_url,
+    category_slug: row.category_slug || null,
+    poll_interval_seconds: Number(row.poll_interval_seconds || 300),
+    last_checked_at: row.last_checked_at,
+    next_check_at: row.next_check_at,
+    last_status: row.last_status || null,
+    last_error: row.last_error || null,
+    is_active: !!row.is_active,
+    source: {
+      id: row.source_id ? Number(row.source_id) : null,
+      key: row.source_key || null,
+      name: row.source_name || null,
+      url: row.source_url || null,
+      type: row.source_type || null,
+      logo: row.logo_url || null,
+      trust_score: row.trust_score ? Number(row.trust_score) : 0,
+      is_active: row.source_is_active === undefined ? true : !!row.source_is_active
+    },
+    created_at: row.created_at,
+    updated_at: row.updated_at
   };
 }
 
@@ -503,6 +560,401 @@ export async function registerRoutes(app) {
       recent_runs: runs.rows,
       recent_items: items.rows
     };
+  });
+
+  app.get('/v1/admin/items', async (request) => {
+    const limit = limitValue(request.query.limit, 25);
+    const offset = offsetValue(request.query.offset);
+    const params = [];
+    const where = [];
+
+    if (request.query.q) {
+      params.push(`%${String(request.query.q).trim()}%`);
+      where.push(`(
+        external_items.title ILIKE $${params.length}
+        OR external_items.description ILIKE $${params.length}
+        OR external_items.content_text ILIKE $${params.length}
+        OR external_items.canonical_url ILIKE $${params.length}
+        OR sources.source_name ILIKE $${params.length}
+      )`);
+    }
+
+    if (request.query.type) {
+      params.push(String(request.query.type).trim());
+      where.push(`external_items.item_type = $${params.length}`);
+    }
+
+    if (request.query.status) {
+      params.push(String(request.query.status).trim());
+      where.push(`external_items.editorial_status = $${params.length}`);
+    }
+
+    if (request.query.category) {
+      params.push(String(request.query.category).trim());
+      where.push(`external_items.category_slug = $${params.length}`);
+    }
+
+    if (request.query.source) {
+      const source = String(request.query.source).trim();
+      if (/^\d+$/.test(source)) {
+        params.push(Number.parseInt(source, 10));
+        where.push(`external_items.source_id = $${params.length}`);
+      } else {
+        params.push(`%${source}%`);
+        where.push(`(sources.source_name ILIKE $${params.length} OR sources.source_key ILIKE $${params.length})`);
+      }
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const count = await query(
+      `
+        SELECT COUNT(*) AS total
+        FROM external_items
+        LEFT JOIN sources ON sources.id = external_items.source_id
+        ${whereSql}
+      `,
+      params
+    );
+
+    const result = await query(
+      `
+        SELECT external_items.*, sources.source_name, sources.source_url, sources.logo_url
+        FROM external_items
+        LEFT JOIN sources ON sources.id = external_items.source_id
+        ${whereSql}
+        ORDER BY external_items.published_at DESC NULLS LAST, external_items.discovered_at DESC, external_items.id DESC
+        LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+      `,
+      [...params, limit, offset]
+    );
+
+    return {
+      total: Number(count.rows[0]?.total || 0),
+      limit,
+      offset,
+      items: result.rows.map(serializeAdminItem)
+    };
+  });
+
+  app.get('/v1/admin/items/:id', async (request, reply) => {
+    const id = Number.parseInt(request.params.id, 10);
+    if (!Number.isFinite(id) || id < 1) {
+      return reply.code(400).send({ ok: false, error: 'invalid_item_id' });
+    }
+
+    const result = await query(
+      `
+        SELECT external_items.*, sources.source_name, sources.source_url, sources.logo_url
+        FROM external_items
+        LEFT JOIN sources ON sources.id = external_items.source_id
+        WHERE external_items.id = $1
+        LIMIT 1
+      `,
+      [id]
+    );
+
+    if (!result.rows.length) {
+      return reply.code(404).send({ ok: false, error: 'item_not_found' });
+    }
+
+    return { item: serializeAdminItem(result.rows[0]) };
+  });
+
+  app.patch('/v1/admin/items/:id', async (request, reply) => {
+    const id = Number.parseInt(request.params.id, 10);
+    const body = request.body || {};
+    const allowed = [
+      'external_id', 'canonical_url', 'item_type', 'title', 'description', 'content_text', 'author_name',
+      'image_url', 'video_url', 'social_url', 'language_code', 'country_code', 'category_slug',
+      'editorial_status', 'wp_post_id'
+    ];
+    const sets = [];
+    const params = [];
+
+    if (!Number.isFinite(id) || id < 1) {
+      return reply.code(400).send({ ok: false, error: 'invalid_item_id' });
+    }
+
+    for (const field of allowed) {
+      if (body[field] === undefined) {
+        continue;
+      }
+
+      let value = body[field];
+      if (['item_type', 'category_slug', 'editorial_status', 'language_code', 'country_code'].includes(field)) {
+        value = slug(value, field === 'category_slug' ? 'news' : '');
+      } else if (['title', 'description', 'content_text', 'author_name'].includes(field)) {
+        value = cleanText(value);
+      } else if (['canonical_url', 'image_url', 'video_url', 'social_url'].includes(field)) {
+        value = cleanText(value);
+        if (value && !/^https?:\/\//i.test(value)) {
+          return reply.code(400).send({ ok: false, error: `invalid_${field}` });
+        }
+      } else if (field === 'wp_post_id') {
+        value = value ? Number.parseInt(value, 10) : null;
+      } else {
+        value = cleanText(value);
+      }
+
+      if (field === 'title' && !value) {
+        return reply.code(400).send({ ok: false, error: 'empty_title' });
+      }
+
+      params.push(value || null);
+      sets.push(`${field} = $${params.length}`);
+    }
+
+    if (body.source && typeof body.source === 'object') {
+      const client = await pool.connect();
+      try {
+        const source = await upsertSource(client, {
+          name: body.source.name,
+          source_url: body.source.url,
+          website_url: body.source.url,
+          source_type: body.source.type || 'rss',
+          logo_url: body.source.logo
+        });
+        params.push(source.id);
+        sets.push(`source_id = $${params.length}`);
+      } finally {
+        client.release();
+      }
+    } else if (body.source_id !== undefined) {
+      params.push(body.source_id ? Number.parseInt(body.source_id, 10) : null);
+      sets.push(`source_id = $${params.length}`);
+    }
+
+    if (!sets.length) {
+      return reply.code(400).send({ ok: false, error: 'empty_update' });
+    }
+
+    params.push(id);
+    const result = await query(
+      `
+        UPDATE external_items
+        SET ${sets.join(', ')}, updated_at = NOW()
+        WHERE id = $${params.length}
+        RETURNING *
+      `,
+      params
+    );
+
+    if (!result.rows.length) {
+      return reply.code(404).send({ ok: false, error: 'item_not_found' });
+    }
+
+    const withSource = await query(
+      `
+        SELECT external_items.*, sources.source_name, sources.source_url, sources.logo_url
+        FROM external_items
+        LEFT JOIN sources ON sources.id = external_items.source_id
+        WHERE external_items.id = $1
+      `,
+      [id]
+    );
+
+    return { ok: true, item: serializeAdminItem(withSource.rows[0]) };
+  });
+
+  app.delete('/v1/admin/items/:id', async (request, reply) => {
+    const id = Number.parseInt(request.params.id, 10);
+    if (!Number.isFinite(id) || id < 1) {
+      return reply.code(400).send({ ok: false, error: 'invalid_item_id' });
+    }
+
+    const result = await query('DELETE FROM external_items WHERE id = $1 RETURNING id', [id]);
+    return { ok: true, deleted: result.rowCount };
+  });
+
+  app.get('/v1/admin/feeds', async (request) => {
+    const limit = limitValue(request.query.limit, 50);
+    const offset = offsetValue(request.query.offset);
+    const params = [];
+    const where = [];
+
+    if (request.query.q) {
+      params.push(`%${String(request.query.q).trim()}%`);
+      where.push(`(
+        feed_channels.feed_url ILIKE $${params.length}
+        OR sources.source_name ILIKE $${params.length}
+        OR sources.source_url ILIKE $${params.length}
+      )`);
+    }
+
+    if (request.query.active !== undefined && request.query.active !== '') {
+      params.push(boolValue(request.query.active));
+      where.push(`feed_channels.is_active = $${params.length}`);
+    }
+
+    const whereSql = where.length ? `WHERE ${where.join(' AND ')}` : '';
+    const count = await query(
+      `
+        SELECT COUNT(*) AS total
+        FROM feed_channels
+        LEFT JOIN sources ON sources.id = feed_channels.source_id
+        ${whereSql}
+      `,
+      params
+    );
+    const result = await query(
+      `
+        SELECT feed_channels.*, sources.source_key, sources.source_name, sources.source_url, sources.source_type,
+               sources.logo_url, sources.trust_score, sources.is_active AS source_is_active
+        FROM feed_channels
+        LEFT JOIN sources ON sources.id = feed_channels.source_id
+        ${whereSql}
+        ORDER BY feed_channels.is_active DESC, feed_channels.next_check_at ASC NULLS FIRST, sources.source_name ASC
+        LIMIT $${params.length + 1} OFFSET $${params.length + 2}
+      `,
+      [...params, limit, offset]
+    );
+
+    return {
+      total: Number(count.rows[0]?.total || 0),
+      limit,
+      offset,
+      feeds: result.rows.map(serializeFeed)
+    };
+  });
+
+  app.post('/v1/admin/feeds', async (request, reply) => {
+    const body = request.body || {};
+    const feedUrl = cleanText(body.feed_url || body.url || '');
+
+    if (!/^https?:\/\//i.test(feedUrl)) {
+      return reply.code(400).send({ ok: false, error: 'invalid_feed_url' });
+    }
+
+    const client = await pool.connect();
+    try {
+      const source = await upsertSource(client, {
+        name: body.source_name || body.name || sourceHome(feedUrl),
+        feed_url: feedUrl,
+        source_url: body.source_url || body.website_url || sourceHome(feedUrl),
+        source_type: body.source_type || 'rss',
+        logo_url: body.logo_url || null
+      });
+      const channel = await upsertChannel(client, source.id, {
+        feed_url: feedUrl,
+        category: body.category_slug || body.category || 'news',
+        poll_interval_seconds: body.poll_interval_seconds || 300
+      });
+      await client.query(
+        'UPDATE feed_channels SET is_active = $1, next_check_at = COALESCE(next_check_at, NOW()), updated_at = NOW() WHERE id = $2',
+        [boolValue(body.is_active, true), channel.id]
+      );
+      const row = await client.query(
+        `
+          SELECT feed_channels.*, sources.source_key, sources.source_name, sources.source_url, sources.source_type,
+                 sources.logo_url, sources.trust_score, sources.is_active AS source_is_active
+          FROM feed_channels
+          LEFT JOIN sources ON sources.id = feed_channels.source_id
+          WHERE feed_channels.id = $1
+        `,
+        [channel.id]
+      );
+      return { ok: true, feed: serializeFeed(row.rows[0]) };
+    } finally {
+      client.release();
+    }
+  });
+
+  app.patch('/v1/admin/feeds/:id', async (request, reply) => {
+    const id = Number.parseInt(request.params.id, 10);
+    const body = request.body || {};
+    const sets = [];
+    const params = [];
+
+    if (!Number.isFinite(id) || id < 1) {
+      return reply.code(400).send({ ok: false, error: 'invalid_feed_id' });
+    }
+
+    if (body.feed_url !== undefined) {
+      const feedUrl = cleanText(body.feed_url);
+      if (!/^https?:\/\//i.test(feedUrl)) {
+        return reply.code(400).send({ ok: false, error: 'invalid_feed_url' });
+      }
+      params.push(feedUrl);
+      sets.push(`feed_url = $${params.length}`);
+    }
+    if (body.category_slug !== undefined || body.category !== undefined) {
+      params.push(slug(body.category_slug || body.category || 'news'));
+      sets.push(`category_slug = $${params.length}`);
+    }
+    if (body.poll_interval_seconds !== undefined) {
+      params.push(Math.max(60, Number.parseInt(body.poll_interval_seconds, 10) || 300));
+      sets.push(`poll_interval_seconds = $${params.length}`);
+      sets.push(`next_check_at = NOW() + $${params.length} * INTERVAL '1 second'`);
+    }
+    if (body.is_active !== undefined) {
+      params.push(boolValue(body.is_active, true));
+      sets.push(`is_active = $${params.length}`);
+    }
+
+    const client = await pool.connect();
+    try {
+      if (sets.length) {
+        params.push(id);
+        await client.query(
+          `
+            UPDATE feed_channels
+            SET ${sets.join(', ')}, updated_at = NOW()
+            WHERE id = $${params.length}
+          `,
+          params
+        );
+      }
+
+      if (body.source && typeof body.source === 'object') {
+        await client.query(
+          `
+            UPDATE sources
+            SET source_name = COALESCE($1, source_name),
+                source_url = COALESCE($2, source_url),
+                source_type = COALESCE($3, source_type),
+                logo_url = COALESCE($4, logo_url),
+                updated_at = NOW()
+            WHERE id = (SELECT source_id FROM feed_channels WHERE id = $5)
+          `,
+          [
+            cleanText(body.source.name) || null,
+            cleanText(body.source.url) || null,
+            cleanText(body.source.type) || null,
+            cleanText(body.source.logo) || null,
+            id
+          ]
+        );
+      }
+
+      const row = await client.query(
+        `
+          SELECT feed_channels.*, sources.source_key, sources.source_name, sources.source_url, sources.source_type,
+                 sources.logo_url, sources.trust_score, sources.is_active AS source_is_active
+          FROM feed_channels
+          LEFT JOIN sources ON sources.id = feed_channels.source_id
+          WHERE feed_channels.id = $1
+        `,
+        [id]
+      );
+
+      if (!row.rows.length) {
+        return reply.code(404).send({ ok: false, error: 'feed_not_found' });
+      }
+
+      return { ok: true, feed: serializeFeed(row.rows[0]) };
+    } finally {
+      client.release();
+    }
+  });
+
+  app.delete('/v1/admin/feeds/:id', async (request, reply) => {
+    const id = Number.parseInt(request.params.id, 10);
+    if (!Number.isFinite(id) || id < 1) {
+      return reply.code(400).send({ ok: false, error: 'invalid_feed_id' });
+    }
+
+    const result = await query('DELETE FROM feed_channels WHERE id = $1 RETURNING id', [id]);
+    return { ok: true, deleted: result.rowCount };
   });
 
   app.post('/v1/items/batch', async (request) => {

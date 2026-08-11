@@ -148,6 +148,121 @@ class Rifnote_Search_Data_API {
         return self::request('/v1/ingest/rss/batch', array(), '', true, 'POST', $payload);
     }
 
+    public static function warehouse_items($args = array(), $force = true) {
+        if (!self::enabled()) {
+            return array(
+                'ok' => false,
+                'message' => __('Data API is not enabled or is missing credentials.', 'rifnote-search'),
+            );
+        }
+
+        $query = array(
+            'q' => sanitize_text_field((string) ($args['q'] ?? '')),
+            'type' => sanitize_key((string) ($args['type'] ?? '')),
+            'status' => sanitize_key((string) ($args['status'] ?? '')),
+            'category' => sanitize_key((string) ($args['category'] ?? '')),
+            'source' => sanitize_text_field((string) ($args['source'] ?? '')),
+            'limit' => max(1, min(50, absint($args['limit'] ?? 25))),
+            'offset' => max(0, absint($args['offset'] ?? 0)),
+        );
+
+        return self::request('/v1/admin/items', $query, 'warehouse_items_' . md5(wp_json_encode($query)), $force);
+    }
+
+    public static function warehouse_item($id, $force = true) {
+        $id = absint($id);
+
+        if (!$id) {
+            return array('ok' => false, 'message' => __('Missing warehouse item ID.', 'rifnote-search'));
+        }
+
+        return self::request('/v1/admin/items/' . $id, array(), 'warehouse_item_' . $id, $force);
+    }
+
+    public static function update_warehouse_item($id, $fields) {
+        $id = absint($id);
+
+        if (!$id) {
+            return array('ok' => false, 'message' => __('Missing warehouse item ID.', 'rifnote-search'));
+        }
+
+        return self::request('/v1/admin/items/' . $id, array(), '', true, 'PATCH', self::clean_admin_payload((array) $fields));
+    }
+
+    public static function delete_warehouse_item($id) {
+        $id = absint($id);
+
+        if (!$id) {
+            return array('ok' => false, 'message' => __('Missing warehouse item ID.', 'rifnote-search'));
+        }
+
+        return self::request('/v1/admin/items/' . $id, array(), '', true, 'DELETE');
+    }
+
+    public static function warehouse_feeds($args = array(), $force = true) {
+        if (!self::enabled()) {
+            return array(
+                'ok' => false,
+                'message' => __('Data API is not enabled or is missing credentials.', 'rifnote-search'),
+            );
+        }
+
+        $query = array(
+            'q' => sanitize_text_field((string) ($args['q'] ?? '')),
+            'active' => isset($args['active']) ? sanitize_text_field((string) $args['active']) : '',
+            'limit' => max(1, min(50, absint($args['limit'] ?? 50))),
+            'offset' => max(0, absint($args['offset'] ?? 0)),
+        );
+
+        return self::request('/v1/admin/feeds', $query, 'warehouse_feeds_' . md5(wp_json_encode($query)), $force);
+    }
+
+    public static function create_warehouse_feed($fields) {
+        return self::request('/v1/admin/feeds', array(), '', true, 'POST', self::clean_admin_payload((array) $fields));
+    }
+
+    public static function update_warehouse_feed($id, $fields) {
+        $id = absint($id);
+
+        if (!$id) {
+            return array('ok' => false, 'message' => __('Missing warehouse feed ID.', 'rifnote-search'));
+        }
+
+        return self::request('/v1/admin/feeds/' . $id, array(), '', true, 'PATCH', self::clean_admin_payload((array) $fields));
+    }
+
+    public static function delete_warehouse_feed($id) {
+        $id = absint($id);
+
+        if (!$id) {
+            return array('ok' => false, 'message' => __('Missing warehouse feed ID.', 'rifnote-search'));
+        }
+
+        return self::request('/v1/admin/feeds/' . $id, array(), '', true, 'DELETE');
+    }
+
+    private static function clean_admin_payload($fields) {
+        $payload = array();
+
+        foreach ((array) $fields as $key => $value) {
+            $key = sanitize_key((string) $key);
+
+            if (!$key) {
+                continue;
+            }
+
+            if (is_array($value)) {
+                $payload[$key] = self::clean_admin_payload($value);
+            } elseif (is_bool($value) || is_numeric($value)) {
+                $payload[$key] = $value;
+            } else {
+                $payload[$key] = sanitize_text_field((string) $value);
+            }
+        }
+
+        return $payload;
+    }
+
     private static function request($path, $query = array(), $cache_key = '', $force = false, $method = 'GET', $body = null) {
         if (!self::base_url()) {
             return array('ok' => false, 'message' => __('Missing Data API URL.', 'rifnote-search'));

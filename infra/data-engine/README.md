@@ -69,6 +69,14 @@ Primary endpoints:
 - `GET /v1/stories/category/football`
 - `GET /v1/trending`
 - `GET /v1/sources`
+- `GET /v1/admin/items`
+- `GET /v1/admin/items/:id`
+- `PATCH /v1/admin/items/:id`
+- `DELETE /v1/admin/items/:id`
+- `GET /v1/admin/feeds`
+- `POST /v1/admin/feeds`
+- `PATCH /v1/admin/feeds/:id`
+- `DELETE /v1/admin/feeds/:id`
 
 ## 6. Expose through HTTPS
 
