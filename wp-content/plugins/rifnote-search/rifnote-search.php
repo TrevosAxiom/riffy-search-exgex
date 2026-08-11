@@ -3,7 +3,7 @@
  * Plugin Name: Rifnote Search
  * Plugin URI: https://rifnote.com/
  * Description: AI-powered news search and publisher discovery plugin for Rifnote.
- * Version: 0.2.4
+ * Version: 0.2.5
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Rifnote
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RIFNOTE_SEARCH_VERSION', '0.2.4');
+define('RIFNOTE_SEARCH_VERSION', '0.2.5');
 define('RIFNOTE_SEARCH_FILE', __FILE__);
 define('RIFNOTE_SEARCH_DIR', plugin_dir_path(__FILE__));
 define('RIFNOTE_SEARCH_URL', plugin_dir_url(__FILE__));
@@ -93,6 +93,8 @@ final class Rifnote_Search_Plugin {
         add_action(Rifnote_Search_Trending::CRON_HOOK, array('Rifnote_Search_Trending', 'run_cron'));
         add_action('init', array('Rifnote_Search_Ingestion', 'schedule'));
         add_action(Rifnote_Search_Ingestion::CRON_HOOK, array('Rifnote_Search_Ingestion', 'run_cron'));
+        add_action('pre_get_posts', array('Rifnote_Search_Ingestion', 'hide_legacy_rss_posts_from_admin'));
+        add_filter('posts_where', array('Rifnote_Search_Ingestion', 'exclude_legacy_rss_posts_where'), 10, 2);
         add_action('init', array('Rifnote_Search_News_API', 'schedule'));
         add_action(Rifnote_Search_News_API::CRON_HOOK, array('Rifnote_Search_News_API', 'run_cron'));
         add_action('init', array('Rifnote_Search_Football_API', 'schedule'));
@@ -120,6 +122,9 @@ final class Rifnote_Search_Plugin {
         add_action('manage_post_posts_custom_column', array('Rifnote_Search_Source_Meta', 'render_post_column'), 10, 2);
         add_action('manage_post_posts_custom_column', array('Rifnote_Search_Admin', 'render_home_pill_post_column'), 20, 2);
         add_action('admin_post_rifnote_update_home_pill', array('Rifnote_Search_Admin', 'handle_home_pill_post_list_update'));
+        add_filter('bulk_actions-edit-post', array('Rifnote_Search_Admin', 'bulk_home_pill_actions'));
+        add_filter('handle_bulk_actions-edit-post', array('Rifnote_Search_Admin', 'handle_bulk_home_pill_action'), 10, 3);
+        add_action('admin_notices', array('Rifnote_Search_Admin', 'bulk_home_pill_notice'));
         add_filter('pre_delete_term', array('Rifnote_Search_Admin', 'protect_notes_category'), 10, 3);
         add_action('category_add_form_fields', array('Rifnote_Search_Admin', 'category_default_image_add_field'));
         add_action('category_edit_form_fields', array('Rifnote_Search_Admin', 'category_default_image_edit_field'));

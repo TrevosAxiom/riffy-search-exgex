@@ -318,6 +318,59 @@ class Rifnote_Search_Admin {
         exit;
     }
 
+    public static function bulk_home_pill_actions($actions) {
+        foreach (self::home_pills() as $pill) {
+            if (!empty($pill['is_notes'])) {
+                continue;
+            }
+
+            $pill_key = self::home_pill_key($pill['category']);
+            $actions['rifnote_home_pill_' . $pill_key] = sprintf(
+                __('Feature in %s pill', 'rifnote-search'),
+                $pill['label']
+            );
+        }
+
+        $actions['rifnote_home_pill_clear'] = __('Remove from homepage pills', 'rifnote-search');
+
+        return $actions;
+    }
+
+    public static function handle_bulk_home_pill_action($redirect_to, $action, $post_ids) {
+        if ('rifnote_home_pill_clear' === $action) {
+            $pill = '';
+        } elseif (0 === strpos($action, 'rifnote_home_pill_')) {
+            $pill = sanitize_key(substr($action, strlen('rifnote_home_pill_')));
+        } else {
+            return $redirect_to;
+        }
+
+        $updated = 0;
+        foreach ((array) $post_ids as $post_id) {
+            $post_id = absint($post_id);
+            if (!$post_id || !current_user_can('edit_post', $post_id)) {
+                continue;
+            }
+
+            self::set_post_home_pill($post_id, $pill);
+            $updated++;
+        }
+
+        return add_query_arg('rifnote_home_pill_bulk_updated', $updated, $redirect_to);
+    }
+
+    public static function bulk_home_pill_notice() {
+        if (empty($_GET['rifnote_home_pill_bulk_updated'])) {
+            return;
+        }
+
+        $updated = absint($_GET['rifnote_home_pill_bulk_updated']);
+        echo '<div class="notice notice-success is-dismissible"><p>' . esc_html(sprintf(
+            _n('%d post homepage pill updated.', '%d post homepage pills updated.', $updated, 'rifnote-search'),
+            $updated
+        )) . '</p></div>';
+    }
+
     public static function register_menu() {
         add_menu_page(
             __('Rifnote Search', 'rifnote-search'),
@@ -866,6 +919,7 @@ class Rifnote_Search_Admin {
         $group = sanitize_key(wp_unslash($_POST['option_page']));
         $rifnote_groups = array(
             'rifnote_search_settings',
+            'rifnote_rss_warehouse_settings',
             'rifnote_home_notes_settings',
             'rifnote_search_football_settings',
             'rifnote_customgpt_settings',
@@ -2684,6 +2738,15 @@ class Rifnote_Search_Admin {
         return max(1, min(1440, absint($value)));
     }
 
+    public static function sanitize_smart_rss_storage_mode($value) {
+        $value = sanitize_key((string) $value);
+        return in_array($value, array('warehouse', 'hybrid', 'wordpress'), true) ? $value : 'warehouse';
+    }
+
+    public static function sanitize_smart_rss_local_retention_days($value) {
+        return max(1, min(365, absint($value)));
+    }
+
     public static function sanitize_social_region_code($value) {
         $value = strtoupper(preg_replace('/[^A-Z]/', '', (string) $value));
         return $value ? substr($value, 0, 2) : 'NG';
@@ -2763,6 +2826,17 @@ class Rifnote_Search_Admin {
         register_setting('rifnote_search_settings', 'rifnote_smart_rss_items_per_feed', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_items_per_feed'), 'default' => 10));
         register_setting('rifnote_search_settings', 'rifnote_smart_rss_timeout', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_timeout'), 'default' => 8));
         register_setting('rifnote_search_settings', 'rifnote_smart_rss_auto_publish', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true));
+        register_setting('rifnote_search_settings', 'rifnote_smart_rss_storage_mode', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_storage_mode'), 'default' => 'warehouse'));
+        register_setting('rifnote_search_settings', 'rifnote_smart_rss_local_retention_days', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_local_retention_days'), 'default' => 30));
+        register_setting('rifnote_rss_warehouse_settings', 'rifnote_smart_rss_enabled', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true));
+        register_setting('rifnote_rss_warehouse_settings', 'rifnote_smart_rss_list', array('type' => 'string', 'sanitize_callback' => array('Rifnote_Search_Ingestion', 'sanitize_smart_rss_list'), 'default' => ''));
+        register_setting('rifnote_rss_warehouse_settings', 'rifnote_smart_rss_interval_minutes', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_interval'), 'default' => 5));
+        register_setting('rifnote_rss_warehouse_settings', 'rifnote_smart_rss_batch_size', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_batch_size'), 'default' => 25));
+        register_setting('rifnote_rss_warehouse_settings', 'rifnote_smart_rss_items_per_feed', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_items_per_feed'), 'default' => 10));
+        register_setting('rifnote_rss_warehouse_settings', 'rifnote_smart_rss_timeout', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_timeout'), 'default' => 8));
+        register_setting('rifnote_rss_warehouse_settings', 'rifnote_smart_rss_auto_publish', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true));
+        register_setting('rifnote_rss_warehouse_settings', 'rifnote_smart_rss_storage_mode', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_storage_mode'), 'default' => 'warehouse'));
+        register_setting('rifnote_rss_warehouse_settings', 'rifnote_smart_rss_local_retention_days', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_local_retention_days'), 'default' => 30));
         register_setting('rifnote_search_settings', 'rifnote_data_api_enabled', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => false));
         register_setting('rifnote_search_settings', 'rifnote_data_api_merge_search', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true));
         register_setting('rifnote_search_settings', 'rifnote_data_api_url', array('type' => 'string', 'sanitize_callback' => 'esc_url_raw', 'default' => ''));

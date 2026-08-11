@@ -8,6 +8,7 @@ class Rifnote_Search_Ingestion {
     const CRON_HOOK = 'rifnote_search_ingest_feeds';
     const SMART_STATUS_OPTION = 'rifnote_smart_rss_feed_status';
     const LOG_OPTION = 'rifnote_smart_rss_run_log';
+    const LOCAL_CLEANUP_OPTION = 'rifnote_smart_rss_local_cleanup_at';
 
     public static function schedule() {
         if (!get_option('rifnote_smart_rss_enabled', true)) {
@@ -151,6 +152,16 @@ class Rifnote_Search_Ingestion {
         return self::interval_minutes() * MINUTE_IN_SECONDS;
     }
 
+    public static function storage_mode() {
+        $mode = sanitize_key((string) get_option('rifnote_smart_rss_storage_mode', 'warehouse'));
+
+        return in_array($mode, array('warehouse', 'hybrid', 'wordpress'), true) ? $mode : 'warehouse';
+    }
+
+    public static function local_retention_days() {
+        return max(1, min(365, absint(get_option('rifnote_smart_rss_local_retention_days', 30))));
+    }
+
     public static function schedule_slug($minutes = null) {
         $minutes = null === $minutes ? self::interval_minutes() : max(1, min(1440, absint($minutes)));
         return 'rifnote_rss_every_' . $minutes . '_minutes';
@@ -276,10 +287,19 @@ class Rifnote_Search_Ingestion {
             return array('skipped' => true, 'reason' => 'disabled');
         }
 
-        return self::run_once();
+        $summary = self::run_once();
+        self::maybe_cleanup_local_rss_posts();
+
+        return $summary;
     }
 
     public static function run_once($limit = 0, $force = false) {
+        $storage_mode = self::storage_mode();
+
+        if ('warehouse' === $storage_mode) {
+            return self::run_warehouse_once($limit, $force);
+        }
+
         if ($force) {
             delete_transient('rifnote_rss_ingestion_lock');
         }
@@ -318,6 +338,7 @@ class Rifnote_Search_Ingestion {
             'ran_at' => gmdate(DATE_ATOM),
             'forced' => (bool) $force,
             'interval_minutes' => self::interval_minutes(),
+            'storage' => $storage_mode,
         );
 
         if (empty($feeds)) {
@@ -359,7 +380,124 @@ class Rifnote_Search_Ingestion {
             delete_transient('rifnote_rss_ingestion_lock');
         }
 
+        if ('hybrid' === $storage_mode && class_exists('Rifnote_Search_Data_API') && Rifnote_Search_Data_API::enabled()) {
+            $summary['warehouse'] = self::push_current_batch_to_warehouse($publishers);
+            update_option('rifnote_data_api_last_rss_ingest', $summary['warehouse'], false);
+            update_option('rifnote_search_ingestion_last_run', $summary, false);
+        }
+
         return $summary;
+    }
+
+    public static function run_warehouse_once($limit = 0, $force = false) {
+        if ($force) {
+            delete_transient('rifnote_rss_ingestion_lock');
+        }
+
+        if (get_transient('rifnote_rss_ingestion_lock')) {
+            $locked = array('locked' => true, 'storage' => 'warehouse', 'ran_at' => gmdate(DATE_ATOM));
+            self::append_log(array(
+                'status' => 'locked',
+                'message' => __('RSS warehouse run skipped because another run is still locked.', 'rifnote-search'),
+                'summary' => $locked,
+            ));
+            return $locked;
+        }
+
+        set_transient('rifnote_rss_ingestion_lock', 1, 4 * MINUTE_IN_SECONDS);
+
+        $limit = $limit ? absint($limit) : absint(get_option('rifnote_smart_rss_batch_size', 25));
+        $limit = max(1, min(100, $limit));
+        $feeds = self::queue_feeds();
+        $publishers = self::next_feed_batch($feeds, $limit);
+        $warehouse_feeds = self::prepare_data_api_feeds($publishers);
+        $summary = array(
+            'checked' => 0,
+            'created' => 0,
+            'published' => 0,
+            'duplicates' => 0,
+            'errors' => 0,
+            'recovered' => 0,
+            'storage' => 'warehouse',
+            'total_feeds' => count($feeds),
+            'batch_size' => $limit,
+            'items_per_feed' => max(1, min(30, absint(get_option('rifnote_smart_rss_items_per_feed', 10)))),
+            'expected_max_items' => count($publishers) * max(1, min(30, absint(get_option('rifnote_smart_rss_items_per_feed', 10)))),
+            'expected_urls' => array_map(array(__CLASS__, 'feed_log_item'), $publishers),
+            'cursor' => (int) get_option('rifnote_smart_rss_cursor', 0),
+            'feeds' => array_map(array(__CLASS__, 'feed_log_item'), $publishers),
+            'ran_at' => gmdate(DATE_ATOM),
+            'forced' => (bool) $force,
+            'interval_minutes' => self::interval_minutes(),
+        );
+
+        if (empty($feeds)) {
+            $summary['empty_queue'] = true;
+            $summary['empty_queue_message'] = __('No RSS feeds are configured. Add Smart RSS feed URLs or verified publisher RSS feeds before running ingestion.', 'rifnote-search');
+        }
+
+        try {
+            if (!class_exists('Rifnote_Search_Data_API')) {
+                $warehouse = array('ok' => false, 'message' => __('Data API bridge is not loaded, so warehouse RSS cannot run.', 'rifnote-search'));
+            } elseif (!Rifnote_Search_Data_API::enabled()) {
+                $warehouse = array('ok' => false, 'message' => __('Data API bridge is disabled. Enable it before running warehouse RSS.', 'rifnote-search'));
+            } elseif (empty($warehouse_feeds)) {
+                $warehouse = array('ok' => false, 'message' => $summary['empty_queue_message'] ?? __('No valid RSS feeds were prepared for the Data API.', 'rifnote-search'));
+            } else {
+                $warehouse = Rifnote_Search_Data_API::ingest_rss_batch($warehouse_feeds);
+            }
+
+            $summary['warehouse'] = $warehouse;
+            $summary['checked'] = (int) ($warehouse['checked'] ?? count($warehouse_feeds));
+            $summary['created'] = (int) ($warehouse['inserted'] ?? $warehouse['created'] ?? 0);
+            $summary['duplicates'] = (int) ($warehouse['duplicates'] ?? 0);
+            $summary['errors'] = (int) ($warehouse['errors'] ?? (empty($warehouse['ok']) ? 1 : 0));
+        } catch (Throwable $error) {
+            $summary['errors']++;
+            $summary['fatal_error'] = $error->getMessage();
+            $summary['warehouse'] = array('ok' => false, 'message' => $error->getMessage());
+        } finally {
+            update_option('rifnote_data_api_last_rss_ingest', $summary['warehouse'] ?? array(), false);
+            update_option('rifnote_search_ingestion_last_run', $summary, false);
+            update_option('rifnote_smart_rss_last_run_at', time(), false);
+            update_option('rifnote_smart_rss_next_due_at', time() + self::interval_seconds(), false);
+
+            $warehouse = is_array($summary['warehouse'] ?? null) ? $summary['warehouse'] : array();
+            self::append_log(array(
+                'status' => !empty($summary['fatal_error']) ? 'error' : (!empty($warehouse['ok']) ? 'warehouse' : 'warning'),
+                'message' => !empty($summary['fatal_error'])
+                    ? sprintf(__('RSS warehouse run stopped unexpectedly: %s', 'rifnote-search'), $summary['fatal_error'])
+                    : (!empty($warehouse['ok'])
+                        ? sprintf(
+                            __('Warehouse checked %1$d feed(s), inserted %2$d, skipped %3$d duplicate(s).', 'rifnote-search'),
+                            (int) $summary['checked'],
+                            (int) $summary['created'],
+                            (int) $summary['duplicates']
+                        )
+                        : sprintf(__('Warehouse RSS push failed: %s', 'rifnote-search'), (string) ($warehouse['message'] ?? $warehouse['error'] ?? __('Unknown error', 'rifnote-search')))),
+                'summary' => $summary,
+            ));
+            delete_transient('rifnote_rss_ingestion_lock');
+        }
+
+        return $summary;
+    }
+
+    private static function push_current_batch_to_warehouse($publishers) {
+        if (!class_exists('Rifnote_Search_Data_API')) {
+            return array('ok' => false, 'message' => __('Data API bridge is not loaded.', 'rifnote-search'));
+        }
+
+        if (!Rifnote_Search_Data_API::enabled()) {
+            return array('ok' => false, 'message' => __('Data API bridge is disabled.', 'rifnote-search'));
+        }
+
+        $warehouse_feeds = self::prepare_data_api_feeds($publishers);
+        if (!$warehouse_feeds) {
+            return array('ok' => false, 'message' => __('No valid RSS feeds were prepared for the Data API.', 'rifnote-search'));
+        }
+
+        return Rifnote_Search_Data_API::ingest_rss_batch($warehouse_feeds);
     }
 
     public static function queue_preview($limit = 0) {
@@ -369,17 +507,7 @@ class Rifnote_Search_Ingestion {
         $total = count($feeds);
         $cursor = (int) get_option('rifnote_smart_rss_cursor', 0);
         $items_per_feed = max(1, min(30, absint(get_option('rifnote_smart_rss_items_per_feed', 10))));
-        $batch = array();
-
-        if ($total) {
-            if ($cursor < 0 || $cursor >= $total) {
-                $cursor = 0;
-            }
-
-            for ($i = 0; $i < min($limit, $total); $i++) {
-                $batch[] = $feeds[($cursor + $i) % $total];
-            }
-        }
+        $batch = self::preview_feed_batch($feeds, $limit);
 
         return array(
             'schedule' => self::schedule_status(),
@@ -394,6 +522,143 @@ class Rifnote_Search_Ingestion {
         );
     }
 
+    public static function data_api_feed_batch($limit = 0) {
+        $limit = $limit ? absint($limit) : absint(get_option('rifnote_smart_rss_batch_size', 25));
+        $limit = max(1, min(100, $limit));
+        $feeds = self::preview_feed_batch(self::queue_feeds(), $limit);
+        return self::prepare_data_api_feeds($feeds);
+    }
+
+    private static function prepare_data_api_feeds($feeds) {
+        $items_per_feed = max(1, min(30, absint(get_option('rifnote_smart_rss_items_per_feed', 10))));
+        $timeout = max(3, min(20, absint(get_option('rifnote_smart_rss_timeout', 8))));
+        $payload = array();
+
+        foreach ($feeds as $feed) {
+            $feed_url = esc_url_raw($feed['rss_feed_url'] ?? '');
+            if (!$feed_url) {
+                continue;
+            }
+
+            $payload[] = array(
+                'name' => Rifnote_Search_Source_Meta::normalize_text($feed['publisher_name'] ?? wp_parse_url($feed_url, PHP_URL_HOST)),
+                'feed_url' => $feed_url,
+                'source_url' => esc_url_raw($feed['website_url'] ?? Rifnote_Search_Source_Meta::source_home_from_url($feed_url)),
+                'category' => Rifnote_Search_Source_Meta::normalize_text($feed['categories'] ?? 'News'),
+                'items_per_feed' => $items_per_feed,
+                'timeout' => $timeout,
+                'language_code' => sanitize_key($feed['language_code'] ?? 'en'),
+                'country_code' => strtoupper(sanitize_key($feed['country_code'] ?? '')),
+            );
+        }
+
+        return $payload;
+    }
+
+    public static function maybe_cleanup_local_rss_posts($force = false) {
+        $last = (int) get_option(self::LOCAL_CLEANUP_OPTION, 0);
+        if (!$force && $last && (time() - $last) < DAY_IN_SECONDS) {
+            return array('skipped' => true, 'reason' => 'recent_cleanup');
+        }
+
+        $summary = self::cleanup_local_rss_posts(self::local_retention_days());
+        update_option(self::LOCAL_CLEANUP_OPTION, time(), false);
+
+        if (empty($summary['skipped'])) {
+            self::append_log(array(
+                'status' => 'cleanup',
+                'message' => sprintf(
+                    __('Legacy WordPress RSS cleanup removed %d post(s) older than %d day(s).', 'rifnote-search'),
+                    (int) ($summary['deleted'] ?? 0),
+                    (int) ($summary['days'] ?? self::local_retention_days())
+                ),
+                'summary' => $summary,
+            ));
+        }
+
+        return $summary;
+    }
+
+    public static function cleanup_local_rss_posts($days = 30, $limit = 250) {
+        global $wpdb;
+
+        $days = max(1, min(365, absint($days)));
+        $limit = max(1, min(1000, absint($limit)));
+        $cutoff = gmdate('Y-m-d H:i:s', time() - ($days * DAY_IN_SECONDS));
+        $markers = self::legacy_rss_post_marker_sql();
+
+        $post_ids = $wpdb->get_col($wpdb->prepare(
+            "SELECT ID FROM {$wpdb->posts}
+             WHERE post_type = 'post'
+               AND post_status IN ('publish','draft','pending','future','private','trash')
+               AND post_date_gmt < %s
+               AND ID IN ({$markers})
+             ORDER BY post_date_gmt ASC
+             LIMIT %d",
+            $cutoff,
+            $limit
+        ));
+
+        $deleted = 0;
+        foreach ($post_ids as $post_id) {
+            if (wp_delete_post((int) $post_id, true)) {
+                $deleted++;
+            }
+        }
+
+        return array(
+            'ok' => true,
+            'days' => $days,
+            'cutoff_gmt' => $cutoff,
+            'found' => count($post_ids),
+            'deleted' => $deleted,
+        );
+    }
+
+    public static function hide_legacy_rss_posts_from_admin($query) {
+        if (!is_admin() || !$query->is_main_query() || !function_exists('get_current_screen')) {
+            return;
+        }
+
+        global $pagenow;
+        if ('edit.php' !== $pagenow || ('post' !== ($query->get('post_type') ?: 'post'))) {
+            return;
+        }
+
+        if (!empty($_GET['rifnote_show_rss'])) {
+            return;
+        }
+
+        $query->set('rifnote_hide_legacy_rss', 1);
+    }
+
+    public static function exclude_legacy_rss_posts_where($where, $query) {
+        global $wpdb;
+
+        if (!is_admin() || !$query->get('rifnote_hide_legacy_rss')) {
+            return $where;
+        }
+
+        return $where . " AND {$wpdb->posts}.ID NOT IN (" . self::legacy_rss_post_marker_sql() . ")";
+    }
+
+    private static function legacy_rss_post_marker_sql() {
+        global $wpdb;
+
+        return $wpdb->prepare(
+            "SELECT post_id FROM {$wpdb->postmeta}
+             WHERE (meta_key = %s AND meta_value = %s)
+                OR (meta_key = %s AND meta_value = %s)
+                OR (meta_key = %s AND meta_value = %s)",
+            'source_type',
+            'rss',
+            'rifnote_origin_channel',
+            'rss',
+            'rifnote_origin_model',
+            'RSS Feed'
+        );
+    }
+
     private static function queue_feeds() {
         $feeds = self::approved_publishers_with_feeds();
 
@@ -402,6 +667,25 @@ class Rifnote_Search_Ingestion {
         }
 
         return array_values($feeds);
+    }
+
+    private static function preview_feed_batch($feeds, $limit) {
+        $total = count($feeds);
+        if (!$total) {
+            return array();
+        }
+
+        $cursor = (int) get_option('rifnote_smart_rss_cursor', 0);
+        if ($cursor < 0 || $cursor >= $total) {
+            $cursor = 0;
+        }
+
+        $batch = array();
+        for ($i = 0; $i < min($limit, $total); $i++) {
+            $batch[] = $feeds[($cursor + $i) % $total];
+        }
+
+        return $batch;
     }
 
     private static function next_feed_batch($feeds, $limit) {

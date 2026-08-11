@@ -101,20 +101,19 @@ class Rifnote_Search_RSS_Warehouse {
         $action = sanitize_key(wp_unslash($_POST['rifnote_rss_action']));
 
         if ('run_now' === $action) {
-            $preview = Rifnote_Search_Ingestion::queue_preview();
-            $warehouse_feeds = self::prepare_data_api_feeds($preview['feeds'] ?? array());
             $summary = Rifnote_Search_Ingestion::run_once(0, true);
-            $warehouse = class_exists('Rifnote_Search_Data_API') ? Rifnote_Search_Data_API::ingest_rss_batch($warehouse_feeds) : array('ok' => false, 'message' => __('Data API bridge is not loaded.', 'rifnote-search'));
-            update_option('rifnote_data_api_last_rss_ingest', $warehouse, false);
             echo '<div class="notice notice-success is-dismissible"><p>' . esc_html(sprintf(
-                __('RSS run finished: checked %1$d, created %2$d, published %3$d, duplicates %4$d, errors %5$d.', 'rifnote-search'),
+                __('RSS run finished: checked %1$d, created %2$d, published %3$d, duplicates %4$d, errors %5$d. Storage: %6$s.', 'rifnote-search'),
                 (int) ($summary['checked'] ?? 0),
                 (int) ($summary['created'] ?? 0),
                 (int) ($summary['published'] ?? 0),
                 (int) ($summary['duplicates'] ?? 0),
-                (int) ($summary['errors'] ?? 0)
+                (int) ($summary['errors'] ?? 0),
+                (string) ($summary['storage'] ?? Rifnote_Search_Ingestion::storage_mode())
             )) . '</p></div>';
-            echo '<div class="notice notice-' . esc_attr(!empty($warehouse['ok']) ? 'success' : 'warning') . ' is-dismissible"><p>' . esc_html(self::warehouse_notice($warehouse)) . '</p></div>';
+            if (!empty($summary['warehouse'])) {
+                echo '<div class="notice notice-' . esc_attr(!empty($summary['warehouse']['ok']) ? 'success' : 'warning') . ' is-dismissible"><p>' . esc_html(self::warehouse_notice($summary['warehouse'])) . '</p></div>';
+            }
             return;
         }
 
@@ -133,6 +132,16 @@ class Rifnote_Search_RSS_Warehouse {
         if ('reset_cursor' === $action) {
             update_option('rifnote_smart_rss_cursor', 0, false);
             echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__('RSS queue cursor reset to the first feed.', 'rifnote-search') . '</p></div>';
+            return;
+        }
+
+        if ('cleanup_legacy_wp' === $action) {
+            $summary = Rifnote_Search_Ingestion::maybe_cleanup_local_rss_posts(true);
+            echo '<div class="notice notice-success is-dismissible"><p>' . esc_html(sprintf(
+                __('Legacy WordPress RSS cleanup removed %1$d post(s). Cutoff: %2$s.', 'rifnote-search'),
+                (int) ($summary['deleted'] ?? 0),
+                (string) ($summary['cutoff_gmt'] ?? '')
+            )) . '</p></div>';
             return;
         }
 
@@ -191,6 +200,7 @@ class Rifnote_Search_RSS_Warehouse {
         self::action_button('repair_schedule', __('Repair RSS schedule', 'rifnote-search'), 'secondary');
         self::action_button('clear_lock', __('Clear ingestion lock', 'rifnote-search'), 'secondary');
         self::action_button('reset_cursor', __('Reset queue cursor', 'rifnote-search'), 'secondary');
+        self::action_button('cleanup_legacy_wp', __('Clean legacy WP RSS posts', 'rifnote-search'), 'secondary');
         echo '</div>';
 
         echo '<div class="card" style="max-width:none;"><h2>' . esc_html__('Last warehouse run', 'rifnote-search') . '</h2>';
@@ -234,7 +244,7 @@ class Rifnote_Search_RSS_Warehouse {
         echo '<div class="card" style="max-width:1220px;"><h2>' . esc_html__('Smart RSS feed list', 'rifnote-search') . '</h2>';
         echo '<p>' . esc_html__('Add one feed per line. Format: Source name | Feed URL | Category | publish/review.', 'rifnote-search') . '</p>';
         echo '<form method="post" action="options.php">';
-        settings_fields('rifnote_search_settings');
+        settings_fields('rifnote_rss_warehouse_settings');
         echo '<textarea class="large-text code" rows="16" name="rifnote_smart_rss_list" placeholder="Punch | https://punchng.com/feed/ | News | publish">' . esc_textarea(get_option('rifnote_smart_rss_list', '')) . '</textarea>';
         echo '<p><label><input type="hidden" name="rifnote_smart_rss_enabled" value="0" /><input type="checkbox" name="rifnote_smart_rss_enabled" value="1" ' . checked((bool) get_option('rifnote_smart_rss_enabled', true), true, false) . ' /> ' . esc_html__('Enable Smart RSS warehouse feeds', 'rifnote-search') . '</label></p>';
         submit_button(__('Save RSS feed list', 'rifnote-search'));
@@ -314,12 +324,22 @@ class Rifnote_Search_RSS_Warehouse {
     private static function render_settings() {
         echo '<div class="card" style="max-width:900px;"><h2>' . esc_html__('RSS warehouse settings', 'rifnote-search') . '</h2>';
         echo '<form method="post" action="options.php">';
-        settings_fields('rifnote_search_settings');
+        settings_fields('rifnote_rss_warehouse_settings');
         echo '<table class="form-table" role="presentation"><tbody>';
+        echo '<tr><th scope="row">' . esc_html__('Storage mode', 'rifnote-search') . '</th><td><select name="rifnote_smart_rss_storage_mode">';
+        foreach (array(
+            'warehouse' => __('Warehouse only: Data API/Postgres, no WordPress posts', 'rifnote-search'),
+            'hybrid' => __('Hybrid: Postgres plus legacy WordPress posts', 'rifnote-search'),
+            'wordpress' => __('WordPress only: legacy local posts', 'rifnote-search'),
+        ) as $value => $label) {
+            echo '<option value="' . esc_attr($value) . '" ' . selected(Rifnote_Search_Ingestion::storage_mode(), $value, false) . '>' . esc_html($label) . '</option>';
+        }
+        echo '</select><p class="description">' . esc_html__('Use warehouse mode for the live platform so RSS, social and YouTube scale outside wp_posts.', 'rifnote-search') . '</p></td></tr>';
         self::settings_number_row('rifnote_smart_rss_interval_minutes', __('Run frequency', 'rifnote-search'), 1, 1440, __('Minutes between RSS ingestion passes. Your server cron can run every minute; Rifnote RSS will only run when this interval is due.', 'rifnote-search'));
         self::settings_number_row('rifnote_smart_rss_batch_size', __('Feeds per run', 'rifnote-search'), 1, 100, __('Keep this low for cheap shared hosting; raise it on a dedicated server.', 'rifnote-search'));
         self::settings_number_row('rifnote_smart_rss_items_per_feed', __('Items per feed', 'rifnote-search'), 1, 30, __('Maximum stories pulled from each source per pass.', 'rifnote-search'));
         self::settings_number_row('rifnote_smart_rss_timeout', __('HTTP timeout', 'rifnote-search'), 3, 20, __('Seconds before a slow feed is skipped.', 'rifnote-search'));
+        self::settings_number_row('rifnote_smart_rss_local_retention_days', __('Legacy WP RSS retention', 'rifnote-search'), 1, 365, __('RSS-origin WordPress posts older than this are removed automatically. Manual/admin posts are never touched.', 'rifnote-search'));
         echo '<tr><th scope="row">' . esc_html__('Default handling', 'rifnote-search') . '</th><td><label><input type="hidden" name="rifnote_smart_rss_auto_publish" value="0" /><input type="checkbox" name="rifnote_smart_rss_auto_publish" value="1" ' . checked((bool) get_option('rifnote_smart_rss_auto_publish', true), true, false) . ' /> ' . esc_html__('Auto-publish RSS items unless a feed line says review.', 'rifnote-search') . '</label></td></tr>';
         echo '</tbody></table>';
         submit_button(__('Save RSS settings', 'rifnote-search'));
@@ -332,6 +352,7 @@ class Rifnote_Search_RSS_Warehouse {
             'rifnote_smart_rss_batch_size' => 25,
             'rifnote_smart_rss_items_per_feed' => 10,
             'rifnote_smart_rss_timeout' => 8,
+            'rifnote_smart_rss_local_retention_days' => 30,
         );
         echo '<tr><th scope="row"><label for="' . esc_attr($option) . '">' . esc_html($label) . '</label></th><td><input id="' . esc_attr($option) . '" type="number" min="' . esc_attr($min) . '" max="' . esc_attr($max) . '" name="' . esc_attr($option) . '" value="' . esc_attr(get_option($option, $defaults[$option] ?? '')) . '" /><p class="description">' . esc_html($description) . '</p></td></tr>';
     }
