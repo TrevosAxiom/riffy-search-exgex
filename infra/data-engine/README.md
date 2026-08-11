@@ -78,11 +78,39 @@ Primary endpoints:
 - `PATCH /v1/admin/feeds/:id`
 - `DELETE /v1/admin/feeds/:id`
 
-## 6. Expose through HTTPS
+## 6. Warehouse CRUD console
+
+The Data API also ships with a browser-based CRUD console for the warehouse.
+This keeps high-volume RSS, social and video records out of WordPress admin.
+
+Open:
+
+```text
+https://data.rifnote.com/admin
+```
+
+Login with the `RIFNOTE_DATA_API_TOKEN` value from `env.local`.
+
+The console includes:
+
+- Dashboard counts and recent ingest runs
+- Warehouse item search, edit and delete
+- RSS feed create, edit, pause and delete
+- Ingest log review
+
+After changing anything in `infra/data-engine/api`, rebuild the API container:
+
+```bash
+cd /home/rifnoteops/rifnote-data-engine
+git pull origin main
+docker compose --env-file env.local -f docker-compose.api.yml up -d --build
+```
+
+## 7. Expose through HTTPS
 
 See [proxy/README.md](proxy/README.md).
 
-## 7. Optional: browser database GUI
+## 8. Optional: browser database GUI
 
 pgAdmin can run privately on the VPS and be exposed through a locked-down proxy.
 Postgres still stays bound to `127.0.0.1` and is not opened to the internet.
