@@ -254,17 +254,21 @@ class Rifnote_Search_RSS_Warehouse {
 
         echo '<div style="display:grid;grid-template-columns:repeat(4,minmax(180px,1fr));gap:14px;max-width:1220px;">';
         self::metric_card(__('Total RSS feeds', 'rifnote-search'), number_format_i18n($summary['total_feeds']), __('Smart + approved publisher feeds', 'rifnote-search'));
-        self::metric_card(__('Next run', 'rifnote-search'), !empty($schedule['next_run_local']) ? $schedule['next_run_local'] : __('Not scheduled', 'rifnote-search'), self::format_cron_status($schedule));
+        self::metric_card(__('Next run', 'rifnote-search'), Rifnote_Search_Ingestion::warehouse_worker_enabled() ? __('VPS worker', 'rifnote-search') : (!empty($schedule['next_run_local']) ? $schedule['next_run_local'] : __('Not scheduled', 'rifnote-search')), self::format_cron_status($schedule));
         self::metric_card(__('Next pass load', 'rifnote-search'), number_format_i18n((int) ($summary['preview']['expected_max_items'] ?? 0)), sprintf(__('%d feeds in the next batch', 'rifnote-search'), count($summary['preview']['feeds'] ?? array())));
         self::metric_card(__('Feeds needing attention', 'rifnote-search'), number_format_i18n($summary['bad_feeds']), __('Errors, blocked feeds or stale checks', 'rifnote-search'));
         echo '</div>';
 
         echo '<div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,420px);gap:18px;max-width:1220px;margin-top:18px;">';
         echo '<div class="card" style="max-width:none;"><h2>' . esc_html__('Warehouse controls', 'rifnote-search') . '</h2>';
-        echo '<p>' . esc_html__('Run a controlled batch, repair only the RSS hook, clear a stuck lock, or restart queue rotation without touching other cron jobs.', 'rifnote-search') . '</p>';
-        self::action_button('run_now', __('Run next RSS batch now', 'rifnote-search'), 'primary');
-        self::action_button('repair_schedule', __('Repair RSS schedule', 'rifnote-search'), 'secondary');
-        self::action_button('clear_lock', __('Clear ingestion lock', 'rifnote-search'), 'secondary');
+        if (Rifnote_Search_Ingestion::warehouse_worker_enabled()) {
+            echo '<p>' . esc_html__('The VPS data engine owns RSS polling. WordPress is only managing feed lists, logs, cleanup, and warehouse CRUD, so public-server cron stays light.', 'rifnote-search') . '</p>';
+        } else {
+            echo '<p>' . esc_html__('Run a controlled batch, repair only the RSS hook, clear a stuck lock, or restart queue rotation without touching other cron jobs.', 'rifnote-search') . '</p>';
+            self::action_button('run_now', __('Run next RSS batch now', 'rifnote-search'), 'primary');
+            self::action_button('repair_schedule', __('Repair RSS schedule', 'rifnote-search'), 'secondary');
+            self::action_button('clear_lock', __('Clear ingestion lock', 'rifnote-search'), 'secondary');
+        }
         self::action_button('reset_cursor', __('Reset queue cursor', 'rifnote-search'), 'secondary');
         self::action_button('cleanup_legacy_wp', __('Clean legacy WP RSS posts', 'rifnote-search'), 'secondary');
         echo '</div>';
@@ -459,6 +463,7 @@ class Rifnote_Search_RSS_Warehouse {
             echo '<option value="' . esc_attr($value) . '" ' . selected(Rifnote_Search_Ingestion::storage_mode(), $value, false) . '>' . esc_html($label) . '</option>';
         }
         echo '</select><p class="description">' . esc_html__('Use warehouse mode for the live platform so RSS, social and YouTube scale outside wp_posts.', 'rifnote-search') . '</p></td></tr>';
+        echo '<tr><th scope="row">' . esc_html__('Warehouse runner', 'rifnote-search') . '</th><td><label><input type="hidden" name="rifnote_rss_warehouse_worker_enabled" value="0" /><input type="checkbox" name="rifnote_rss_warehouse_worker_enabled" value="1" ' . checked((bool) get_option('rifnote_rss_warehouse_worker_enabled', true), true, false) . ' /> ' . esc_html__('Let the VPS data engine pull RSS feeds itself.', 'rifnote-search') . '</label><p class="description">' . esc_html__('Recommended for production. WordPress will stop scheduling RSS ingestion and will only manage feeds, logs, cleanup, and warehouse records.', 'rifnote-search') . '</p></td></tr>';
         self::settings_number_row('rifnote_smart_rss_interval_minutes', __('Run frequency', 'rifnote-search'), 1, 1440, __('Minutes between RSS ingestion passes. Your server cron can run every minute; Rifnote RSS will only run when this interval is due.', 'rifnote-search'));
         self::settings_number_row('rifnote_smart_rss_batch_size', __('Feeds per run', 'rifnote-search'), 1, 100, __('Keep this low for cheap shared hosting; raise it on a dedicated server.', 'rifnote-search'));
         self::settings_number_row('rifnote_smart_rss_items_per_feed', __('Items per feed', 'rifnote-search'), 1, 30, __('Maximum stories pulled from each source per pass.', 'rifnote-search'));
@@ -771,6 +776,10 @@ class Rifnote_Search_RSS_Warehouse {
     }
 
     private static function format_cron_status($status) {
+        if (!empty($status['warehouse_worker_enabled'])) {
+            return __('VPS warehouse worker owns RSS polling; WordPress cron is intentionally off for RSS.', 'rifnote-search');
+        }
+
         if (empty($status['next_run'])) {
             return __('Not scheduled', 'rifnote-search');
         }

@@ -2747,6 +2747,10 @@ class Rifnote_Search_Admin {
         return max(1, min(365, absint($value)));
     }
 
+    public static function sanitize_bool($value) {
+        return rest_sanitize_boolean($value);
+    }
+
     public static function sanitize_social_region_code($value) {
         $value = strtoupper(preg_replace('/[^A-Z]/', '', (string) $value));
         return $value ? substr($value, 0, 2) : 'NG';
@@ -2828,6 +2832,7 @@ class Rifnote_Search_Admin {
         register_setting('rifnote_search_settings', 'rifnote_smart_rss_auto_publish', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true));
         register_setting('rifnote_search_settings', 'rifnote_smart_rss_storage_mode', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_storage_mode'), 'default' => 'warehouse'));
         register_setting('rifnote_search_settings', 'rifnote_smart_rss_local_retention_days', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_local_retention_days'), 'default' => 30));
+        register_setting('rifnote_search_settings', 'rifnote_rss_warehouse_worker_enabled', array('type' => 'boolean', 'sanitize_callback' => array(__CLASS__, 'sanitize_bool'), 'default' => true));
         register_setting('rifnote_rss_warehouse_settings', 'rifnote_smart_rss_enabled', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true));
         register_setting('rifnote_rss_warehouse_settings', 'rifnote_smart_rss_list', array('type' => 'string', 'sanitize_callback' => array('Rifnote_Search_Ingestion', 'sanitize_smart_rss_list'), 'default' => ''));
         register_setting('rifnote_rss_warehouse_settings', 'rifnote_smart_rss_interval_minutes', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_interval'), 'default' => 5));
@@ -2837,6 +2842,7 @@ class Rifnote_Search_Admin {
         register_setting('rifnote_rss_warehouse_settings', 'rifnote_smart_rss_auto_publish', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true));
         register_setting('rifnote_rss_warehouse_settings', 'rifnote_smart_rss_storage_mode', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_storage_mode'), 'default' => 'warehouse'));
         register_setting('rifnote_rss_warehouse_settings', 'rifnote_smart_rss_local_retention_days', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_local_retention_days'), 'default' => 30));
+        register_setting('rifnote_rss_warehouse_settings', 'rifnote_rss_warehouse_worker_enabled', array('type' => 'boolean', 'sanitize_callback' => array(__CLASS__, 'sanitize_bool'), 'default' => true));
         register_setting('rifnote_search_settings', 'rifnote_data_api_enabled', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => false));
         register_setting('rifnote_search_settings', 'rifnote_data_api_merge_search', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true));
         register_setting('rifnote_search_settings', 'rifnote_data_api_url', array('type' => 'string', 'sanitize_callback' => 'esc_url_raw', 'default' => ''));

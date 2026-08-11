@@ -6,6 +6,7 @@ import { hasAdminSession, isAdminPath, isPublicAdminPath, requireApiToken } from
 import { pool } from './db.js';
 import { registerAdminConsole } from './admin-console.js';
 import { registerRoutes } from './routes.js';
+import { startRssWorker } from './rss-worker.js';
 
 const app = Fastify({
   logger: true,
@@ -49,8 +50,11 @@ app.addHook('preHandler', async (request, reply) => {
 await registerAdminConsole(app);
 await registerRoutes(app);
 
+const rssWorker = startRssWorker(app);
+
 const shutdown = async () => {
   app.log.info('shutting down');
+  rssWorker.stop();
   await app.close();
   await pool.end();
   process.exit(0);

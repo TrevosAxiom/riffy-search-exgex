@@ -16,6 +16,11 @@ class Rifnote_Search_Ingestion {
             return;
         }
 
+        if (self::warehouse_worker_enabled()) {
+            self::clear_schedule();
+            return;
+        }
+
         $schedule = self::schedule_slug();
         $current = wp_get_schedule(self::CRON_HOOK);
 
@@ -32,6 +37,11 @@ class Rifnote_Search_Ingestion {
 
     public static function repair_schedule($force = false) {
         if (!get_option('rifnote_smart_rss_enabled', true)) {
+            self::clear_schedule();
+            return false;
+        }
+
+        if (self::warehouse_worker_enabled()) {
             self::clear_schedule();
             return false;
         }
@@ -85,6 +95,8 @@ class Rifnote_Search_Ingestion {
         $watched = array(
             'rifnote_smart_rss_enabled',
             'rifnote_smart_rss_interval_minutes',
+            'rifnote_smart_rss_storage_mode',
+            'rifnote_rss_warehouse_worker_enabled',
         );
 
         if (!in_array($option, $watched, true)) {
@@ -111,6 +123,7 @@ class Rifnote_Search_Ingestion {
             'overdue_seconds' => (int) $overdue_seconds,
             'overdue_label' => $overdue ? self::human_duration($overdue_seconds) : '',
             'is_locked' => (bool) get_transient('rifnote_rss_ingestion_lock'),
+            'warehouse_worker_enabled' => self::warehouse_worker_enabled(),
         );
     }
 
@@ -156,6 +169,10 @@ class Rifnote_Search_Ingestion {
         $mode = sanitize_key((string) get_option('rifnote_smart_rss_storage_mode', 'warehouse'));
 
         return in_array($mode, array('warehouse', 'hybrid', 'wordpress'), true) ? $mode : 'warehouse';
+    }
+
+    public static function warehouse_worker_enabled() {
+        return 'warehouse' === self::storage_mode() && (bool) get_option('rifnote_rss_warehouse_worker_enabled', true);
     }
 
     public static function local_retention_days() {
@@ -287,6 +304,11 @@ class Rifnote_Search_Ingestion {
             return array('skipped' => true, 'reason' => 'disabled');
         }
 
+        if (self::warehouse_worker_enabled()) {
+            self::clear_schedule();
+            return array('skipped' => true, 'reason' => 'warehouse_worker');
+        }
+
         $summary = self::run_once();
         self::maybe_cleanup_local_rss_posts();
 
@@ -390,6 +412,31 @@ class Rifnote_Search_Ingestion {
     }
 
     public static function run_warehouse_once($limit = 0, $force = false) {
+        if (self::warehouse_worker_enabled()) {
+            $summary = array(
+                'ok' => true,
+                'skipped' => true,
+                'reason' => 'warehouse_worker',
+                'storage' => 'warehouse',
+                'checked' => 0,
+                'created' => 0,
+                'published' => 0,
+                'duplicates' => 0,
+                'errors' => 0,
+                'ran_at' => gmdate(DATE_ATOM),
+                'message' => __('RSS ingestion is owned by the VPS warehouse worker. WordPress is not fetching feeds.', 'rifnote-search'),
+            );
+            update_option('rifnote_search_ingestion_last_run', $summary, false);
+            self::append_log(array(
+                'status' => 'worker',
+                'message' => $summary['message'],
+                'summary' => $summary,
+            ));
+            self::clear_schedule();
+
+            return $summary;
+        }
+
         if ($force) {
             delete_transient('rifnote_rss_ingestion_lock');
         }

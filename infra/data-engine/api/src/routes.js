@@ -10,6 +10,15 @@ const parser = new XMLParser({
   attributeNamePrefix: '@_',
   textNodeName: '#text',
   cdataPropName: '#cdata',
+  processEntities: false,
+  htmlEntities: false,
+  stopNodes: [
+    '*.item.description',
+    '*.item.content:encoded',
+    '*.item.summary',
+    '*.entry.content',
+    '*.entry.summary'
+  ],
   trimValues: true
 });
 
@@ -135,6 +144,10 @@ function cleanText(value) {
 function slug(value, fallback = 'news') {
   const clean = cleanText(value).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   return clean || fallback;
+}
+
+function feedCategory(feed) {
+  return slug(feed.category_slug || feed.category || feed.categories || 'news');
 }
 
 function sourceKey(feed) {
@@ -269,7 +282,7 @@ async function upsertChannel(client, sourceId, feed) {
         updated_at = NOW()
       RETURNING id
     `,
-    [sourceId, feedUrl, slug(feed.category || feed.categories || 'news'), interval]
+    [sourceId, feedUrl, feedCategory(feed), interval]
   );
 
   return result.rows[0];
@@ -307,7 +320,7 @@ async function insertExternalItem(client, sourceId, channelId, feed, item) {
       item.image_url || null,
       feed.language_code || 'en',
       feed.country_code || null,
-      slug(feed.category || feed.categories || 'news'),
+      feedCategory(feed),
       item.published_at && !Number.isNaN(item.published_at.getTime()) ? item.published_at.toISOString() : null,
       JSON.stringify(item.raw_payload || {})
     ]
@@ -316,7 +329,7 @@ async function insertExternalItem(client, sourceId, channelId, feed, item) {
   return result.rows[0];
 }
 
-async function ingestFeed(feed) {
+export async function ingestFeed(feed) {
   const feedUrl = feed.feed_url || feed.url || '';
   if (!/^https?:\/\//i.test(feedUrl)) {
     return { ok: false, feed_url: feedUrl, error: 'invalid_feed_url' };
@@ -409,7 +422,12 @@ async function ingestFeed(feed) {
     );
     if (channel?.id) {
       await query(
-        'UPDATE feed_channels SET last_checked_at = NOW(), last_status = $1, last_error = $2, updated_at = NOW() WHERE id = $3',
+        `
+          UPDATE feed_channels
+          SET last_checked_at = NOW(), next_check_at = NOW() + poll_interval_seconds * INTERVAL '1 second',
+              last_status = $1, last_error = $2, updated_at = NOW()
+          WHERE id = $3
+        `,
         ['error', error.message, channel.id]
       );
     }

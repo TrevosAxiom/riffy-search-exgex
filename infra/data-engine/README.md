@@ -98,6 +98,29 @@ The console includes:
 - RSS feed create, edit, pause and delete
 - Ingest log review
 
+## 7. RSS worker
+
+The Data API container runs the RSS worker itself, so WordPress does not need to
+poll every feed. WordPress can manage feeds and read/search warehouse results,
+while the VPS pulls due RSS feeds into PostgreSQL.
+
+The worker respects each feed's `poll_interval_seconds`. These environment
+values can be changed in `env.local`:
+
+```bash
+RIFNOTE_RSS_WORKER_ENABLED=true
+RIFNOTE_RSS_WORKER_TICK_SECONDS=60
+RIFNOTE_RSS_WORKER_BATCH_SIZE=10
+RIFNOTE_RSS_ITEMS_PER_FEED=10
+RIFNOTE_RSS_FETCH_TIMEOUT_SECONDS=12
+```
+
+After changing worker values:
+
+```bash
+docker compose --env-file env.local -f docker-compose.api.yml up -d
+```
+
 After changing anything in `infra/data-engine/api`, rebuild the API container:
 
 ```bash
@@ -106,11 +129,11 @@ git pull origin main
 docker compose --env-file env.local -f docker-compose.api.yml up -d --build
 ```
 
-## 7. Expose through HTTPS
+## 8. Expose through HTTPS
 
 See [proxy/README.md](proxy/README.md).
 
-## 8. Optional: browser database GUI
+## 9. Optional: browser database GUI
 
 pgAdmin can run privately on the VPS and be exposed through a locked-down proxy.
 Postgres still stays bound to `127.0.0.1` and is not opened to the internet.
