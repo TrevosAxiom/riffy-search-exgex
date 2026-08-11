@@ -1,6 +1,36 @@
 import { query } from './db.js';
 import { clearAdminSessionCookie, createAdminSessionCookie } from './auth.js';
 
+const ITEM_TYPE_OPTIONS = [
+  ['article', 'Article'],
+  ['social', 'Social'],
+  ['video', 'Video']
+];
+
+const STATUS_OPTIONS = [
+  ['raw', 'Raw'],
+  ['reviewed', 'Reviewed'],
+  ['published', 'Published'],
+  ['rejected', 'Rejected']
+];
+
+const CATEGORY_OPTIONS = [
+  ['', 'Uncategorized'],
+  ['notes', 'Notes'],
+  ['nigeria', 'Nigeria'],
+  ['world', 'World'],
+  ['football', 'Football'],
+  ['sports', 'Sports'],
+  ['politics', 'Politics'],
+  ['business', 'Business'],
+  ['technology', 'Technology'],
+  ['entertainment', 'Entertainment'],
+  ['health', 'Health'],
+  ['science', 'Science'],
+  ['opinion', 'Opinion'],
+  ['crime', 'Crime']
+];
+
 function esc(value = '') {
   return String(value ?? '')
     .replace(/&/g, '&amp;')
@@ -51,12 +81,15 @@ function layout(title, body, request, notice = '') {
     .muted{color:var(--muted)} .card{background:var(--card);border:1px solid var(--line);border-radius:22px;padding:20px;box-shadow:0 12px 30px rgba(15,23,42,.04)}
     .grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}.stat b{font-size:30px;display:block;margin-bottom:6px}
     .toolbar{display:grid;grid-template-columns:2fr repeat(4,1fr) auto;gap:10px;margin:14px 0}
+    label span{display:block;font-weight:900;margin-bottom:7px;color:#344054}
     input,select,textarea{width:100%;border:1px solid var(--line);border-radius:12px;padding:12px 13px;font:inherit;background:#fff;color:var(--ink)}
     textarea{min-height:120px}.btn,button{border:0;border-radius:999px;background:#111827;color:#fff;padding:11px 16px;font-weight:900;cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:8px}
     .btn.red,button.red{background:var(--red)}.btn.ghost,button.ghost{background:#fff;color:#111827;border:1px solid var(--line)}
     table{width:100%;border-collapse:collapse} th{text-align:left;color:#667085;font-size:12px;text-transform:uppercase;letter-spacing:.06em}
     th,td{padding:14px;border-bottom:1px solid var(--line);vertical-align:top} td.actions{white-space:nowrap}
     .pill{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:5px 10px;font-weight:800;color:#667085;background:#f8fafc}
+    .pill.raw{color:#b54708;background:#fffaeb;border-color:#fedf89}.pill.reviewed{color:#175cd3;background:#eff8ff;border-color:#b2ddff}.pill.published{color:#027a48;background:#ecfdf3;border-color:#abefc6}.pill.rejected{color:#b42318;background:#fef3f2;border-color:#fecdca}
+    .inline-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.inline-actions form{display:inline}.mini{padding:7px 10px;font-size:12px}
     .ok{color:#039855}.bad{color:#b42318}.notice{padding:12px 14px;border-radius:14px;background:#ecfdf3;border:1px solid #abefc6;margin-bottom:14px;font-weight:800}
     .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.full{grid-column:1/-1}.danger{border-top:1px solid var(--line);margin-top:18px;padding-top:18px}
     .login{min-height:100vh;display:grid;place-items:center;padding:24px}.login .card{max-width:460px;width:100%}
@@ -184,8 +217,20 @@ export async function registerAdminConsole(app) {
       LIMIT $${params.length - 1} OFFSET $${params.length}
     `, params);
     const body = `${itemsToolbar({ q, type, status, category, perPage })}
-      <section class="card">${itemsTable(items.rows)}${pager('/admin/items', request.query, count.rows[0]?.total || 0, perPage, page)}</section>`;
+      <section class="card">${bulkPublishForm(count.rows[0]?.total || 0, status)}${itemsTable(items.rows)}${pager('/admin/items', request.query, count.rows[0]?.total || 0, perPage, page)}</section>`;
     reply.type('text/html').send(layout('Items CRUD', body, request));
+  });
+
+  app.post('/admin/items/publish-raw', async (_request, reply) => {
+    await query("UPDATE external_items SET editorial_status = 'published', updated_at = NOW() WHERE editorial_status = 'raw'");
+    redirect(reply, '/admin/items?status=published&bulk_published=1');
+  });
+
+  app.post('/admin/items/:id/status', async (request, reply) => {
+    const body = postBody(request);
+    const status = STATUS_OPTIONS.some(([value]) => value === body.editorial_status) ? body.editorial_status : 'published';
+    await query('UPDATE external_items SET editorial_status = $1, updated_at = NOW() WHERE id = $2', [status, request.params.id]);
+    redirect(reply, request.headers.referer && String(request.headers.referer).includes('/admin/items') ? request.headers.referer : '/admin/items');
   });
 
   app.get('/admin/items/:id/edit', async (request, reply) => {
@@ -212,7 +257,7 @@ export async function registerAdminConsole(app) {
       body.canonical_url || '',
       body.item_type || 'article',
       body.category_slug || null,
-      body.editorial_status || 'raw',
+      body.editorial_status || 'published',
       body.image_url || null,
       body.video_url || null,
       body.social_url || null,
@@ -302,16 +347,31 @@ function slug(value) {
 function itemsToolbar(values) {
   return `<form class="toolbar" method="get" action="/admin/items">
     <input name="q" value="${attr(values.q)}" placeholder="Search title, source, URL">
-    <select name="type">${options(['', 'article', 'social', 'video'], values.type, 'All types')}</select>
-    <select name="status">${options(['', 'raw', 'reviewed', 'published', 'rejected'], values.status, 'All statuses')}</select>
-    <input name="category" value="${attr(values.category)}" placeholder="Category">
-    <select name="limit">${options(['25', '50', '100'], String(values.perPage))}</select>
+    ${select('type', [['', 'All types'], ...ITEM_TYPE_OPTIONS], values.type)}
+    ${select('status', [['', 'All statuses'], ...STATUS_OPTIONS], values.status)}
+    ${select('category', [['', 'All categories'], ...CATEGORY_OPTIONS.filter(([value]) => value)], values.category)}
+    ${select('limit', [['25', '25'], ['50', '50'], ['100', '100']], String(values.perPage))}
     <button>Filter</button>
   </form>`;
 }
 
-function options(values, selected, emptyLabel = '') {
-  return values.map((value) => `<option value="${attr(value)}"${String(value) === String(selected) ? ' selected' : ''}>${esc(value || emptyLabel)}</option>`).join('');
+function select(name, choices, selected = '') {
+  return `<select name="${attr(name)}">${choices.map(([value, label]) => `<option value="${attr(value)}"${String(value) === String(selected) ? ' selected' : ''}>${esc(label)}</option>`).join('')}</select>`;
+}
+
+function selectField(name, label, choices, selected = '') {
+  return `<label><span>${esc(label)}</span>${select(name, choices, selected)}</label>`;
+}
+
+function bulkPublishForm(total, status) {
+  if ('raw' !== status) {
+    return '';
+  }
+
+  return `<form method="post" action="/admin/items/publish-raw" onsubmit="return confirm('Publish every raw warehouse item?')" style="margin-bottom:14px">
+    <button class="red">Publish all raw items</button>
+    <span class="muted" style="margin-left:10px">${esc(total)} raw item(s) in this filtered view.</span>
+  </form>`;
 }
 
 function itemsTable(rows) {
@@ -323,9 +383,16 @@ function itemsTable(rows) {
       <td><b>${esc(row.title)}</b><br><span class="muted">${esc(row.canonical_url)}</span></td>
       <td>${esc(row.source_name || 'Unknown')}</td>
       <td><span class="pill">${esc(row.item_type)}</span></td>
-      <td><span class="pill">${esc(row.editorial_status)}</span></td>
+      <td><span class="pill ${esc(row.editorial_status)}">${esc(row.editorial_status)}</span></td>
       <td>${esc(row.published_at || row.created_at || '')}</td>
-      <td class="actions"><a class="btn ghost" href="/admin/items/${row.id}/edit">Edit</a></td>
+      <td class="actions">
+        <a class="btn ghost mini" href="/admin/items/${row.id}/edit">Edit</a>
+        <div class="inline-actions">
+          ${row.editorial_status !== 'published' ? quickStatus(row.id, 'published', 'Publish') : ''}
+          ${row.editorial_status !== 'reviewed' ? quickStatus(row.id, 'reviewed', 'Review') : ''}
+          ${row.editorial_status !== 'rejected' ? quickStatus(row.id, 'rejected', 'Reject') : ''}
+        </div>
+      </td>
     </tr>`).join('')}
   </tbody></table>`;
 }
@@ -335,9 +402,9 @@ function itemForm(row) {
     <div class="form-grid">
       ${field('title', 'Title', row.title)}
       ${field('canonical_url', 'Canonical URL', row.canonical_url)}
-      ${field('item_type', 'Type', row.item_type)}
-      ${field('editorial_status', 'Status', row.editorial_status)}
-      ${field('category_slug', 'Category', row.category_slug)}
+      ${selectField('item_type', 'Type', ITEM_TYPE_OPTIONS, row.item_type || 'article')}
+      ${selectField('editorial_status', 'Status', STATUS_OPTIONS, row.editorial_status || 'published')}
+      ${selectField('category_slug', 'Category', CATEGORY_OPTIONS, row.category_slug || '')}
       ${field('author_name', 'Author', row.author_name)}
       ${field('image_url', 'Image URL', row.image_url)}
       ${field('video_url', 'Video URL', row.video_url)}
@@ -353,7 +420,11 @@ function itemForm(row) {
 }
 
 function field(name, label, value = '') {
-  return `<label>${esc(label)}<input name="${attr(name)}" value="${attr(value || '')}"></label>`;
+  return `<label><span>${esc(label)}</span><input name="${attr(name)}" value="${attr(value || '')}"></label>`;
+}
+
+function quickStatus(id, status, label) {
+  return `<form method="post" action="/admin/items/${id}/status"><input type="hidden" name="editorial_status" value="${attr(status)}"><button class="ghost mini">${esc(label)}</button></form>`;
 }
 
 function feedCreateForm() {
@@ -361,7 +432,7 @@ function feedCreateForm() {
     ${field('source_name', 'Source name')}
     ${field('source_url', 'Source URL')}
     ${field('feed_url', 'Feed URL')}
-    ${field('category_slug', 'Category')}
+    ${selectField('category_slug', 'Category', CATEGORY_OPTIONS)}
     ${field('poll_interval_seconds', 'Poll interval seconds', '300')}
     ${field('logo_url', 'Logo URL')}
     <label><input type="checkbox" name="is_active" value="1" checked style="width:auto"> Active</label>
@@ -387,7 +458,7 @@ function feedEditForm(row) {
     ${field('source_name', 'Source name', row.source_name)}
     ${field('source_url', 'Source URL', row.source_url)}
     ${field('feed_url', 'Feed URL', row.feed_url)}
-    ${field('category_slug', 'Category', row.category_slug)}
+    ${selectField('category_slug', 'Category', CATEGORY_OPTIONS, row.category_slug || '')}
     ${field('poll_interval_seconds', 'Poll interval seconds', row.poll_interval_seconds)}
     ${field('logo_url', 'Logo URL', row.logo_url)}
     <label><input type="checkbox" name="is_active" value="1"${row.is_active ? ' checked' : ''} style="width:auto"> Active</label>

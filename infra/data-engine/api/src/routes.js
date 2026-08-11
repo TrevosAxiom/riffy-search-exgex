@@ -72,7 +72,7 @@ function serializeAdminItem(row) {
     external_id: row.external_id || null,
     content_text: row.content_text || null,
     author_name: row.author_name || null,
-    editorial_status: row.editorial_status || 'raw',
+    editorial_status: row.editorial_status || 'published',
     raw_payload: row.raw_payload || {},
     created_at: row.created_at,
     updated_at: row.updated_at
@@ -282,7 +282,7 @@ async function insertExternalItem(client, sourceId, channelId, feed, item) {
         source_id, channel_id, external_id, canonical_url, item_type, title, description, content_text,
         image_url, language_code, country_code, category_slug, published_at, raw_payload, editorial_status, updated_at
       )
-      VALUES ($1, $2, $3, $4, 'article', $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, 'raw', NOW())
+      VALUES ($1, $2, $3, $4, 'article', $5, $6, $7, $8, $9, $10, $11, $12, $13::jsonb, 'published', NOW())
       ON CONFLICT (canonical_url) DO UPDATE SET
         source_id = EXCLUDED.source_id,
         channel_id = EXCLUDED.channel_id,
