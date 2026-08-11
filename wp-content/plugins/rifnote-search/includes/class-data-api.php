@@ -323,6 +323,8 @@ class Rifnote_Search_Data_API {
                     $message = __('Data API rejected the token (HTTP 401). Re-save the warehouse token or sync it with the data engine token.', 'rifnote-search');
                 } elseif (403 === $code) {
                     $message = __('Data API request was blocked (HTTP 403). Check Cloudflare/firewall rules and allow server-to-server API calls.', 'rifnote-search');
+                } elseif (404 === $code && 0 === strpos($path, '/v1/admin/')) {
+                    $message = __('Data API warehouse admin routes are missing (HTTP 404). Rebuild/redeploy the Rifnote data-engine container so the PostgreSQL CRUD endpoints are available.', 'rifnote-search');
                 }
 
                 $result = array(
