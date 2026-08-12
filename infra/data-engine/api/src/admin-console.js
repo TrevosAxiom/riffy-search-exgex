@@ -91,6 +91,7 @@ function layout(title, body, request, notice = '') {
     .pill{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:5px 10px;font-weight:800;color:#667085;background:#f8fafc}
     .pill.raw{color:#b54708;background:#fffaeb;border-color:#fedf89}.pill.reviewed{color:#175cd3;background:#eff8ff;border-color:#b2ddff}.pill.published{color:#027a48;background:#ecfdf3;border-color:#abefc6}.pill.rejected{color:#b42318;background:#fef3f2;border-color:#fecdca}
     .inline-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.inline-actions form{display:inline}.mini{padding:7px 10px;font-size:12px}
+    .feed-tools{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:16px}
     .ok{color:#039855}.bad{color:#b42318}.notice{padding:12px 14px;border-radius:14px;background:#ecfdf3;border:1px solid #abefc6;margin-bottom:14px;font-weight:800}
     .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.full{grid-column:1/-1}.danger{border-top:1px solid var(--line);margin-top:18px;padding-top:18px}
     .login{min-height:100vh;display:grid;place-items:center;padding:24px}.login .card{max-width:460px;width:100%}
@@ -104,7 +105,7 @@ function layout(title, body, request, notice = '') {
       main{padding:16px 12px 96px;max-width:none}.top{margin-bottom:12px}.top p{margin:8px 0 0}
       h1{font-size:28px}h2{font-size:20px}.card{border-radius:18px;padding:16px;box-shadow:0 8px 20px rgba(15,23,42,.04)}
       .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.stat b{font-size:24px}
-      .toolbar,.form-grid{grid-template-columns:1fr}.toolbar{gap:8px}.toolbar button{justify-content:center}
+      .toolbar,.form-grid,.feed-tools{grid-template-columns:1fr}.toolbar{gap:8px}.toolbar button{justify-content:center}
       .inline-actions{gap:8px}.inline-actions .mini,.actions .mini{flex:1;justify-content:center}
       table,thead,tbody,tr,th,td{display:block;width:100%}thead{display:none}
       table{border-collapse:separate;border-spacing:0}tbody{display:grid;gap:12px}
@@ -165,6 +166,32 @@ async function stats() {
 
 function postBody(request) {
   return request.body && typeof request.body === 'object' ? request.body : {};
+}
+
+async function upsertFeed(body = {}) {
+  const feedUrl = cleanString(body.feed_url);
+  if (!/^https?:\/\//i.test(feedUrl)) {
+    throw new Error('feed_url must be a valid http(s) URL');
+  }
+
+  const sourceUrl = cleanString(body.source_url);
+  const sourceName = cleanString(body.source_name) || sourceUrl || feedUrl;
+  const logoUrl = sourceLogo(body.logo_url, sourceUrl || feedUrl);
+  const interval = boundedInt(body.poll_interval_seconds, 300, 60, 86400);
+  const active = boolInput(body.is_active ?? body.active ?? '1');
+
+  const source = await query(`
+    INSERT INTO sources (source_key, source_name, source_url, source_type, logo_url, updated_at)
+    VALUES ($1, $2, $3, 'rss', $4, NOW())
+    ON CONFLICT (source_key) DO UPDATE SET source_name = EXCLUDED.source_name, source_url = EXCLUDED.source_url, logo_url = EXCLUDED.logo_url, updated_at = NOW()
+    RETURNING id
+  `, [slug(sourceName), sourceName, sourceUrl || null, logoUrl]);
+
+  await query(`
+    INSERT INTO feed_channels (source_id, feed_url, category_slug, poll_interval_seconds, next_check_at, is_active, updated_at)
+    VALUES ($1, $2, $3, $4, NOW(), $5, NOW())
+    ON CONFLICT (feed_url) DO UPDATE SET source_id = EXCLUDED.source_id, category_slug = EXCLUDED.category_slug, poll_interval_seconds = EXCLUDED.poll_interval_seconds, is_active = EXCLUDED.is_active, updated_at = NOW()
+  `, [source.rows[0].id, feedUrl, cleanString(body.category_slug) || null, interval, active]);
 }
 
 export async function registerAdminConsole(app) {
@@ -306,24 +333,56 @@ export async function registerAdminConsole(app) {
       LEFT JOIN sources ON sources.id = feed_channels.source_id
       ORDER BY feed_channels.is_active DESC, feed_channels.next_check_at ASC NULLS FIRST, sources.source_name ASC
     `);
-    reply.type('text/html').send(layout('RSS Feeds', rssSettingsSummary(settings) + feedCreateForm() + `<section class="card" style="margin-top:16px">${feedsTable(feeds.rows)}</section>`, request));
+    reply.type('text/html').send(layout('RSS Feeds', rssSettingsSummary(settings) + feedCreateForm() + feedBulkTools(request.query) + `<section class="card" style="margin-top:16px">${feedsTable(feeds.rows)}</section>`, request));
   });
 
   app.post('/admin/feeds', async (request, reply) => {
-    const body = postBody(request);
-    const logoUrl = sourceLogo(body.logo_url, body.source_url || body.feed_url);
-    const source = await query(`
-      INSERT INTO sources (source_key, source_name, source_url, source_type, logo_url, updated_at)
-      VALUES ($1, $2, $3, 'rss', $4, NOW())
-      ON CONFLICT (source_key) DO UPDATE SET source_name = EXCLUDED.source_name, source_url = EXCLUDED.source_url, logo_url = EXCLUDED.logo_url, updated_at = NOW()
-      RETURNING id
-    `, [slug(body.source_name || body.feed_url), body.source_name || body.feed_url, body.source_url || null, logoUrl]);
-    await query(`
-      INSERT INTO feed_channels (source_id, feed_url, category_slug, poll_interval_seconds, next_check_at, is_active, updated_at)
-      VALUES ($1, $2, $3, $4, NOW(), $5, NOW())
-      ON CONFLICT (feed_url) DO UPDATE SET source_id = EXCLUDED.source_id, category_slug = EXCLUDED.category_slug, poll_interval_seconds = EXCLUDED.poll_interval_seconds, is_active = EXCLUDED.is_active, updated_at = NOW()
-    `, [source.rows[0].id, body.feed_url, body.category_slug || null, Number.parseInt(body.poll_interval_seconds || '300', 10), !!body.is_active]);
+    await upsertFeed(postBody(request));
     redirect(reply, '/admin/feeds?saved=1');
+  });
+
+  app.get('/admin/feeds/export.csv', async (_request, reply) => {
+    const feeds = await query(`
+      SELECT sources.source_name, sources.source_url, feed_channels.feed_url, feed_channels.category_slug,
+        feed_channels.poll_interval_seconds, sources.logo_url, feed_channels.is_active
+      FROM feed_channels
+      LEFT JOIN sources ON sources.id = feed_channels.source_id
+      ORDER BY sources.source_name ASC, feed_channels.feed_url ASC
+    `);
+    const columns = ['source_name', 'source_url', 'feed_url', 'category_slug', 'poll_interval_seconds', 'logo_url', 'is_active'];
+    const csv = [
+      columns.join(','),
+      ...feeds.rows.map((row) => columns.map((column) => csvCell(row[column])).join(','))
+    ].join('\n');
+    reply
+      .header('Content-Type', 'text/csv; charset=utf-8')
+      .header('Content-Disposition', `attachment; filename="rifnote-rss-feeds-${new Date().toISOString().slice(0, 10)}.csv"`)
+      .send(csv);
+  });
+
+  app.post('/admin/feeds/import', async (request, reply) => {
+    const rows = parseFeedsCsv(postBody(request).csv || '');
+    const summary = { imported: 0, skipped: 0, errors: [] };
+    for (const row of rows) {
+      if (!row.feed_url) {
+        summary.skipped++;
+        summary.errors.push('Skipped row without feed_url.');
+        continue;
+      }
+      try {
+        await upsertFeed(row);
+        summary.imported++;
+      } catch (error) {
+        summary.skipped++;
+        summary.errors.push(`${row.feed_url}: ${error.message}`);
+      }
+    }
+    const queryString = new URLSearchParams({
+      imported: String(summary.imported),
+      skipped: String(summary.skipped),
+      errors: summary.errors.slice(0, 3).join(' | ')
+    }).toString();
+    redirect(reply, `/admin/feeds?${queryString}`);
   });
 
   app.get('/admin/feeds/:id/edit', async (request, reply) => {
@@ -343,7 +402,7 @@ export async function registerAdminConsole(app) {
         next_check_at = CASE WHEN $4 THEN COALESCE(next_check_at, NOW()) ELSE next_check_at END,
         updated_at = NOW()
       WHERE id = $5
-    `, [body.feed_url, body.category_slug || null, Number.parseInt(body.poll_interval_seconds || '300', 10), !!body.is_active, request.params.id]);
+    `, [body.feed_url, body.category_slug || null, boundedInt(body.poll_interval_seconds, 300, 60, 86400), boolInput(body.is_active), request.params.id]);
     await query(`
       UPDATE sources SET source_name = $1, source_url = $2, logo_url = $3, updated_at = NOW()
       WHERE id = (SELECT source_id FROM feed_channels WHERE id = $4)
@@ -388,6 +447,110 @@ export async function registerAdminConsole(app) {
 
 function slug(value) {
   return String(value || 'source').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'source';
+}
+
+function cleanString(value = '') {
+  return String(value ?? '').trim();
+}
+
+function csvCell(value = '') {
+  const text = String(value ?? '');
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+}
+
+function parseCsv(text = '') {
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let quoted = false;
+  const input = String(text || '').replace(/^\uFEFF/, '');
+
+  for (let index = 0; index < input.length; index++) {
+    const char = input[index];
+    const next = input[index + 1];
+    if (quoted) {
+      if (char === '"' && next === '"') {
+        cell += '"';
+        index++;
+      } else if (char === '"') {
+        quoted = false;
+      } else {
+        cell += char;
+      }
+      continue;
+    }
+    if (char === '"') {
+      quoted = true;
+    } else if (char === ',') {
+      row.push(cell.trim());
+      cell = '';
+    } else if (char === '\n') {
+      row.push(cell.trim());
+      if (row.some(Boolean)) {
+        rows.push(row);
+      }
+      row = [];
+      cell = '';
+    } else if (char !== '\r') {
+      cell += char;
+    }
+  }
+
+  row.push(cell.trim());
+  if (row.some(Boolean)) {
+    rows.push(row);
+  }
+  return rows;
+}
+
+function parseFeedsCsv(text = '') {
+  const rows = parseCsv(text);
+  if (!rows.length) {
+    return [];
+  }
+
+  const defaultHeaders = ['source_name', 'source_url', 'feed_url', 'category_slug', 'poll_interval_seconds', 'logo_url', 'is_active'];
+  const first = rows[0].map((value) => value.toLowerCase());
+  const hasHeaders = first.includes('feed_url') || first.includes('feed url') || first.includes('rss url');
+  const headers = hasHeaders ? rows.shift().map(normalizeCsvHeader) : defaultHeaders;
+
+  return rows.map((values) => {
+    const entry = {};
+    headers.forEach((header, index) => {
+      entry[header] = values[index] || '';
+    });
+    if (!entry.feed_url && entry.rss_url) {
+      entry.feed_url = entry.rss_url;
+    }
+    if (!entry.category_slug && entry.category) {
+      entry.category_slug = entry.category;
+    }
+    if (!entry.poll_interval_seconds && entry.interval) {
+      entry.poll_interval_seconds = entry.interval;
+    }
+    return entry;
+  });
+}
+
+function normalizeCsvHeader(value = '') {
+  const header = String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  const aliases = {
+    feed: 'feed_url',
+    rss: 'feed_url',
+    rss_url: 'feed_url',
+    feed_link: 'feed_url',
+    source: 'source_name',
+    publisher: 'source_name',
+    website: 'source_url',
+    source_link: 'source_url',
+    category: 'category_slug',
+    interval: 'poll_interval_seconds',
+    polling_seconds: 'poll_interval_seconds',
+    active: 'is_active',
+    enabled: 'is_active',
+    logo: 'logo_url'
+  };
+  return aliases[header] || header;
 }
 
 function sourceLogo(logoUrl, sourceUrl) {
@@ -559,8 +722,28 @@ function feedCreateForm() {
     ${selectField('category_slug', 'Category', CATEGORY_OPTIONS)}
     ${field('poll_interval_seconds', 'Poll interval seconds', '300')}
     ${field('logo_url', 'Logo URL')}
-    <label><input type="checkbox" name="is_active" value="1" checked style="width:auto"> Active</label>
+    <label><span>Feed status</span><input type="hidden" name="is_active" value="0"><input type="checkbox" name="is_active" value="1" checked style="width:auto"> Active</label>
   </div><p><button class="red">Save feed</button></p></form>`;
+}
+
+function feedBulkTools(values = {}) {
+  const message = values.imported !== undefined
+    ? `<p class="notice">${esc(values.imported || 0)} feed(s) imported or updated. ${esc(values.skipped || 0)} skipped.${values.errors ? ` ${esc(values.errors)}` : ''}</p>`
+    : '';
+  return `<section class="feed-tools">
+    <form class="card" method="post" action="/admin/feeds/import">
+      <h2>Bulk import CSV</h2>
+      <p class="muted">Paste CSV with columns: <b>source_name, source_url, feed_url, category_slug, poll_interval_seconds, logo_url, is_active</b>. Duplicate feed URLs update the existing feed.</p>
+      <textarea name="csv" placeholder="source_name,source_url,feed_url,category_slug,poll_interval_seconds,logo_url,is_active&#10;BBC,https://bbc.com,https://feeds.bbci.co.uk/news/rss.xml,world,300,,1"></textarea>
+      <p><button class="red">Import feeds</button></p>
+      ${message}
+    </form>
+    <section class="card">
+      <h2>Export feeds</h2>
+      <p class="muted">Download every RSS feed currently saved in the warehouse. Use this as a backup or edit it in a spreadsheet and paste it back into the importer.</p>
+      <p><a class="btn ghost" href="/admin/feeds/export.csv">Export RSS CSV</a></p>
+    </section>
+  </section>`;
 }
 
 function feedsTable(rows) {
@@ -585,7 +768,7 @@ function feedEditForm(row) {
     ${selectField('category_slug', 'Category', CATEGORY_OPTIONS, row.category_slug || '')}
     ${field('poll_interval_seconds', 'Poll interval seconds', row.poll_interval_seconds)}
     ${field('logo_url', 'Logo URL', row.logo_url)}
-    <label><input type="checkbox" name="is_active" value="1"${row.is_active ? ' checked' : ''} style="width:auto"> Active</label>
+    <label><span>Feed status</span><input type="hidden" name="is_active" value="0"><input type="checkbox" name="is_active" value="1"${row.is_active ? ' checked' : ''} style="width:auto"> Active</label>
   </div><p><button class="red">Save feed</button> <a class="btn ghost" href="/admin/feeds">Back</a></p></form>
   <form class="card danger" method="post" action="/admin/feeds/${row.id}/delete" onsubmit="return confirm('Delete this feed?')"><h2>Delete feed</h2><button class="red">Delete feed</button></form>`;
 }
