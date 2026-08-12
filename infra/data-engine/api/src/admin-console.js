@@ -67,13 +67,13 @@ function layout(title, body, request, notice = '') {
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>${esc(title)} · Rifnote Warehouse</title>
   <style>
-    :root{--red:#ed1c24;--ink:#111827;--muted:#667085;--line:#e7ecf3;--bg:#f6f8fb;--card:#fff;}
+    :root{--red:#ed1c24;--ink:#111827;--muted:#667085;--line:#e7ecf3;--bg:#f6f8fb;--card:#fff;--soft:#f9fafb;}
     *{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--ink);font-family:Inter,Roboto,Arial,sans-serif}
     a{color:inherit} .shell{display:grid;grid-template-columns:260px 1fr;min-height:100vh}
     aside{background:#fff;border-right:1px solid var(--line);padding:24px;position:sticky;top:0;height:100vh}
     .brand{display:flex;gap:12px;align-items:center;font-weight:900;font-size:22px;margin-bottom:28px}
     .mark{width:42px;height:42px;border-radius:14px;background:var(--red);color:#fff;display:grid;place-items:center;font-weight:900}
-    nav a{display:block;padding:13px 14px;border-radius:14px;text-decoration:none;color:#475467;font-weight:800;margin-bottom:6px}
+    nav{display:grid;gap:6px}nav a{display:block;padding:13px 14px;border-radius:14px;text-decoration:none;color:#475467;font-weight:800}
     nav a.active,nav a:hover{background:#111827;color:#fff}
     main{padding:28px;max-width:1500px;width:100%}
     .top{display:flex;justify-content:space-between;gap:16px;align-items:center;margin-bottom:20px}
@@ -87,13 +87,38 @@ function layout(title, body, request, notice = '') {
     .btn.red,button.red{background:var(--red)}.btn.ghost,button.ghost{background:#fff;color:#111827;border:1px solid var(--line)}
     table{width:100%;border-collapse:collapse} th{text-align:left;color:#667085;font-size:12px;text-transform:uppercase;letter-spacing:.06em}
     th,td{padding:14px;border-bottom:1px solid var(--line);vertical-align:top} td.actions{white-space:nowrap}
+    .source-lockup{display:flex;gap:10px;align-items:flex-start}.source-logo{width:34px;height:34px;border-radius:10px;border:1px solid var(--line);background:#fff;object-fit:contain;flex:0 0 34px}
     .pill{display:inline-flex;border:1px solid var(--line);border-radius:999px;padding:5px 10px;font-weight:800;color:#667085;background:#f8fafc}
     .pill.raw{color:#b54708;background:#fffaeb;border-color:#fedf89}.pill.reviewed{color:#175cd3;background:#eff8ff;border-color:#b2ddff}.pill.published{color:#027a48;background:#ecfdf3;border-color:#abefc6}.pill.rejected{color:#b42318;background:#fef3f2;border-color:#fecdca}
     .inline-actions{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}.inline-actions form{display:inline}.mini{padding:7px 10px;font-size:12px}
     .ok{color:#039855}.bad{color:#b42318}.notice{padding:12px 14px;border-radius:14px;background:#ecfdf3;border:1px solid #abefc6;margin-bottom:14px;font-weight:800}
     .form-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.full{grid-column:1/-1}.danger{border-top:1px solid var(--line);margin-top:18px;padding-top:18px}
     .login{min-height:100vh;display:grid;place-items:center;padding:24px}.login .card{max-width:460px;width:100%}
-    @media(max-width:900px){.shell{display:block}aside{position:static;height:auto}.grid,.toolbar,.form-grid{grid-template-columns:1fr}main{padding:16px}table{display:block;overflow-x:auto}}
+    @media(max-width:900px){
+      body{background:#fff}.shell{display:block}
+      aside{position:sticky;top:0;height:auto;z-index:20;padding:12px 14px;border-right:0;border-bottom:1px solid var(--line);box-shadow:0 10px 26px rgba(15,23,42,.06)}
+      .brand{margin:0 0 10px;font-size:18px}.mark{width:36px;height:36px;border-radius:12px}
+      nav{display:flex;gap:8px;overflow-x:auto;scroll-snap-type:x proximity;padding-bottom:3px;margin:0 -2px}
+      nav a{white-space:nowrap;scroll-snap-align:start;padding:10px 13px;border:1px solid var(--line);background:#fff;font-size:14px}
+      nav a.active{background:#111827;color:#fff;border-color:#111827}
+      main{padding:16px 12px 96px;max-width:none}.top{margin-bottom:12px}.top p{margin:8px 0 0}
+      h1{font-size:28px}h2{font-size:20px}.card{border-radius:18px;padding:16px;box-shadow:0 8px 20px rgba(15,23,42,.04)}
+      .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.stat b{font-size:24px}
+      .toolbar,.form-grid{grid-template-columns:1fr}.toolbar{gap:8px}.toolbar button{justify-content:center}
+      .inline-actions{gap:8px}.inline-actions .mini,.actions .mini{flex:1;justify-content:center}
+      table,thead,tbody,tr,th,td{display:block;width:100%}thead{display:none}
+      table{border-collapse:separate;border-spacing:0}tbody{display:grid;gap:12px}
+      tr{border:1px solid var(--line);border-radius:16px;background:#fff;padding:12px;box-shadow:0 8px 18px rgba(15,23,42,.035)}
+      td{border:0;padding:8px 0}td:not(:first-child)::before{content:attr(data-label);display:block;color:#667085;font-size:11px;text-transform:uppercase;letter-spacing:.06em;font-weight:900;margin-bottom:4px}
+      td.actions{white-space:normal}.source-lockup{align-items:center}.source-logo{width:30px;height:30px;flex-basis:30px}
+      .pill{font-size:12px}.btn,button{min-height:42px}.mini{min-height:auto}
+    }
+    @media(max-width:520px){
+      .grid{grid-template-columns:1fr 1fr}.card{padding:14px}
+      h1{font-size:25px}.top .muted{font-size:14px}
+      input,select,textarea{font-size:16px}.btn,button{width:100%;justify-content:center}
+      p .btn,p button{margin-top:8px}.inline-actions form{flex:1}
+    }
   </style>
 </head>
 <body>
@@ -479,12 +504,12 @@ function itemsTable(rows) {
   }
   return `<table><thead><tr><th>Story</th><th>Source</th><th>Type</th><th>Status</th><th>Published</th><th></th></tr></thead><tbody>
     ${rows.map((row) => `<tr>
-      <td><b>${esc(row.title)}</b><br><span class="muted">${esc(row.canonical_url)}</span></td>
-      <td>${esc(row.source_name || 'Unknown')}</td>
-      <td><span class="pill">${esc(row.item_type)}</span></td>
-      <td><span class="pill ${esc(row.editorial_status)}">${esc(row.editorial_status)}</span></td>
-      <td>${esc(row.published_at || row.created_at || '')}</td>
-      <td class="actions">
+      <td data-label="Story"><b>${esc(row.title)}</b><br><span class="muted">${esc(row.canonical_url)}</span></td>
+      <td data-label="Source">${sourceLockup(row.source_name || 'Unknown', row.logo_url)}</td>
+      <td data-label="Type"><span class="pill">${esc(row.item_type)}</span></td>
+      <td data-label="Status"><span class="pill ${esc(row.editorial_status)}">${esc(row.editorial_status)}</span></td>
+      <td data-label="Published">${esc(row.published_at || row.created_at || '')}</td>
+      <td class="actions" data-label="Actions">
         <a class="btn ghost mini" href="/admin/items/${row.id}/edit">Edit</a>
         <div class="inline-actions">
           ${row.editorial_status !== 'published' ? quickStatus(row.id, 'published', 'Publish') : ''}
@@ -543,12 +568,12 @@ function feedsTable(rows) {
     return '<p class="muted">No feeds saved yet.</p>';
   }
   return `<table><thead><tr><th>Feed</th><th>Category</th><th>Interval</th><th>Next check</th><th>Status</th><th></th></tr></thead><tbody>${rows.map((row) => `<tr>
-    <td><b>${esc(row.source_name || row.feed_url)}</b><br><span class="muted">${esc(row.feed_url)}</span></td>
-    <td>${esc(row.category_slug || '')}</td>
-    <td>${esc(row.poll_interval_seconds)}s</td>
-    <td>${esc(row.next_check_at || '')}</td>
-    <td><span class="${row.is_active ? 'ok' : 'bad'}">${row.is_active ? 'Active' : 'Paused'}</span><br><span class="muted">${esc(row.last_status || '')}</span></td>
-    <td><a class="btn ghost" href="/admin/feeds/${row.id}/edit">Edit</a></td>
+    <td data-label="Feed">${sourceLockup(row.source_name || row.feed_url, row.logo_url, row.feed_url)}</td>
+    <td data-label="Category">${esc(row.category_slug || '')}</td>
+    <td data-label="Interval">${esc(row.poll_interval_seconds)}s</td>
+    <td data-label="Next check">${esc(row.next_check_at || '')}</td>
+    <td data-label="Status"><span class="${row.is_active ? 'ok' : 'bad'}">${row.is_active ? 'Active' : 'Paused'}</span><br><span class="muted">${esc(row.last_status || '')}</span></td>
+    <td data-label="Actions"><a class="btn ghost" href="/admin/feeds/${row.id}/edit">Edit</a></td>
   </tr>`).join('')}</tbody></table>`;
 }
 
@@ -570,13 +595,18 @@ function runsTable(rows) {
     return '<p class="muted">No ingest runs logged yet.</p>';
   }
   return `<table><thead><tr><th>Run</th><th>Source</th><th>Checked</th><th>Created</th><th>Duplicates</th><th>Error</th></tr></thead><tbody>${rows.map((row) => `<tr>
-    <td><span class="pill">${esc(row.status)}</span><br><span class="muted">${esc(row.started_at || '')}</span></td>
-    <td><b>${esc(row.source_name || 'Unknown')}</b><br><span class="muted">${esc(row.expected_url || row.feed_url || '')}</span></td>
-    <td>${esc(row.pulled_items || 0)}</td>
-    <td>${esc(row.inserted_items || 0)}</td>
-    <td>${esc(row.duplicate_items || 0)}</td>
-    <td class="bad">${esc(row.error_message || '')}</td>
+    <td data-label="Run"><span class="pill">${esc(row.status)}</span><br><span class="muted">${esc(row.started_at || '')}</span></td>
+    <td data-label="Source"><b>${esc(row.source_name || 'Unknown')}</b><br><span class="muted">${esc(row.expected_url || row.feed_url || '')}</span></td>
+    <td data-label="Checked">${esc(row.pulled_items || 0)}</td>
+    <td data-label="Created">${esc(row.inserted_items || 0)}</td>
+    <td data-label="Duplicates">${esc(row.duplicate_items || 0)}</td>
+    <td class="bad" data-label="Error">${esc(row.error_message || '')}</td>
   </tr>`).join('')}</tbody></table>`;
+}
+
+function sourceLockup(name, logoUrl, detail = '') {
+  const logo = logoUrl ? `<img class="source-logo" src="${attr(logoUrl)}" alt="">` : '<span class="source-logo mark">R</span>';
+  return `<span class="source-lockup">${logo}<span><b>${esc(name)}</b>${detail ? `<br><span class="muted">${esc(detail)}</span>` : ''}</span></span>`;
 }
 
 function pager(path, query, total, perPage, page) {
