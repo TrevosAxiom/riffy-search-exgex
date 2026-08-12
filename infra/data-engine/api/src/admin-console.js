@@ -104,6 +104,7 @@ function layout(title, body, request, notice = '') {
         <a${active('/admin/dashboard')} href="/admin/dashboard">Dashboard</a>
         <a${active('/admin/items')} href="/admin/items">Items CRUD</a>
         <a${active('/admin/feeds')} href="/admin/feeds">RSS Feeds</a>
+        <a${active('/admin/settings')} href="/admin/settings">RSS Settings</a>
         <a${active('/admin/logs')} href="/admin/logs">Ingest Logs</a>
         <a href="/admin/logout">Logout</a>
       </nav>
@@ -273,23 +274,25 @@ export async function registerAdminConsole(app) {
   });
 
   app.get('/admin/feeds', async (request, reply) => {
+    const settings = await getRssSettings();
     const feeds = await query(`
       SELECT feed_channels.*, sources.source_name, sources.source_url, sources.source_type, sources.logo_url
       FROM feed_channels
       LEFT JOIN sources ON sources.id = feed_channels.source_id
       ORDER BY feed_channels.is_active DESC, feed_channels.next_check_at ASC NULLS FIRST, sources.source_name ASC
     `);
-    reply.type('text/html').send(layout('RSS Feeds', feedCreateForm() + `<section class="card" style="margin-top:16px">${feedsTable(feeds.rows)}</section>`, request));
+    reply.type('text/html').send(layout('RSS Feeds', rssSettingsSummary(settings) + feedCreateForm() + `<section class="card" style="margin-top:16px">${feedsTable(feeds.rows)}</section>`, request));
   });
 
   app.post('/admin/feeds', async (request, reply) => {
     const body = postBody(request);
+    const logoUrl = sourceLogo(body.logo_url, body.source_url || body.feed_url);
     const source = await query(`
       INSERT INTO sources (source_key, source_name, source_url, source_type, logo_url, updated_at)
       VALUES ($1, $2, $3, 'rss', $4, NOW())
       ON CONFLICT (source_key) DO UPDATE SET source_name = EXCLUDED.source_name, source_url = EXCLUDED.source_url, logo_url = EXCLUDED.logo_url, updated_at = NOW()
       RETURNING id
-    `, [slug(body.source_name || body.feed_url), body.source_name || body.feed_url, body.source_url || null, body.logo_url || null]);
+    `, [slug(body.source_name || body.feed_url), body.source_name || body.feed_url, body.source_url || null, logoUrl]);
     await query(`
       INSERT INTO feed_channels (source_id, feed_url, category_slug, poll_interval_seconds, next_check_at, is_active, updated_at)
       VALUES ($1, $2, $3, $4, NOW(), $5, NOW())
@@ -309,6 +312,7 @@ export async function registerAdminConsole(app) {
 
   app.post('/admin/feeds/:id', async (request, reply) => {
     const body = postBody(request);
+    const logoUrl = sourceLogo(body.logo_url, body.source_url || body.feed_url);
     await query(`
       UPDATE feed_channels SET feed_url = $1, category_slug = $2, poll_interval_seconds = $3, is_active = $4,
         next_check_at = CASE WHEN $4 THEN COALESCE(next_check_at, NOW()) ELSE next_check_at END,
@@ -318,13 +322,30 @@ export async function registerAdminConsole(app) {
     await query(`
       UPDATE sources SET source_name = $1, source_url = $2, logo_url = $3, updated_at = NOW()
       WHERE id = (SELECT source_id FROM feed_channels WHERE id = $4)
-    `, [body.source_name || body.feed_url, body.source_url || null, body.logo_url || null, request.params.id]);
+    `, [body.source_name || body.feed_url, body.source_url || null, logoUrl, request.params.id]);
     redirect(reply, `/admin/feeds/${request.params.id}/edit?saved=1`);
   });
 
   app.post('/admin/feeds/:id/delete', async (request, reply) => {
     await query('DELETE FROM feed_channels WHERE id = $1', [request.params.id]);
     redirect(reply, '/admin/feeds?deleted=1');
+  });
+
+  app.get('/admin/settings', async (request, reply) => {
+    reply.type('text/html').send(layout('RSS Settings', rssSettingsForm(await getRssSettings()), request));
+  });
+
+  app.post('/admin/settings/rss-worker', async (request, reply) => {
+    const settings = sanitizeRssSettings(postBody(request));
+    await query(
+      `
+        INSERT INTO app_settings (setting_key, setting_value, updated_at)
+        VALUES ('rss_worker', $1::jsonb, NOW())
+        ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = NOW()
+      `,
+      [JSON.stringify(settings)]
+    );
+    redirect(reply, '/admin/settings?saved=1');
   });
 
   app.get('/admin/logs', async (request, reply) => {
@@ -342,6 +363,84 @@ export async function registerAdminConsole(app) {
 
 function slug(value) {
   return String(value || 'source').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'source';
+}
+
+function sourceLogo(logoUrl, sourceUrl) {
+  if (logoUrl && /^https?:\/\//i.test(String(logoUrl))) {
+    return String(logoUrl);
+  }
+  try {
+    const host = new URL(String(sourceUrl || '')).hostname.replace(/^www\./, '');
+    return host ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=96` : null;
+  } catch {
+    return null;
+  }
+}
+
+function boundedInt(value, fallback, min, max) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function boolInput(value) {
+  return ['1', 'true', 'yes', 'on', 'active'].includes(String(value || '').toLowerCase());
+}
+
+function sanitizeRssSettings(value = {}) {
+  return {
+    enabled: boolInput(value.enabled),
+    tick_seconds: boundedInt(value.tick_seconds, 60, 10, 3600),
+    batch_size: boundedInt(value.batch_size, 10, 1, 100),
+    items_per_feed: boundedInt(value.items_per_feed, 10, 1, 30),
+    fetch_timeout_seconds: boundedInt(value.fetch_timeout_seconds, 12, 3, 60),
+    cleanup_after_days: boundedInt(value.cleanup_after_days, 30, 1, 365)
+  };
+}
+
+async function getRssSettings() {
+  const result = await query("SELECT setting_value FROM app_settings WHERE setting_key = 'rss_worker' LIMIT 1");
+  return sanitizeRssSettings({
+    enabled: true,
+    tick_seconds: 60,
+    batch_size: 10,
+    items_per_feed: 10,
+    fetch_timeout_seconds: 12,
+    cleanup_after_days: 30,
+    ...(result.rows[0]?.setting_value || {})
+  });
+}
+
+function rssSettingsSummary(settings) {
+  return `<section class="card" style="margin-bottom:16px">
+    <h2>Worker controls</h2>
+    <p class="muted">The VPS data engine owns RSS polling. Feed rows keep their own poll interval; these controls decide how often the worker wakes, how many feeds it checks per pass, and how aggressively old RSS items are cleaned.</p>
+    <p>
+      <span class="pill ${settings.enabled ? 'published' : 'rejected'}">${settings.enabled ? 'Worker enabled' : 'Worker paused'}</span>
+      <span class="pill">Wake every ${esc(settings.tick_seconds)}s</span>
+      <span class="pill">${esc(settings.batch_size)} feeds per pass</span>
+      <span class="pill">${esc(settings.items_per_feed)} items/feed</span>
+      <a class="btn ghost mini" href="/admin/settings">Edit settings</a>
+    </p>
+  </section>`;
+}
+
+function rssSettingsForm(settings) {
+  return `<form class="card" method="post" action="/admin/settings/rss-worker">
+    <h2>RSS worker settings</h2>
+    <p class="muted">These values are saved in PostgreSQL and picked up by the data-engine worker on its next cycle. Docker env values remain fallbacks only.</p>
+    <div class="form-grid">
+      <label><span>Worker status</span>${select('enabled', [['1', 'Enabled'], ['0', 'Paused']], settings.enabled ? '1' : '0')}</label>
+      ${field('tick_seconds', 'Worker wake interval seconds', settings.tick_seconds)}
+      ${field('batch_size', 'Feeds checked per pass', settings.batch_size)}
+      ${field('items_per_feed', 'Max items per feed run', settings.items_per_feed)}
+      ${field('fetch_timeout_seconds', 'Feed fetch timeout seconds', settings.fetch_timeout_seconds)}
+      ${field('cleanup_after_days', 'Auto-delete RSS items after days', settings.cleanup_after_days)}
+    </div>
+    <p><button class="red">Save RSS settings</button> <a class="btn ghost" href="/admin/feeds">Back to feeds</a></p>
+  </form>`;
 }
 
 function itemsToolbar(values) {

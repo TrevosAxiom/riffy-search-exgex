@@ -77,6 +77,8 @@ Primary endpoints:
 - `POST /v1/admin/feeds`
 - `PATCH /v1/admin/feeds/:id`
 - `DELETE /v1/admin/feeds/:id`
+- `GET /v1/admin/settings/rss-worker`
+- `PATCH /v1/admin/settings/rss-worker`
 
 ## 6. Warehouse CRUD console
 
@@ -96,6 +98,7 @@ The console includes:
 - Dashboard counts and recent ingest runs
 - Warehouse item search, edit and delete
 - RSS feed create, edit, pause and delete
+- RSS worker interval, batch, timeout and cleanup settings
 - Ingest log review
 
 ## 7. RSS worker
@@ -104,8 +107,16 @@ The Data API container runs the RSS worker itself, so WordPress does not need to
 poll every feed. WordPress can manage feeds and read/search warehouse results,
 while the VPS pulls due RSS feeds into PostgreSQL.
 
-The worker respects each feed's `poll_interval_seconds`. These environment
-values can be changed in `env.local`:
+The worker respects each feed's `poll_interval_seconds`. Runtime worker controls
+live in PostgreSQL and can be edited at:
+
+```text
+https://data.rifnote.com/admin/settings
+```
+
+The saved settings control worker wake interval, feeds checked per pass, max
+items per feed, feed fetch timeout, and RSS cleanup after days. These environment
+values are fallback defaults:
 
 ```bash
 RIFNOTE_RSS_WORKER_ENABLED=true
@@ -113,6 +124,7 @@ RIFNOTE_RSS_WORKER_TICK_SECONDS=60
 RIFNOTE_RSS_WORKER_BATCH_SIZE=10
 RIFNOTE_RSS_ITEMS_PER_FEED=10
 RIFNOTE_RSS_FETCH_TIMEOUT_SECONDS=12
+RIFNOTE_RSS_CLEANUP_AFTER_DAYS=30
 ```
 
 After changing worker values:

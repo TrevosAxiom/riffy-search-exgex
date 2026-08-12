@@ -3,7 +3,7 @@ import cors from '@fastify/cors';
 import formbody from '@fastify/formbody';
 import helmet from '@fastify/helmet';
 import { hasAdminSession, isAdminPath, isPublicAdminPath, requireApiToken } from './auth.js';
-import { pool } from './db.js';
+import { ensureSchema, pool } from './db.js';
 import { registerAdminConsole } from './admin-console.js';
 import { registerRoutes } from './routes.js';
 import { startRssWorker } from './rss-worker.js';
@@ -22,6 +22,8 @@ await app.register(cors, {
 });
 
 await app.register(formbody);
+
+await ensureSchema();
 
 app.get('/health', async () => ({ ok: true, service: 'rifnote-data-api' }));
 

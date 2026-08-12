@@ -169,6 +169,21 @@ function sourceHome(feedUrl) {
   }
 }
 
+function sourceLogo(feed) {
+  const manual = cleanText(feed.logo_url || feed.logo || feed.source_logo_url || '');
+  if (manual && /^https?:\/\//i.test(manual)) {
+    return manual;
+  }
+
+  const source = feed.source_url || feed.website_url || feed.url || feed.feed_url || '';
+  try {
+    const host = new URL(source).hostname.replace(/^www\./, '');
+    return host ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=96` : null;
+  } catch {
+    return null;
+  }
+}
+
 function itemLink(entry) {
   const link = first(entry.link);
 
@@ -261,7 +276,7 @@ async function upsertSource(client, feed) {
       cleanText(feed.name || feed.publisher_name || sourceHome(feedUrl) || 'RSS source'),
       home || null,
       cleanText(feed.source_type || 'rss') || 'rss',
-      feed.logo_url || null
+      sourceLogo(feed)
     ]
   );
 
@@ -436,6 +451,42 @@ export async function ingestFeed(feed) {
   }
 }
 
+const RSS_WORKER_DEFAULTS = {
+  enabled: true,
+  tick_seconds: 60,
+  batch_size: 10,
+  items_per_feed: 10,
+  fetch_timeout_seconds: 12,
+  cleanup_after_days: 30
+};
+
+function boundedInt(value, fallback, min, max) {
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isFinite(parsed)) {
+    return fallback;
+  }
+  return Math.max(min, Math.min(max, parsed));
+}
+
+function sanitizeRssWorkerSettings(value = {}) {
+  return {
+    enabled: boolValue(value.enabled, RSS_WORKER_DEFAULTS.enabled),
+    tick_seconds: boundedInt(value.tick_seconds, RSS_WORKER_DEFAULTS.tick_seconds, 10, 3600),
+    batch_size: boundedInt(value.batch_size, RSS_WORKER_DEFAULTS.batch_size, 1, 100),
+    items_per_feed: boundedInt(value.items_per_feed, RSS_WORKER_DEFAULTS.items_per_feed, 1, MAX_FEED_LIMIT),
+    fetch_timeout_seconds: boundedInt(value.fetch_timeout_seconds, RSS_WORKER_DEFAULTS.fetch_timeout_seconds, 3, 60),
+    cleanup_after_days: boundedInt(value.cleanup_after_days, RSS_WORKER_DEFAULTS.cleanup_after_days, 1, 365)
+  };
+}
+
+async function rssWorkerSettings() {
+  const result = await query("SELECT setting_value FROM app_settings WHERE setting_key = 'rss_worker' LIMIT 1");
+  return sanitizeRssWorkerSettings({
+    ...RSS_WORKER_DEFAULTS,
+    ...(result.rows[0]?.setting_value || {})
+  });
+}
+
 export async function registerRoutes(app) {
   app.get('/v1/health', async () => {
     const result = await query('SELECT NOW() AS now');
@@ -578,6 +629,23 @@ export async function registerRoutes(app) {
       recent_runs: runs.rows,
       recent_items: items.rows
     };
+  });
+
+  app.get('/v1/admin/settings/rss-worker', async () => {
+    return { ok: true, settings: await rssWorkerSettings() };
+  });
+
+  app.patch('/v1/admin/settings/rss-worker', async (request) => {
+    const settings = sanitizeRssWorkerSettings(request.body || {});
+    await query(
+      `
+        INSERT INTO app_settings (setting_key, setting_value, updated_at)
+        VALUES ('rss_worker', $1::jsonb, NOW())
+        ON CONFLICT (setting_key) DO UPDATE SET setting_value = EXCLUDED.setting_value, updated_at = NOW()
+      `,
+      [JSON.stringify(settings)]
+    );
+    return { ok: true, settings: await rssWorkerSettings() };
   });
 
   app.get('/v1/admin/items', async (request) => {
