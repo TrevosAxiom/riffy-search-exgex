@@ -604,7 +604,7 @@ async function getRssSettings() {
 function rssSettingsSummary(settings) {
   return `<section class="card" style="margin-bottom:16px">
     <h2>Worker controls</h2>
-    <p class="muted">The VPS data engine owns RSS polling. Feed rows keep their own poll interval; these controls decide how often the worker wakes, how many feeds it checks per pass, and how aggressively old RSS items are cleaned.</p>
+    <p class="muted">The VPS data engine owns RSS polling. Feed rows keep their own poll interval; these controls decide how often the worker wakes, how many feeds it checks per pass, and how aggressively old RSS items are cleaned. Broken source feeds are automatically switched to Google News RSS using the source domain.</p>
     <p>
       <span class="pill ${settings.enabled ? 'published' : 'rejected'}">${settings.enabled ? 'Worker enabled' : 'Worker paused'}</span>
       <span class="pill">Wake every ${esc(settings.tick_seconds)}s</span>

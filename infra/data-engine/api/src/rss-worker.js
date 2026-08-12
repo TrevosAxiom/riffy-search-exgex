@@ -115,6 +115,70 @@ function normalizeFeed(row, settings) {
   };
 }
 
+function googleNewsRssUrl(feed) {
+  const raw = feed.source_url || feed.website_url || feed.feed_url || '';
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.replace(/^www\./, '');
+    if (!host || host === 'news.google.com') {
+      return '';
+    }
+    return `https://news.google.com/rss/search?q=site:${encodeURIComponent(host)}&hl=en-US&gl=US&ceid=US:en`;
+  } catch {
+    return '';
+  }
+}
+
+async function switchFeedToGoogleRss(feed, error) {
+  const fallbackUrl = googleNewsRssUrl(feed);
+  if (!fallbackUrl || fallbackUrl === feed.feed_url) {
+    return null;
+  }
+
+  const existing = await query(
+    'SELECT id FROM feed_channels WHERE feed_url = $1 AND id <> $2 LIMIT 1',
+    [fallbackUrl, feed.id]
+  );
+
+  if (existing.rowCount) {
+    await query(
+      `
+        UPDATE feed_channels
+        SET is_active = FALSE,
+            last_status = 'fallback_duplicate',
+            last_error = $1,
+            updated_at = NOW()
+        WHERE id = $2
+      `,
+      [
+        `Original RSS failed (${error || 'unknown error'}). Google News fallback already exists on feed #${existing.rows[0].id}, so this duplicate feed was disabled.`,
+        feed.id
+      ]
+    );
+    return null;
+  }
+
+  const result = await query(
+    `
+      UPDATE feed_channels
+      SET feed_url = $1,
+          last_status = 'fallback',
+          last_error = $2,
+          next_check_at = NOW(),
+          updated_at = NOW()
+      WHERE id = $3
+      RETURNING feed_url
+    `,
+    [
+      fallbackUrl,
+      `Original RSS failed (${error || 'unknown error'}). Switched automatically to Google News RSS fallback.`,
+      feed.id
+    ]
+  );
+
+  return result.rows[0]?.feed_url || null;
+}
+
 async function cleanupOldItems(days) {
   if (!days) {
     return 0;
@@ -155,6 +219,10 @@ async function tick(app, settings) {
     if (!result.ok) {
       summary.errors++;
       app.log.warn({ feed_url: feed.feed_url, error: result.error }, 'rss worker feed failed');
+      const fallbackUrl = await switchFeedToGoogleRss(feed, result.error);
+      if (fallbackUrl) {
+        app.log.info({ feed_id: feed.id, from: feed.feed_url, to: fallbackUrl }, 'rss worker switched feed to google news fallback');
+      }
     }
   }
 
