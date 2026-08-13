@@ -630,7 +630,12 @@ function App({ mode }) {
 
   const featuredFootballMatches = Array.isArray(window.RIFNOTE_SEARCH?.featuredFootballMatches) ? window.RIFNOTE_SEARCH.featuredFootballMatches : [];
   const activeFeaturedFootballMatches = featuredFootballMatches.filter((fixture) => fixture && !isFootballFixtureFinished(fixture));
-  const hasHomeSearchMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl || window.RIFNOTE_SEARCH?.electionTakeover?.enabled || activeFeaturedFootballMatches.length);
+  const isElectionTakeoverActive = Boolean(window.RIFNOTE_SEARCH?.electionTakeover?.enabled);
+  const hasFeaturedFootballTakeover = activeFeaturedFootballMatches.length > 0;
+  const homeSearchMediaType = String(window.RIFNOTE_SEARCH?.homeSearchMediaType || 'image').toLowerCase();
+  const isAdminHomepageImageActive = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl) && homeSearchMediaType !== 'video' && !isElectionTakeoverActive && !hasFeaturedFootballTakeover;
+  const hasHomeSearchMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl || isElectionTakeoverActive || hasFeaturedFootballTakeover);
+  const showMobileTakeoverLogo = hasHomeSearchMedia && !isAdminHomepageImageActive;
 
   if (mode === 'search-bar') {
     return <SearchPanel state={state} onSubmit={submitSearch} compact />;
@@ -752,7 +757,7 @@ function App({ mode }) {
     <main className="rs-shell rs-search-page">
       {isHome ? (
         <section className={`rs-google-home ${hasHomeSearchMedia ? 'has-home-media' : ''}`}>
-          {hasHomeSearchMedia ? <MobileHomeTakeoverLogo /> : null}
+          {showMobileTakeoverLogo ? <MobileHomeTakeoverLogo /> : null}
           {hasHomeSearchMedia ? (
             <HomeSearchMedia primary featuredFootballMatches={activeFeaturedFootballMatches} />
           ) : (
