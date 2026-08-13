@@ -3,7 +3,7 @@
  * Plugin Name: Rifnote Search
  * Plugin URI: https://rifnote.com/
  * Description: AI-powered news search and publisher discovery plugin for Rifnote.
- * Version: 0.2.8
+ * Version: 0.2.9
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Rifnote
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RIFNOTE_SEARCH_VERSION', '0.2.8');
+define('RIFNOTE_SEARCH_VERSION', '0.2.9');
 define('RIFNOTE_SEARCH_FILE', __FILE__);
 define('RIFNOTE_SEARCH_DIR', plugin_dir_path(__FILE__));
 define('RIFNOTE_SEARCH_URL', plugin_dir_url(__FILE__));
@@ -48,6 +48,7 @@ require_once RIFNOTE_SEARCH_DIR . 'includes/class-customgpt-import.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-data-api.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-github-updater.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-rss-warehouse.php';
+require_once RIFNOTE_SEARCH_DIR . 'includes/class-election.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-search.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-ai.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-rest-api.php';
@@ -80,6 +81,7 @@ final class Rifnote_Search_Plugin {
         add_action('plugins_loaded', array('Rifnote_Search_Retention', 'maybe_install'));
         add_action('plugins_loaded', array('Rifnote_Search_Launch_Readiness', 'maybe_install'));
         add_action('plugins_loaded', array('Rifnote_Search_GitHub_Updater', 'init'));
+        add_action('plugins_loaded', array('Rifnote_Search_Election', 'init'));
         add_action('plugins_loaded', array('Rifnote_Search_Football_API', 'maybe_install'));
         add_action('plugins_loaded', array('Rifnote_Search_Live_Data', 'maybe_install'));
         add_action('plugins_loaded', array('Rifnote_Search_Aggregation', 'ensure_categories'));
@@ -94,6 +96,7 @@ final class Rifnote_Search_Plugin {
         add_action('init', array('Rifnote_Search_Ingestion', 'schedule'));
         add_action(Rifnote_Search_Ingestion::CRON_HOOK, array('Rifnote_Search_Ingestion', 'run_cron'));
         add_action('pre_get_posts', array('Rifnote_Search_Ingestion', 'hide_legacy_rss_posts_from_admin'));
+        add_action('pre_get_posts', array('Rifnote_Search_Ingestion', 'limit_category_archives_to_manual_posts'));
         add_filter('posts_where', array('Rifnote_Search_Ingestion', 'exclude_legacy_rss_posts_where'), 10, 2);
         add_action('init', array('Rifnote_Search_News_API', 'schedule'));
         add_action(Rifnote_Search_News_API::CRON_HOOK, array('Rifnote_Search_News_API', 'run_cron'));
@@ -516,15 +519,56 @@ JS;
             'siteLogoUrl' => esc_url_raw(get_option('rifnote_site_logo_url', '')),
             'siteIconUrl' => class_exists('Rifnote_Search_PWA') ? Rifnote_Search_PWA::app_icon_url(192) : esc_url_raw(get_site_icon_url(192)),
             'siteLogoWidthDesktop' => absint(get_option('rifnote_site_logo_width_desktop', 220)),
+            'homeTakeoverLogoSizeMobile' => max(28, min(84, absint(get_option('rifnote_home_takeover_logo_size_mobile', 40)))),
             'homeSearchMediaUrl' => esc_url_raw(get_option('rifnote_home_search_media_url', '')),
             'homeSearchMediaLinkUrl' => esc_url_raw(get_option('rifnote_home_search_media_link_url', '')),
             'homeSearchMediaType' => sanitize_key(get_option('rifnote_home_search_media_type', 'image')),
+            'electionTakeover' => class_exists('Rifnote_Search_Election') ? Rifnote_Search_Election::public_payload() : array(),
+            'featuredFootballMatches' => class_exists('Rifnote_Search_Football_API') ? Rifnote_Search_Football_API::featured_homepage_matches(8) : array(),
+            'featuredFootballUrl' => home_url('/football/'),
             'homePills' => class_exists('Rifnote_Search_Admin') ? Rifnote_Search_Admin::home_pills() : array(),
+            'siteCategories' => $this->site_categories_context(),
             'showExcerpts' => (bool) get_option('rifnote_show_story_excerpts', true),
             'showAiCards' => (bool) get_option('rifnote_show_ai_cards', true),
             'canManageOptions' => current_user_can('manage_options'),
             'canManagePosts' => current_user_can('edit_posts'),
         );
+    }
+
+    private function site_categories_context() {
+        $terms = get_terms(array(
+            'taxonomy' => 'category',
+            'hide_empty' => false,
+            'orderby' => 'name',
+            'order' => 'ASC',
+            'number' => 200,
+        ));
+
+        if (is_wp_error($terms) || !is_array($terms)) {
+            return array();
+        }
+
+        $categories = array();
+        foreach ($terms as $term) {
+            if (!$term instanceof WP_Term || 'uncategorized' === $term->slug) {
+                continue;
+            }
+
+            $term_link = get_term_link($term);
+            if (is_wp_error($term_link)) {
+                continue;
+            }
+
+            $categories[] = array(
+                'id' => absint($term->term_id),
+                'name' => html_entity_decode($term->name, ENT_QUOTES, get_bloginfo('charset')),
+                'slug' => $term->slug,
+                'count' => absint($term->count),
+                'url' => esc_url_raw($term_link),
+            );
+        }
+
+        return $categories;
     }
 
     public function render_app($mode = 'app') {

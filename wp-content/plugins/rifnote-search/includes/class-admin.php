@@ -463,6 +463,7 @@ class Rifnote_Search_Admin {
             'rifnote-search-discovery' => array('title' => __('Search & Discovery', 'rifnote-search'), 'menu' => __('Search & Discovery', 'rifnote-search'), 'section' => 'discovery'),
             'rifnote-search-aggregation' => array('title' => __('Manual Aggregation', 'rifnote-search'), 'menu' => __('Manual Aggregation', 'rifnote-search'), 'section' => 'aggregation'),
             'rifnote-search-football' => array('title' => __('Football Control Center', 'rifnote-search'), 'menu' => __('Football', 'rifnote-search'), 'section' => 'football'),
+            'rifnote-search-football-curation' => array('title' => __('Football Curation', 'rifnote-search'), 'menu' => __('Football Curation', 'rifnote-search'), 'section' => 'football-curation'),
             'rifnote-search-customgpt' => array('title' => __('CustomGPT Import', 'rifnote-search'), 'menu' => __('CustomGPT Import', 'rifnote-search'), 'section' => 'customgpt'),
             'rifnote-search-publishers' => array('title' => __('Publishers', 'rifnote-search'), 'menu' => __('Publishers', 'rifnote-search'), 'section' => 'publishers'),
             'rifnote-search-operations' => array('title' => __('Operations', 'rifnote-search'), 'menu' => __('Operations', 'rifnote-search'), 'section' => 'operations'),
@@ -528,6 +529,22 @@ class Rifnote_Search_Admin {
         return in_array($current, $sections, true);
     }
 
+    private static function football_competition_key($competition) {
+        return absint($competition['league_id'] ?? 0) . ':' . absint($competition['season'] ?? 0);
+    }
+
+    private static function football_competition_from_key($key, $competitions) {
+        $key = sanitize_text_field((string) $key);
+
+        foreach ((array) $competitions as $competition) {
+            if (self::football_competition_key($competition) === $key) {
+                return $competition;
+            }
+        }
+
+        return array();
+    }
+
     private static function render_admin_tabs() {
         $current_page = isset($_GET['page']) ? sanitize_key(wp_unslash($_GET['page'])) : 'rifnote-search';
         $pages = self::admin_pages();
@@ -565,6 +582,7 @@ class Rifnote_Search_Admin {
                 'fields' => array(
                     'rifnote_site_logo_url' => array('label' => __('Site logo', 'rifnote-search'), 'type' => 'media', 'library' => 'image', 'description' => __('Main desktop logo. Mobile uses the compact favicon-style mark.', 'rifnote-search')),
                     'rifnote_site_logo_width_desktop' => array('label' => __('Desktop logo width', 'rifnote-search'), 'type' => 'number', 'min' => 80, 'max' => 420, 'suffix' => 'px'),
+                    'rifnote_home_takeover_logo_size_mobile' => array('label' => __('Mobile homepage takeover logo size', 'rifnote-search'), 'type' => 'number', 'min' => 28, 'max' => 84, 'suffix' => 'px'),
                     'rifnote_default_story_image_url' => array('label' => __('Global default story image', 'rifnote-search'), 'type' => 'media', 'library' => 'image', 'description' => __('Used when a post and its category have no story image.', 'rifnote-search')),
                     'rifnote_home_search_media_url' => array('label' => __('Homepage big media', 'rifnote-search'), 'type' => 'media', 'library' => ''),
                     'rifnote_home_search_media_link_url' => array('label' => __('Homepage media link', 'rifnote-search'), 'type' => 'url', 'description' => __('Optional custom URL or search URL for the homepage media.', 'rifnote-search')),
@@ -1144,6 +1162,8 @@ class Rifnote_Search_Admin {
             'rifnote_api_football_finished_cache_ttl',
             'rifnote_api_football_details_cache_ttl',
             'rifnote_api_football_competitions',
+            'rifnote_api_football_team_watchlist',
+            'rifnote_home_featured_football_matches',
         );
     }
 
@@ -1154,7 +1174,7 @@ class Rifnote_Search_Admin {
 
         Rifnote_Search_Football_API::clear_cache();
 
-        if ('rifnote_api_football_live_cache_ttl' === $option || 'rifnote_api_football_key' === $option || 'rifnote_api_football_competitions' === $option) {
+        if ('rifnote_api_football_live_cache_ttl' === $option || 'rifnote_api_football_key' === $option || 'rifnote_api_football_competitions' === $option || 'rifnote_api_football_team_watchlist' === $option) {
             Rifnote_Search_Football_API::clear_schedule();
             Rifnote_Search_Football_API::schedule();
         }
@@ -2264,6 +2284,57 @@ class Rifnote_Search_Admin {
         return implode("\n", array_slice(array_unique($lines), 0, 50));
     }
 
+    public static function sanitize_football_team_watchlist($value) {
+        $lines = array();
+
+        if (is_array($value)) {
+            $value = implode("\n", array_map('sanitize_text_field', $value));
+        }
+
+        foreach (explode("\n", (string) $value) as $line) {
+            $line = preg_replace('/\s+#.*$/', '', sanitize_text_field($line));
+            $line = trim((string) $line);
+
+            if ('' === $line) {
+                continue;
+            }
+
+            $parts = preg_split('/[:|,]/', $line, 2);
+            $team_id = isset($parts[0]) ? absint($parts[0]) : 0;
+            $team_name = isset($parts[1]) ? sanitize_text_field($parts[1]) : '';
+
+            if ($team_id) {
+                $lines[] = $team_id . ($team_name ? ':' . $team_name : '');
+                continue;
+            }
+
+            $team_name = sanitize_text_field($line);
+            if ($team_name) {
+                $lines[] = $team_name;
+            }
+        }
+
+        return implode("\n", array_slice(array_unique($lines), 0, 250));
+    }
+
+    public static function sanitize_home_featured_football_matches($value) {
+        $ids = array();
+
+        if (is_array($value)) {
+            $value = implode("\n", array_map('absint', $value));
+        }
+
+        foreach (preg_split('/[\s,]+/', (string) $value) as $item) {
+            $fixture_id = absint($item);
+
+            if ($fixture_id) {
+                $ids[] = $fixture_id;
+            }
+        }
+
+        return implode("\n", array_slice(array_values(array_unique($ids)), 0, 12));
+    }
+
     public static function sanitize_secret($value) {
         $option = '';
         $filter = current_filter();
@@ -2363,6 +2434,16 @@ class Rifnote_Search_Admin {
         }
 
         return max(80, min(420, $width));
+    }
+
+    public static function sanitize_mobile_logo_size($value) {
+        $size = absint($value);
+
+        if (!$size) {
+            return 40;
+        }
+
+        return max(28, min(84, $size));
     }
 
     public static function google_font_choices() {
@@ -2776,6 +2857,8 @@ class Rifnote_Search_Admin {
             'rifnote_api_football_finished_cache_ttl' => array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_football_finished_ttl'), 'default' => 900),
             'rifnote_api_football_details_cache_ttl' => array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_football_details_ttl'), 'default' => 600),
             'rifnote_api_football_competitions' => array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_football_competitions'), 'default' => "39:2025:Premier League\n2:2025:UEFA Champions League\n3:2025:UEFA Europa League\n1:2026:FIFA World Cup"),
+            'rifnote_api_football_team_watchlist' => array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_football_team_watchlist'), 'default' => ''),
+            'rifnote_home_featured_football_matches' => array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_home_featured_football_matches'), 'default' => ''),
         );
 
         register_setting('rifnote_search_settings', 'rifnote_ai_enabled', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true));
@@ -2810,6 +2893,7 @@ class Rifnote_Search_Admin {
         register_setting('rifnote_search_settings', 'rifnote_home_lead_post_id', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_home_lead_post_id'), 'default' => 0));
         register_setting('rifnote_search_settings', 'rifnote_site_logo_url', array('type' => 'string', 'sanitize_callback' => 'esc_url_raw', 'default' => ''));
         register_setting('rifnote_search_settings', 'rifnote_site_logo_width_desktop', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_logo_width'), 'default' => 220));
+        register_setting('rifnote_search_settings', 'rifnote_home_takeover_logo_size_mobile', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_mobile_logo_size'), 'default' => 40));
         register_setting('rifnote_search_settings', 'rifnote_default_story_image_url', array('type' => 'string', 'sanitize_callback' => 'esc_url_raw', 'default' => ''));
         register_setting('rifnote_search_settings', 'rifnote_typography_heading_font', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_google_font'), 'default' => 'Google Sans'));
         register_setting('rifnote_search_settings', 'rifnote_typography_body_font', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_google_font'), 'default' => 'Roboto'));
@@ -2885,6 +2969,9 @@ class Rifnote_Search_Admin {
         foreach ($football_settings as $option => $args) {
             register_setting('rifnote_search_football_settings', $option, $args);
         }
+
+        register_setting('rifnote_search_football_curation_settings', 'rifnote_api_football_team_watchlist', $football_settings['rifnote_api_football_team_watchlist']);
+        register_setting('rifnote_search_football_curation_settings', 'rifnote_home_featured_football_matches', $football_settings['rifnote_home_featured_football_matches']);
     }
 
     public static function sanitize_source_logo_overrides($value) {
@@ -3095,6 +3182,13 @@ class Rifnote_Search_Admin {
         $editorial_audit = Rifnote_Search_Editorial::recent_audit(20);
         $football_settings = Rifnote_Search_Football_API::settings();
         $football_competitions = Rifnote_Search_Football_API::competitions();
+        $football_team_watchlist = Rifnote_Search_Football_API::team_watchlist();
+        $football_curation_league_key = isset($_GET['football_league']) ? sanitize_text_field(wp_unslash($_GET['football_league'])) : '';
+        $football_curation_date = isset($_GET['football_date']) ? sanitize_text_field(wp_unslash($_GET['football_date'])) : wp_date('Y-m-d');
+        $football_curation_competition = self::football_competition_from_key($football_curation_league_key, $football_competitions);
+        $football_stored_teams = self::is_section('football-curation') ? Rifnote_Search_Football_API::stored_teams_by_competition((int) ($football_curation_competition['league_id'] ?? 0), (int) ($football_curation_competition['season'] ?? 0), 700) : array();
+        $football_featured_ids = self::is_section('football-curation') ? Rifnote_Search_Football_API::homepage_featured_fixture_ids() : array();
+        $football_today_matches = self::is_section('football-curation') ? Rifnote_Search_Football_API::stored_matches_for_date($football_curation_date, 260, false) : array();
         $football_health = Rifnote_Search_Football_API::admin_health();
         $football_usage = Rifnote_Search_Football_API::usage_summary(7);
         $football_recent_usage = Rifnote_Search_Football_API::recent_usage(12);
@@ -3224,6 +3318,14 @@ class Rifnote_Search_Admin {
                                 <input id="rifnote_site_logo_width_desktop" class="small-text" type="number" min="80" max="420" step="1" name="rifnote_site_logo_width_desktop" value="<?php echo esc_attr(self::sanitize_logo_width(get_option('rifnote_site_logo_width_desktop', 220))); ?>" />
                                 <span><?php esc_html_e('px', 'rifnote-search'); ?></span>
                                 <p class="description"><?php esc_html_e('Controls the max width of the desktop header logo. Mobile still uses the favicon-style mark to save space.', 'rifnote-search'); ?></p>
+                            </td>
+                        </tr>
+                        <tr>
+                            <th scope="row"><label for="rifnote_home_takeover_logo_size_mobile"><?php esc_html_e('Mobile homepage takeover logo size', 'rifnote-search'); ?></label></th>
+                            <td>
+                                <input id="rifnote_home_takeover_logo_size_mobile" class="small-text" type="number" min="28" max="84" step="1" name="rifnote_home_takeover_logo_size_mobile" value="<?php echo esc_attr(self::sanitize_mobile_logo_size(get_option('rifnote_home_takeover_logo_size_mobile', 40))); ?>" />
+                                <span><?php esc_html_e('px', 'rifnote-search'); ?></span>
+                                <p class="description"><?php esc_html_e('Shown at the top center of the mobile homepage when featured media, election, video or match scoreboard replaces the normal Rifnote wordmark.', 'rifnote-search'); ?></p>
                             </td>
                         </tr>
                         <tr>
@@ -3884,6 +3986,17 @@ class Rifnote_Search_Admin {
                                         <p class="description"><?php esc_html_e('One per line: league_id:season:label. Examples: 39:2025:Premier League, 2:2025:UEFA Champions League, 3:2025:UEFA Europa League, 1:2026:FIFA World Cup.', 'rifnote-search'); ?></p>
                                     </td>
                                 </tr>
+                                <tr>
+                                    <th scope="row"><?php esc_html_e('Teams and homepage matches', 'rifnote-search'); ?></th>
+                                    <td>
+                                        <p>
+                                            <strong><?php esc_html_e('Current visibility:', 'rifnote-search'); ?></strong>
+                                            <?php echo !empty($football_team_watchlist['enabled']) ? esc_html(sprintf(_n('%d selected team', '%d selected teams', count($football_team_watchlist['labels']), 'rifnote-search'), count($football_team_watchlist['labels']))) : esc_html__('All teams from watched competitions', 'rifnote-search'); ?>
+                                        </p>
+                                        <p><a class="button button-secondary" href="<?php echo esc_url(admin_url('admin.php?page=rifnote-search-football-curation')); ?>"><?php esc_html_e('Open Football Curation', 'rifnote-search'); ?></a></p>
+                                        <p class="description"><?php esc_html_e('Team visibility and homepage featured scoreboards now live on a dedicated curation page with league filters, checkbox selection and match picking.', 'rifnote-search'); ?></p>
+                                    </td>
+                                </tr>
                             </tbody>
                         </table>
                         <?php submit_button(__('Save Football settings', 'rifnote-search')); ?>
@@ -4027,6 +4140,165 @@ class Rifnote_Search_Admin {
                     </tbody>
                 </table>
             </div>
+            <?php endif; ?>
+
+            <?php if (self::is_section('football-curation')) : ?>
+            <?php
+            $football_selected_team_ids = isset($football_team_watchlist['ids']) && is_array($football_team_watchlist['ids']) ? $football_team_watchlist['ids'] : array();
+            $football_selected_team_labels = isset($football_team_watchlist['labels']) && is_array($football_team_watchlist['labels']) ? $football_team_watchlist['labels'] : array();
+            $football_filtered_matches = array_values(array_filter((array) $football_today_matches, function($fixture) use ($football_curation_competition) {
+                if (empty($football_curation_competition)) {
+                    return true;
+                }
+
+                return (int) ($fixture['league']['id'] ?? 0) === (int) ($football_curation_competition['league_id'] ?? 0)
+                    && (int) ($fixture['league']['season'] ?? 0) === (int) ($football_curation_competition['season'] ?? 0);
+            }));
+            ?>
+            <h2><?php esc_html_e('Football Curation', 'rifnote-search'); ?></h2>
+            <p><?php esc_html_e('Pick the teams Rifnote should surface, then choose the saved match or matches that can become homepage scoreboards.', 'rifnote-search'); ?></p>
+
+            <div class="card" style="max-width:1280px;margin:16px 0;">
+                <h2><?php esc_html_e('Filter the room', 'rifnote-search'); ?></h2>
+                <form method="get" style="display:flex;gap:12px;align-items:end;flex-wrap:wrap;">
+                    <input type="hidden" name="page" value="rifnote-search-football-curation" />
+                    <label>
+                        <strong><?php esc_html_e('League / cup', 'rifnote-search'); ?></strong><br />
+                        <select name="football_league" style="min-width:280px;">
+                            <option value=""><?php esc_html_e('All configured leagues/cups', 'rifnote-search'); ?></option>
+                            <?php foreach ($football_competitions as $competition) : ?>
+                                <?php $competition_key = self::football_competition_key($competition); ?>
+                                <option value="<?php echo esc_attr($competition_key); ?>" <?php selected($football_curation_league_key, $competition_key); ?>>
+                                    <?php echo esc_html(sprintf('%s · %d', $competition['label'], (int) $competition['season'])); ?>
+                                </option>
+                            <?php endforeach; ?>
+                        </select>
+                    </label>
+                    <label>
+                        <strong><?php esc_html_e('Match date', 'rifnote-search'); ?></strong><br />
+                        <input type="date" name="football_date" value="<?php echo esc_attr($football_curation_date); ?>" />
+                    </label>
+                    <?php submit_button(__('Load teams and matches', 'rifnote-search'), 'secondary', 'submit', false); ?>
+                </form>
+                <p class="description"><?php esc_html_e('Teams come from saved fixtures in the database. Matches come from the selected date, also from the database.', 'rifnote-search'); ?></p>
+            </div>
+
+            <form method="post" action="options.php">
+                <?php settings_fields('rifnote_search_football_curation_settings'); ?>
+                <div style="display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:18px;align-items:start;max-width:1280px;">
+                    <div class="card">
+                        <h2><?php esc_html_e('Team visibility', 'rifnote-search'); ?></h2>
+                        <p><?php esc_html_e('Select the teams whose matches should appear in live score surfaces. Leave everything unchecked to show all configured competition teams.', 'rifnote-search'); ?></p>
+                        <p>
+                            <input type="search" class="regular-text" id="rifnote-football-curation-team-search" placeholder="<?php esc_attr_e('Search teams, IDs, leagues...', 'rifnote-search'); ?>" />
+                            <span class="description"><?php echo esc_html(sprintf(_n('%d selected now', '%d selected now', count($football_selected_team_labels), 'rifnote-search'), count($football_selected_team_labels))); ?></span>
+                        </p>
+                        <input type="hidden" name="rifnote_api_football_team_watchlist[]" value="" />
+                        <div style="max-height:620px;overflow:auto;border:1px solid #dcdcde;border-radius:10px;background:#fff;">
+                            <table class="widefat striped" id="rifnote-football-curation-team-list">
+                                <thead>
+                                    <tr>
+                                        <th style="width:42px;"><?php esc_html_e('Use', 'rifnote-search'); ?></th>
+                                        <th><?php esc_html_e('Team', 'rifnote-search'); ?></th>
+                                        <th><?php esc_html_e('League', 'rifnote-search'); ?></th>
+                                        <th><?php esc_html_e('Seen', 'rifnote-search'); ?></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (!$football_stored_teams) : ?>
+                                        <tr><td colspan="4"><?php esc_html_e('No teams saved for this filter yet. Sync fixtures for the configured leagues, then come back here.', 'rifnote-search'); ?></td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($football_stored_teams as $team) : ?>
+                                        <?php
+                                        $team_id = absint($team['team_id'] ?? 0);
+                                        $team_name = sanitize_text_field($team['team_name'] ?? '');
+                                        $league_name = sanitize_text_field($team['league_name'] ?? __('Football', 'rifnote-search'));
+                                        $season = absint($team['league_season'] ?? 0);
+                                        $line = $team_id . ':' . $team_name;
+                                        $checked = $team_id && !empty($football_selected_team_ids[$team_id]);
+                                        ?>
+                                        <tr data-curation-search="<?php echo esc_attr(strtolower($team_name . ' ' . $team_id . ' ' . $league_name . ' ' . $season)); ?>">
+                                            <td><input type="checkbox" name="rifnote_api_football_team_watchlist[]" value="<?php echo esc_attr($line); ?>" <?php checked($checked); ?> /></td>
+                                            <td><strong><?php echo esc_html($team_name); ?></strong><br /><code><?php echo esc_html($team_id); ?></code></td>
+                                            <td><?php echo esc_html($league_name); ?><br /><span class="description"><?php echo esc_html($season); ?></span></td>
+                                            <td><?php echo esc_html(number_format_i18n((int) ($team['appearances'] ?? 0))); ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <h2><?php esc_html_e('Homepage scoreboards', 'rifnote-search'); ?></h2>
+                        <p><?php esc_html_e('Pick one or more matches from the selected date. Multiple matches show as a homepage carousel.', 'rifnote-search'); ?></p>
+                        <p>
+                            <input type="search" class="regular-text" id="rifnote-football-curation-match-search" placeholder="<?php esc_attr_e('Search matches, teams, fixture IDs...', 'rifnote-search'); ?>" />
+                            <span class="description"><?php echo esc_html(sprintf(_n('%d featured match selected', '%d featured matches selected', count($football_featured_ids), 'rifnote-search'), count($football_featured_ids))); ?></span>
+                        </p>
+                        <input type="hidden" name="rifnote_home_featured_football_matches[]" value="" />
+                        <div style="max-height:620px;overflow:auto;border:1px solid #dcdcde;border-radius:10px;background:#fff;">
+                            <table class="widefat striped" id="rifnote-football-curation-match-list">
+                                <thead>
+                                    <tr>
+                                        <th style="width:42px;"><?php esc_html_e('Feature', 'rifnote-search'); ?></th>
+                                        <th><?php esc_html_e('Match', 'rifnote-search'); ?></th>
+                                        <th><?php esc_html_e('Kickoff', 'rifnote-search'); ?></th>
+                                        <th><?php esc_html_e('Status', 'rifnote-search'); ?></th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php if (!$football_filtered_matches) : ?>
+                                        <tr><td colspan="4"><?php esc_html_e('No saved matches found for this date/filter. Sync fixtures first or choose another date.', 'rifnote-search'); ?></td></tr>
+                                    <?php endif; ?>
+                                    <?php foreach ($football_filtered_matches as $fixture) : ?>
+                                        <?php
+                                        $fixture_id = absint($fixture['id'] ?? 0);
+                                        $home = sanitize_text_field($fixture['home']['name'] ?? '');
+                                        $away = sanitize_text_field($fixture['away']['name'] ?? '');
+                                        $league = sanitize_text_field($fixture['league']['name'] ?? __('Football', 'rifnote-search'));
+                                        $status = sanitize_text_field($fixture['status_short'] ?? '');
+                                        $kickoff_ts = !empty($fixture['date']) ? strtotime((string) $fixture['date']) : 0;
+                                        $kickoff = $kickoff_ts ? wp_date('M j, H:i', $kickoff_ts) : __('TBD', 'rifnote-search');
+                                        $goals_home = isset($fixture['goals']['home']) ? (string) $fixture['goals']['home'] : '-';
+                                        $goals_away = isset($fixture['goals']['away']) ? (string) $fixture['goals']['away'] : '-';
+                                        ?>
+                                        <tr data-curation-search="<?php echo esc_attr(strtolower($league . ' ' . $home . ' ' . $away . ' ' . $fixture_id . ' ' . $status)); ?>">
+                                            <td><input type="checkbox" name="rifnote_home_featured_football_matches[]" value="<?php echo esc_attr($fixture_id); ?>" <?php checked(in_array($fixture_id, $football_featured_ids, true)); ?> /></td>
+                                            <td><strong><?php echo esc_html($home . ' vs ' . $away); ?></strong><br /><span class="description"><?php echo esc_html($league); ?> · <code><?php echo esc_html($fixture_id); ?></code></span></td>
+                                            <td><?php echo esc_html($kickoff); ?></td>
+                                            <td><?php echo esc_html(($status ? $status : 'TBD') . ' · ' . $goals_home . '-' . $goals_away); ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <?php submit_button(__('Save football curation', 'rifnote-search')); ?>
+            </form>
+            <script>
+            (function () {
+                function bindSearch(inputId, tableId) {
+                    var input = document.getElementById(inputId);
+                    var table = document.getElementById(tableId);
+
+                    if (!input || !table) {
+                        return;
+                    }
+
+                    input.addEventListener('input', function () {
+                        var query = input.value.trim().toLowerCase();
+                        table.querySelectorAll('tbody tr[data-curation-search]').forEach(function (row) {
+                            row.style.display = !query || row.getAttribute('data-curation-search').indexOf(query) !== -1 ? '' : 'none';
+                        });
+                    });
+                }
+
+                bindSearch('rifnote-football-curation-team-search', 'rifnote-football-curation-team-list');
+                bindSearch('rifnote-football-curation-match-search', 'rifnote-football-curation-match-list');
+            })();
+            </script>
             <?php endif; ?>
 
             <?php if (self::is_section('release')) : ?>

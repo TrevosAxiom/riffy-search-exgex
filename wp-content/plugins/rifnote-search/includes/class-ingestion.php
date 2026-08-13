@@ -679,6 +679,40 @@ class Rifnote_Search_Ingestion {
         $query->set('rifnote_hide_legacy_rss', 1);
     }
 
+    public static function limit_category_archives_to_manual_posts($query) {
+        if (is_admin() || !$query->is_main_query() || !$query->is_category()) {
+            return;
+        }
+
+        $query->set('post_type', 'post');
+        $query->set('post_status', 'publish');
+        $query->set('meta_query', self::merge_manual_origin_meta_query($query->get('meta_query')));
+    }
+
+    private static function merge_manual_origin_meta_query($existing_meta_query) {
+        $meta_query = is_array($existing_meta_query) ? $existing_meta_query : array();
+
+        if (!isset($meta_query['relation'])) {
+            $meta_query['relation'] = 'AND';
+        }
+
+        $meta_query[] = array(
+            'relation' => 'OR',
+            array(
+                'key' => 'rifnote_origin_channel',
+                'value' => 'admin',
+                'compare' => '=',
+            ),
+            array(
+                'key' => 'rifnote_origin_model',
+                'value' => 'Rifnote Admin',
+                'compare' => '=',
+            ),
+        );
+
+        return $meta_query;
+    }
+
     public static function exclude_legacy_rss_posts_where($where, $query) {
         global $wpdb;
 

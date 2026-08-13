@@ -499,6 +499,379 @@
   background: transparent;
 }
 
+.rs-home-takeover-mobile-logo {
+  display: none;
+}
+
+.rs-election-takeover {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, .95fr) minmax(280px, .9fr);
+  gap: clamp(14px, 3vw, 28px);
+  align-items: center;
+  width: min(980px, 92vw);
+  margin: 0 auto;
+  padding: clamp(18px, 3vw, 30px);
+  text-align: left;
+  border: 1px solid #e2e8f0;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 88% 12%, rgb(22 163 74 / 14%), transparent 32%),
+    radial-gradient(circle at 8% 18%, rgb(237 28 36 / 12%), transparent 30%),
+    linear-gradient(135deg, #fff, #f8fafc);
+  box-shadow: 0 18px 46px rgb(15 23 42 / 9%);
+  overflow: hidden;
+}
+
+.rs-election-takeover::before {
+  position: absolute;
+  inset: 0;
+  content: "";
+  background-image: linear-gradient(90deg, rgb(15 23 42 / 4%) 1px, transparent 1px);
+  background-size: 46px 100%;
+  opacity: .35;
+  pointer-events: none;
+}
+
+.rs-election-copy,
+.rs-election-visual {
+  position: relative;
+  z-index: 1;
+}
+
+.rs-election-eyebrow {
+  display: inline-flex;
+  width: max-content;
+  margin-bottom: 10px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: rgb(237 28 36 / 9%);
+  color: #a60d13;
+  font-size: .7rem;
+  font-weight: 900;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.rs-election-copy h1 {
+  max-width: 500px;
+  margin: 0;
+  color: var(--rs-text);
+  font-size: clamp(2.25rem, 5.2vw, 4.5rem);
+  font-weight: 950;
+  line-height: .94;
+  letter-spacing: -.055em;
+}
+
+.rs-election-copy p {
+  max-width: 470px;
+  margin: 12px 0 0;
+  color: #667085;
+  font-size: clamp(.92rem, 1.2vw, 1.05rem);
+  font-weight: 650;
+  line-height: 1.45;
+}
+
+.rs-election-countdown {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  max-width: 430px;
+  margin-top: 18px;
+}
+
+.rs-election-countdown span {
+  display: grid;
+  gap: 2px;
+  padding: 10px 9px;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  background: rgb(255 255 255 / 78%);
+  box-shadow: 0 10px 22px rgb(15 23 42 / 6%);
+}
+
+.rs-election-countdown strong {
+  color: var(--rs-text);
+  font-size: clamp(1.25rem, 2.2vw, 1.75rem);
+  font-weight: 950;
+  line-height: 1;
+  letter-spacing: -.04em;
+}
+
+.rs-election-countdown small {
+  color: #667085;
+  font-size: .65rem;
+  font-weight: 850;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.rs-election-live-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 9px;
+  align-items: center;
+  margin-top: 16px;
+}
+
+.rs-election-live-meta > span {
+  display: inline-flex;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #344054;
+  font-weight: 850;
+}
+
+.rs-election-coverage-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 18px;
+  padding: 11px 15px;
+  border-radius: 999px;
+  background: #ed1c24;
+  color: #fff;
+  font-weight: 900;
+  text-decoration: none;
+  box-shadow: 0 16px 32px rgb(237 28 36 / 24%);
+}
+
+.rs-election-coverage-link:hover,
+.rs-election-coverage-link:focus {
+  color: #fff;
+  transform: translateY(-1px);
+}
+
+.rs-election-visual {
+  min-height: 250px;
+  overflow: hidden;
+  border-radius: 22px;
+}
+
+.rs-election-visual > img,
+.rs-election-visual > video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  min-height: 250px;
+  object-fit: cover;
+  border-radius: inherit;
+}
+
+.rs-election-results {
+  display: grid;
+  gap: 10px;
+  height: 100%;
+  min-height: 250px;
+  padding: clamp(14px, 2.4vw, 20px);
+  border: 1px solid #e2e8f0;
+  border-radius: inherit;
+  background: rgb(255 255 255 / 82%);
+  backdrop-filter: blur(18px);
+}
+
+.rs-election-results-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.rs-election-results-head strong {
+  color: var(--rs-text);
+  font-size: 1rem;
+  font-weight: 950;
+}
+
+.rs-election-results-head small {
+  color: #667085;
+  font-weight: 800;
+}
+
+.rs-election-party-list {
+  display: grid;
+  gap: 8px;
+}
+
+.rs-election-party {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 10px;
+  border: 1px solid #e5eaf1;
+  border-radius: 15px;
+  background: #fff;
+}
+
+.rs-election-party-logo {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border: 1px solid rgb(15 23 42 / 8%);
+  border-radius: 13px;
+  background: color-mix(in srgb, var(--party-color, #ed1c24) 10%, #fff);
+  overflow: hidden;
+}
+
+.rs-election-party-logo img {
+  width: 80%;
+  height: 80%;
+  object-fit: contain;
+}
+
+.rs-election-party-logo span {
+  color: var(--party-color, #ed1c24);
+  font-weight: 950;
+}
+
+.rs-election-party b,
+.rs-election-party strong {
+  color: var(--rs-text);
+  font-weight: 950;
+}
+
+.rs-election-party small {
+  display: block;
+  color: #667085;
+  font-weight: 750;
+}
+
+.rs-election-party i {
+  display: block;
+  height: 6px;
+  margin-top: 5px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: #eef2f7;
+}
+
+.rs-election-party em {
+  display: block;
+  height: 100%;
+  min-width: 0;
+  border-radius: inherit;
+  transition: width .45s ease;
+}
+
+.rs-election-lga-pulse {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid #e5eaf1;
+  border-radius: 16px;
+  background: linear-gradient(135deg, #fff, #f8fafc);
+}
+
+.rs-election-lga-pulse > div:first-child {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.rs-election-lga-pulse strong {
+  color: var(--rs-text);
+  font-size: .88rem;
+  font-weight: 950;
+}
+
+.rs-election-lga-pulse small {
+  color: #667085;
+  font-size: .72rem;
+  font-weight: 850;
+}
+
+.rs-election-lga-list {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+
+.rs-election-lga-list span {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+  padding: 7px 8px;
+  border-radius: 12px;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #edf1f6;
+}
+
+.rs-election-lga-list b {
+  overflow: hidden;
+  color: var(--rs-text);
+  font-size: .75rem;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rs-election-lga-list em {
+  overflow: hidden;
+  color: #ed1c24;
+  font-size: .68rem;
+  font-style: normal;
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rs-election-results p {
+  margin: 0;
+  color: #667085;
+  font-weight: 700;
+}
+
+@media (max-width: 860px) {
+  .rs-election-takeover {
+    grid-template-columns: 1fr;
+    gap: 14px;
+    width: min(100%, calc(100vw - 28px));
+    padding: 15px;
+    border-radius: 24px;
+  }
+
+  .rs-election-copy {
+    text-align: center;
+  }
+
+  .rs-election-eyebrow,
+  .rs-election-coverage-link {
+    margin-right: auto;
+    margin-left: auto;
+  }
+
+  .rs-election-copy h1 {
+    margin-inline: auto;
+    font-size: clamp(2.05rem, 12vw, 3.35rem);
+  }
+
+  .rs-election-copy p {
+    margin-inline: auto;
+  }
+
+  .rs-election-countdown {
+    grid-template-columns: repeat(4, minmax(58px, 1fr));
+    max-width: 100%;
+  }
+
+  .rs-election-countdown span {
+    padding: 11px 8px;
+    border-radius: 17px;
+  }
+
+  .rs-election-visual,
+  .rs-election-visual > img,
+  .rs-election-visual > video,
+  .rs-election-results {
+    min-height: 220px;
+  }
+}
+
 .rs-orbit-logo {
   position: relative;
   z-index: 1;
@@ -937,6 +1310,427 @@
 
 .rs-live-card {
   overflow: hidden;
+}
+
+.rs-home-featured-football {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: clamp(14px, 2vw, 24px);
+  width: min(1120px, 94vw);
+  margin: 0 auto;
+  padding: clamp(20px, 3vw, 38px);
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: hidden;
+}
+
+.rs-home-featured-football::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(90deg, rgb(16 24 40 / 5%) 1px, transparent 1px),
+    linear-gradient(0deg, rgb(16 24 40 / 4%) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: linear-gradient(90deg, transparent, #000 18%, #000 82%, transparent);
+  pointer-events: none;
+}
+
+.rs-home-featured-football.is-live {
+  border-color: transparent;
+}
+
+.rs-home-goal-flash {
+  position: absolute;
+  inset: 10px;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  border-radius: 28px;
+  background:
+    radial-gradient(circle at 50% 20%, rgb(237 28 36 / 30%), transparent 38%),
+    linear-gradient(135deg, #101828, #06140f);
+  color: #fff;
+  text-align: center;
+  box-shadow: 0 28px 70px rgb(15 23 42 / 28%);
+  animation: rsGoalFlashIn 4200ms ease both;
+}
+
+.rs-home-goal-flash span {
+  display: inline-flex;
+  min-height: 32px;
+  align-items: center;
+  padding: 7px 14px;
+  border-radius: 999px;
+  background: #ed1c24;
+  color: #fff;
+  font-size: 0.82rem;
+  font-weight: 900;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.rs-home-goal-flash b {
+  font-size: clamp(2rem, 8vw, 5rem);
+  font-weight: 950;
+  letter-spacing: -0.05em;
+  line-height: 0.92;
+}
+
+.rs-home-goal-flash small {
+  color: #dbe4ef;
+  font-size: clamp(1rem, 2vw, 1.3rem);
+  font-weight: 820;
+}
+
+.rs-home-goal-flash strong {
+  min-width: 118px;
+  padding: 12px 20px;
+  border-radius: 22px;
+  background: #fff;
+  color: #101828;
+  font-size: clamp(1.4rem, 3vw, 2.2rem);
+  font-weight: 950;
+}
+
+@keyframes rsGoalFlashIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92);
+  }
+
+  12%,
+  82% {
+    opacity: 1;
+    transform: scale(1);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.02);
+  }
+}
+
+.rs-home-featured-football-top {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.rs-home-football-kicker {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  min-height: 36px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  background: #feecee;
+  color: #ed1c24;
+  font-size: 0.78rem;
+  font-weight: 850;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.rs-home-football-league {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  max-width: 100%;
+  padding: 9px 14px;
+  border: 1px solid #e4ebf5;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 82%);
+  color: #101828;
+  box-shadow: 0 12px 35px rgb(15 23 42 / 7%);
+}
+
+.rs-home-football-league img {
+  width: 24px;
+  height: 24px;
+  object-fit: contain;
+}
+
+.rs-home-football-league b,
+.rs-home-football-league em {
+  overflow: hidden;
+  max-width: 22ch;
+  font-size: 0.88rem;
+  font-style: normal;
+  font-weight: 850;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rs-home-scoreboard {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: clamp(14px, 3vw, 38px);
+  min-width: 0;
+  padding: clamp(12px, 2vw, 20px);
+  border-radius: 28px;
+  color: #101828;
+  text-decoration: none;
+}
+
+.rs-home-scoreboard:hover .rs-home-scoreboard-score b,
+.rs-home-scoreboard:focus-visible .rs-home-scoreboard-score b {
+  background: #ed1c24;
+}
+
+.rs-home-scoreboard-team {
+  display: inline-grid;
+  grid-template-columns: 64px minmax(0, auto);
+  align-items: center;
+  gap: 14px;
+  min-width: 0;
+}
+
+.rs-home-scoreboard-team.is-right {
+  grid-template-columns: minmax(0, auto) 64px;
+  justify-content: end;
+  text-align: right;
+}
+
+.rs-home-scoreboard-team.is-right img,
+.rs-home-scoreboard-team.is-right i {
+  grid-column: 2;
+  grid-row: 1;
+}
+
+.rs-home-scoreboard-team.is-right b {
+  grid-column: 1;
+  grid-row: 1;
+}
+
+.rs-home-scoreboard-team img,
+.rs-home-scoreboard-team i {
+  width: 64px;
+  height: 64px;
+  border-radius: 999px;
+  object-fit: contain;
+  background: #fff;
+  box-shadow: inset 0 0 0 1px #e4ebf5;
+}
+
+.rs-home-scoreboard-team i {
+  display: grid;
+  place-items: center;
+  color: #ed1c24;
+  font-size: 0.72rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.rs-home-scoreboard-team b {
+  overflow: hidden;
+  font-size: clamp(1.15rem, 2.1vw, 2rem);
+  font-weight: 900;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.rs-home-scoreboard-score {
+  display: grid;
+  justify-items: center;
+  gap: 4px;
+}
+
+.rs-home-scoreboard-score b {
+  min-width: clamp(132px, 17vw, 220px);
+  padding: clamp(13px, 2vw, 22px) clamp(18px, 2.4vw, 30px);
+  border-radius: 28px;
+  background: #101828;
+  color: #fff;
+  font-size: clamp(2.2rem, 5.6vw, 5.4rem);
+  font-weight: 900;
+  line-height: 1;
+  text-align: center;
+  transition: background 160ms ease;
+}
+
+.rs-home-scoreboard-score small {
+  color: #667085;
+  font-size: clamp(0.85rem, 1.1vw, 1.05rem);
+  font-weight: 850;
+}
+
+.rs-home-football-details {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.rs-home-football-details span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 12px 14px;
+  border: 1px solid #e4ebf5;
+  border-radius: 18px;
+  background: rgb(255 255 255 / 84%);
+  color: #667085;
+  font-size: 0.9rem;
+  font-weight: 820;
+  box-shadow: 0 10px 24px rgb(15 23 42 / 5%);
+}
+
+.rs-home-football-details svg {
+  flex: 0 0 auto;
+  color: #ed1c24;
+}
+
+.rs-home-scoreboard-controls {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  justify-content: center;
+  white-space: nowrap;
+}
+
+.rs-home-scoreboard-controls button {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid #e4ebf5;
+  border-radius: 999px;
+  background: #fff;
+  color: #101828;
+  cursor: pointer;
+}
+
+.rs-home-scoreboard-controls span {
+  color: #667085;
+  font-size: 0.75rem;
+  font-weight: 850;
+}
+
+@media (max-width: 760px) {
+  .rs-home-featured-football {
+    width: 100%;
+    padding: 8px 2px 14px;
+    border-radius: 0;
+  }
+
+  .rs-home-featured-football::before {
+    opacity: 0.55;
+  }
+
+  .rs-home-featured-football-top {
+    overflow: hidden;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    mask-image: linear-gradient(90deg, #000 0, #000 88%, transparent);
+  }
+
+  .rs-home-football-league {
+    flex: 0 0 auto;
+    justify-content: center;
+    width: max-content;
+    max-width: none;
+    animation: rsFootballLeaguePingPong 10s ease-in-out infinite alternate;
+  }
+
+  .rs-home-football-league b,
+  .rs-home-football-league em {
+    max-width: none;
+  }
+
+  .rs-home-scoreboard {
+    gap: 10px;
+    padding: 4px 0 8px;
+  }
+
+  .rs-home-scoreboard-team {
+    grid-template-columns: 44px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .rs-home-scoreboard-team.is-right {
+    grid-template-columns: minmax(0, 1fr) 44px;
+  }
+
+  .rs-home-scoreboard-team img,
+  .rs-home-scoreboard-team i {
+    width: 44px;
+    height: 44px;
+  }
+
+  .rs-home-scoreboard-team b {
+    font-size: 0.96rem;
+  }
+
+  .rs-home-scoreboard-score b {
+    min-width: 88px;
+    padding: 11px 10px;
+    border-radius: 20px;
+    font-size: 1.45rem;
+  }
+
+  .rs-home-football-details {
+    display: flex;
+    width: 100%;
+    gap: 10px;
+    overflow: hidden;
+    white-space: nowrap;
+    mask-image: linear-gradient(90deg, transparent, #000 8%, #000 92%, transparent);
+  }
+
+  .rs-home-football-details span {
+    flex: 0 0 auto;
+    min-width: max-content;
+    padding: 10px 12px;
+    font-size: 0.82rem;
+    animation: rsFootballDetailsPingPong 12s ease-in-out infinite alternate;
+  }
+
+  .rs-home-goal-flash {
+    inset: 0;
+    border-radius: 24px;
+  }
+
+  .rs-home-scoreboard-controls {
+    justify-content: center;
+  }
+}
+
+@keyframes rsFootballDetailsPingPong {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(calc(-100% + min(100vw, 390px) - 64px));
+  }
+}
+
+@keyframes rsFootballLeaguePingPong {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(calc(-100% + min(100vw, 390px) - 64px));
+  }
 }
 
 .rs-live-card::before {
@@ -1991,9 +2785,11 @@
   width: 46px;
   height: 46px;
   place-items: center;
+  border: 0;
+  background: transparent;
   padding: 0;
   color: var(--rs-text);
-  box-shadow: 0 8px 20px rgb(15 23 42 / 8%);
+  box-shadow: none;
 }
 
 .rs-plugin-login svg {
@@ -10064,6 +10860,10 @@ body.rifnote-search-plugin-page .rs-match-modal-close,
     scroll-snap-align: start;
   }
 
+  .rs-home-categories-tab {
+    display: none !important;
+  }
+
   .rs-bottom-nav,
   .rs-mobile-tabbar {
     right: 10px;
@@ -10313,6 +11113,67 @@ body.rifnote-search-plugin-page .rs-match-modal-close,
   .rs-bottom-nav button svg {
     width: 28px !important;
     height: 28px !important;
+  }
+
+  .rs-bottom-nav button,
+  .rs-mobile-tabbar a,
+  .rs-mobile-tabbar .rs-mobile-menu-button {
+    display: grid !important;
+    grid-template-rows: 36px 16px !important;
+    gap: 5px !important;
+    place-items: center !important;
+    min-width: 0 !important;
+    min-height: 62px !important;
+    padding: 5px 2px 4px !important;
+    border: 0 !important;
+    border-radius: 18px !important;
+    background: transparent !important;
+    color: #667085 !important;
+    font: inherit !important;
+    line-height: 1 !important;
+    text-align: center !important;
+    text-decoration: none !important;
+  }
+
+  .rs-bottom-nav button > svg,
+  .rs-mobile-tabbar a > span,
+  .rs-mobile-tabbar .rs-mobile-menu-button > span {
+    display: grid !important;
+    width: 36px !important;
+    height: 36px !important;
+    place-items: center !important;
+    margin: 0 !important;
+    border-radius: 14px !important;
+    background: #f3f5f8 !important;
+    color: #101828 !important;
+  }
+
+  .rs-bottom-nav button span,
+  .rs-mobile-tabbar b,
+  .rs-mobile-tabbar .rs-mobile-menu-button b {
+    display: block !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    overflow: hidden !important;
+    color: inherit !important;
+    font-size: .74rem !important;
+    font-weight: 760 !important;
+    line-height: 16px !important;
+    text-overflow: ellipsis !important;
+    white-space: nowrap !important;
+  }
+
+  .rs-bottom-nav button.is-live,
+  .rs-mobile-tabbar a.is-live {
+    background: #ed1c24 !important;
+    color: #fff !important;
+  }
+
+  .rs-bottom-nav button.is-live > svg,
+  .rs-mobile-tabbar a.is-live > span {
+    background: rgb(255 255 255 / 18%) !important;
+    color: #fff !important;
   }
 }
 
@@ -10723,8 +11584,28 @@ body.rifnote-search-plugin-page .rs-match-modal-close,
 }
 
 @media (max-width: 720px) {
+  .rs-home-takeover-mobile-logo {
+    position: relative;
+    z-index: 3;
+    display: grid;
+    width: var(--rs-home-takeover-logo-size, 40px);
+    height: var(--rs-home-takeover-logo-size, 40px);
+    place-items: center;
+    overflow: hidden;
+    border-radius: 14px;
+    text-decoration: none;
+  }
+
+  .rs-home-takeover-mobile-logo img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+
   .rs-google-home.has-home-media {
-    padding-top: 42px !important;
+    padding-top: 18px !important;
+    gap: 16px;
   }
 
   .rs-home-search-media.is-primary {
@@ -15013,7 +15894,7 @@ body.rifnote-search-plugin-page .rs-plugin-header:not(.is-search-home) .rs-insta
 
 body.rifnote-search-plugin-page .rs-google-quicklinks button {
   display: inline-flex;
-  gap: 7px;
+  gap: 0;
   align-items: center;
   justify-content: center;
 }
@@ -15040,7 +15921,7 @@ body.rifnote-search-plugin-page .rs-google-quicklinks {
 body.rifnote-search-plugin-page .rs-google-quicklinks button {
   position: relative !important;
   display: inline-flex !important;
-  gap: 8px !important;
+  gap: 0 !important;
   align-items: center !important;
   border: 0 !important;
   border-radius: 0 !important;
@@ -15072,8 +15953,110 @@ body.rifnote-search-plugin-page .rs-google-quicklinks button.active::after {
 }
 
 body.rifnote-search-plugin-page .rs-google-quicklinks button svg {
-  width: 16px !important;
-  height: 16px !important;
+  display: none !important;
+}
+
+.rs-home-categories-tab {
+  display: inline-flex;
+}
+
+.rs-home-category-browser {
+  display: grid;
+  gap: 22px;
+  padding: clamp(18px, 2.4vw, 26px);
+}
+
+.rs-home-category-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: center;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--rs-border);
+}
+
+.rs-home-category-head h2 {
+  margin: 0;
+  color: var(--rs-brand-strong);
+  font-size: clamp(1.35rem, 2vw, 1.85rem);
+  font-weight: 850;
+  letter-spacing: -.025em;
+}
+
+.rs-home-category-head p {
+  margin: 4px 0 0;
+  color: var(--rs-text-muted);
+  font-size: .96rem;
+  font-weight: 520;
+}
+
+.rs-home-category-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: min(320px, 100%);
+  padding: 11px 13px;
+  border: 1px solid var(--rs-border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--rs-text-muted);
+}
+
+.rs-home-category-search input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--rs-text);
+  font: inherit;
+  font-weight: 560;
+}
+
+.rs-home-category-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.rs-home-category-pills a {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border: 1px solid var(--rs-border);
+  border-radius: 999px;
+  background: #fff;
+  color: var(--rs-text);
+  font-weight: 760;
+  text-decoration: none;
+  transition: color 160ms ease, border-color 160ms ease, transform 160ms ease;
+}
+
+.rs-home-category-pills a:hover,
+.rs-home-category-pills a:focus {
+  border-color: #ed1c24;
+  color: #ed1c24;
+  transform: translateY(-1px);
+}
+
+.rs-home-category-pills small {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background: #f2f4f7;
+  color: var(--rs-text-muted);
+  font-size: .75rem;
+  font-weight: 800;
+}
+
+.rs-home-category-pills p {
+  margin: 0;
+  color: var(--rs-text-muted);
+  font-weight: 650;
 }
 
 .rs-media-search-snippets {
@@ -15874,6 +16857,332 @@ body.rifnote-search-plugin-page .rs-smart-embed .tiktok-embed {
   min-width: 0 !important;
 }
 
+html.rs-menu-is-open,
+html.rs-menu-is-open body {
+  overflow: hidden !important;
+}
+
+body.rifnote-search-plugin-page .rs-plugin-menu-trigger {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  gap: 3px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--rs-text);
+  box-shadow: none;
+  cursor: pointer;
+}
+
+body.rifnote-search-plugin-page .rs-plugin-menu-trigger span {
+  display: block;
+  width: 20px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+body.rifnote-search-plugin-page .rs-menu-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100500;
+  background: rgb(2 6 23 / 56%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 180ms ease;
+}
+
+body.rifnote-search-plugin-page .rs-menu-overlay.is-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+body.rifnote-search-plugin-page .rs-menu-drawer {
+  position: fixed;
+  top: var(--wp-admin--admin-bar--height, 0);
+  right: 0;
+  bottom: 0;
+  z-index: 100510;
+  display: flex;
+  width: min(438px, 94vw);
+  max-width: 94vw;
+  flex-direction: column;
+  border-left: 1px solid #e5e7eb;
+  background: #fff;
+  color: #0f172a;
+  box-shadow: -34px 0 80px rgb(2 6 23 / 40%);
+  transform: translateX(105%);
+  transition: transform 220ms cubic-bezier(.2, .8, .2, 1);
+}
+
+body.rifnote-search-plugin-page .rs-menu-drawer.is-open {
+  transform: translateX(0);
+}
+
+body.rifnote-search-plugin-page .rs-menu-drawer a,
+body.rifnote-search-plugin-page .rs-menu-drawer button {
+  color: inherit;
+  font-family: inherit;
+}
+
+body.rifnote-search-plugin-page .rs-menu-drawer-head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 48px;
+  align-items: center;
+  gap: 12px;
+  min-height: 22px;
+  padding: 12px 18px 2px;
+}
+
+body.rifnote-search-plugin-page .rs-menu-head-spacer {
+  min-width: 0;
+}
+
+body.rifnote-search-plugin-page .rs-menu-close,
+body.rifnote-search-plugin-page .rs-menu-back {
+  display: inline-grid;
+  width: 46px;
+  height: 46px;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #0f172a;
+  cursor: pointer;
+}
+
+body.rifnote-search-plugin-page .rs-menu-close {
+  position: absolute;
+  top: 18px;
+  left: -62px;
+  visibility: hidden;
+  opacity: 0;
+  background: #fff;
+  box-shadow: 0 18px 46px rgb(15 23 42 / 16%);
+  pointer-events: none;
+  transition: opacity 160ms ease, visibility 160ms ease, transform 160ms ease;
+  transform: scale(0.92);
+}
+
+body.rifnote-search-plugin-page .rs-menu-drawer.is-open .rs-menu-close {
+  visibility: visible;
+  opacity: 1;
+  pointer-events: auto;
+  transform: scale(1);
+}
+
+body.rifnote-search-plugin-page .rs-menu-back {
+  display: inline-flex;
+  width: auto;
+  min-width: 94px;
+  gap: 5px;
+  justify-content: flex-start;
+  padding: 0 6px;
+  font-size: 1rem;
+  font-weight: 780;
+}
+
+body.rifnote-search-plugin-page .rs-menu-back[hidden] {
+  display: none !important;
+}
+
+body.rifnote-search-plugin-page .rs-menu-close:hover,
+body.rifnote-search-plugin-page .rs-menu-close:focus-visible,
+body.rifnote-search-plugin-page .rs-menu-back:hover,
+body.rifnote-search-plugin-page .rs-menu-back:focus-visible {
+  background: #f1f5f9;
+  outline: 0;
+}
+
+body.rifnote-search-plugin-page .rs-menu-close svg,
+body.rifnote-search-plugin-page .rs-menu-back svg {
+  width: 24px;
+  height: 24px;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+body.rifnote-search-plugin-page .rs-menu-scroll {
+  min-height: 0;
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 14px 26px;
+  -webkit-overflow-scrolling: touch;
+}
+
+body.rifnote-search-plugin-page .rs-menu-view {
+  display: none;
+}
+
+body.rifnote-search-plugin-page .rs-menu-view.is-active {
+  display: block;
+  animation: rsMenuViewIn 180ms ease both;
+}
+
+@keyframes rsMenuViewIn {
+  from {
+    opacity: 0;
+    transform: translateX(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+body.rifnote-search-plugin-page .rs-menu-section {
+  padding: 12px 0 20px;
+}
+
+body.rifnote-search-plugin-page .rs-menu-section h2 {
+  display: none;
+  position: relative;
+  margin: 0 0 16px;
+  color: #0f172a;
+  font-size: clamp(1.65rem, 4vw, 2.25rem);
+  font-weight: 900;
+  letter-spacing: -0.035em;
+}
+
+body.rifnote-search-plugin-page .rs-menu-view:not([data-rs-menu-view="home"]) .rs-menu-section h2 {
+  display: block;
+}
+
+body.rifnote-search-plugin-page .rs-menu-section h2::after {
+  display: block;
+  width: 96px;
+  height: 4px;
+  margin-top: 10px;
+  border-radius: 999px;
+  background: #ed1c24;
+  content: "";
+}
+
+body.rifnote-search-plugin-page .rs-menu-kicker {
+  margin: 0 0 8px;
+  color: #667085;
+  font-size: 0.82rem;
+  font-weight: 850;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+body.rifnote-search-plugin-page .rs-menu-category-list {
+  display: grid;
+  gap: 4px;
+}
+
+body.rifnote-search-plugin-page .rs-menu-row {
+  display: grid;
+  width: 100%;
+  min-height: 62px;
+  grid-template-columns: 44px minmax(0, 1fr) 28px;
+  align-items: center;
+  gap: 15px;
+  padding: 8px 10px;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #0f172a;
+  text-align: left;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+body.rifnote-search-plugin-page .rs-menu-row:hover,
+body.rifnote-search-plugin-page .rs-menu-row:focus-visible {
+  background: #f8fafc;
+  color: #0f172a;
+  outline: 0;
+  transform: translateX(-2px);
+}
+
+body.rifnote-search-plugin-page .rs-menu-row-icon {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  color: #ed1c24;
+}
+
+body.rifnote-search-plugin-page .rs-menu-row-icon svg {
+  width: 29px;
+  height: 29px;
+  stroke: currentColor;
+  stroke-width: 2.15;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+body.rifnote-search-plugin-page .rs-menu-row b {
+  overflow: hidden;
+  color: inherit;
+  font-size: 1.28rem;
+  font-weight: 790;
+  letter-spacing: -0.02em;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+body.rifnote-search-plugin-page .rs-menu-row i {
+  color: #0f172a;
+  font-size: 2rem;
+  font-style: normal;
+  line-height: 1;
+  text-align: center;
+}
+
+body.rifnote-search-plugin-page .rs-mobile-menu-button {
+  display: grid;
+  min-width: 0;
+  place-items: center;
+  gap: 6px;
+  padding: 8px 4px;
+  border: 0;
+  border-radius: 24px;
+  background: transparent;
+  color: #667085;
+  font-family: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+body.rifnote-search-plugin-page .rs-mobile-menu-button > span {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 18px;
+  background: #f8fafc;
+  color: var(--rs-text);
+}
+
+body.rifnote-search-plugin-page .rs-mobile-menu-button svg {
+  width: 24px;
+  height: 24px;
+  stroke: currentColor;
+  stroke-width: 2.4;
+  stroke-linecap: round;
+}
+
+body.rifnote-search-plugin-page .rs-mobile-menu-button b {
+  font-size: 0.85rem;
+  font-weight: 840;
+}
+
+body.rifnote-search-plugin-page .rs-mobile-menu-button:hover,
+body.rifnote-search-plugin-page .rs-mobile-menu-button:focus-visible {
+  color: #ed1c24;
+  outline: 0;
+}
+
 @media (max-width: 720px) {
   body.rifnote-search-plugin-page .rs-plugin-search,
   body.rifnote-search-plugin-page .rs-search-input {
@@ -15887,5 +17196,52 @@ body.rifnote-search-plugin-page .rs-smart-embed .tiktok-embed {
     width: 48px !important;
     min-width: 48px !important;
     height: 48px !important;
+  }
+
+  body.rifnote-search-plugin-page .rs-plugin-menu-trigger {
+    width: 42px;
+    height: 42px;
+  }
+
+  body.rifnote-search-plugin-page .rs-plugin-menu-trigger span {
+    width: 22px;
+  }
+
+  body.rifnote-search-plugin-page .rs-menu-drawer {
+    top: 0;
+    width: min(380px, 86vw);
+    max-width: 86vw;
+  }
+
+  body.rifnote-search-plugin-page .rs-menu-close {
+    left: -50px;
+    width: 44px;
+    height: 44px;
+  }
+
+  body.admin-bar.rifnote-search-plugin-page .rs-menu-drawer {
+    top: var(--wp-admin--admin-bar--height, 46px);
+  }
+
+  body.rifnote-search-plugin-page .rs-menu-drawer-head {
+    padding: 16px 14px 8px;
+  }
+
+  body.rifnote-search-plugin-page .rs-menu-scroll {
+    padding: 2px 10px calc(110px + env(safe-area-inset-bottom));
+  }
+
+  body.rifnote-search-plugin-page .rs-menu-section h2 {
+    font-size: 2rem;
+  }
+
+  body.rifnote-search-plugin-page .rs-menu-row {
+    min-height: 60px;
+    grid-template-columns: 42px minmax(0, 1fr) 24px;
+    gap: 13px;
+  }
+
+  body.rifnote-search-plugin-page .rs-menu-row b {
+    font-size: 1.18rem;
   }
 }

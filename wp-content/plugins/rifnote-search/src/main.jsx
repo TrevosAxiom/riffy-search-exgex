@@ -106,6 +106,19 @@ function normalizeHomePills(rawPills) {
   return Array.from(keyed.values()).slice(0, 10);
 }
 
+function runtimeSiteCategories() {
+  const categories = Array.isArray(window.RIFNOTE_SEARCH?.siteCategories) ? window.RIFNOTE_SEARCH.siteCategories : [];
+  return categories
+    .map((category) => ({
+      id: category?.id || category?.term_id || category?.slug || category?.name,
+      name: decodeText(category?.name || ''),
+      slug: category?.slug || slugify(category?.name || ''),
+      count: Number(category?.count || 0),
+      url: category?.url || `${window.RIFNOTE_SEARCH?.homeUrl || '/'}category/${category?.slug || slugify(category?.name || '')}/`,
+    }))
+    .filter((category) => category.name);
+}
+
 function runtimeHomePills() {
   if (!Array.isArray(window.RIFNOTE_SEARCH?.homePills)) {
     return defaultHomePills;
@@ -403,8 +416,11 @@ function App({ mode }) {
   const [homeNotes, setHomeNotes] = useState(null);
   const [homeNotesArchiveUrl, setHomeNotesArchiveUrl] = useState('');
   const homepagePills = useMemo(() => runtimeHomePills(), []);
+  const siteCategories = useMemo(() => runtimeSiteCategories(), []);
   const [homePill, setHomePill] = useState(homepagePills[0]?.category || 'Notes');
+  const [homeUtilityTab, setHomeUtilityTab] = useState('');
   const isHome = !state.query.trim() && state.category === 'All News' && state.dateRange === 'all' && state.sort === 'relevance';
+  const showHomeCategories = isHome && homeUtilityTab === 'categories';
   const homeStories = useMemo(() => results, [results]);
   const activeHomePill = useMemo(() => homepagePills.find((pill) => pill.category === homePill) || homepagePills[0] || defaultHomePills[0], [homePill, homepagePills]);
   const topStories = useMemo(() => homeStories.filter((story) => !homeLeadStory?.id || story.id !== homeLeadStory.id).slice(0, 10), [homeLeadStory?.id, homeStories]);
@@ -448,8 +464,19 @@ function App({ mode }) {
 
   function updateHomePill(pill) {
     const nextPill = pill || homepagePills[0] || defaultHomePills[0];
+    setHomeUtilityTab('');
     setHomePill(nextPill.category);
     trackAnalyticsEvent({ event_type: 'homepage_pill_used', category: nextPill.category, metadata: { label: nextPill.label } });
+  }
+
+  function toggleHomeCategories() {
+    setHomeUtilityTab((current) => {
+      const next = current === 'categories' ? '' : 'categories';
+      if (next) {
+        trackAnalyticsEvent({ event_type: 'homepage_pill_used', category: 'Categories', metadata: { label: 'Categories' } });
+      }
+      return next;
+    });
   }
 
   useEffect(() => {
@@ -601,7 +628,9 @@ function App({ mode }) {
     return <SitewideLiveLayout state={state} liveState={railState} className={className}>{content}</SitewideLiveLayout>;
   }
 
-  const hasHomeSearchMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl);
+  const featuredFootballMatches = Array.isArray(window.RIFNOTE_SEARCH?.featuredFootballMatches) ? window.RIFNOTE_SEARCH.featuredFootballMatches : [];
+  const activeFeaturedFootballMatches = featuredFootballMatches.filter((fixture) => fixture && !isFootballFixtureFinished(fixture));
+  const hasHomeSearchMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl || window.RIFNOTE_SEARCH?.electionTakeover?.enabled || activeFeaturedFootballMatches.length);
 
   if (mode === 'search-bar') {
     return <SearchPanel state={state} onSubmit={submitSearch} compact />;
@@ -723,8 +752,9 @@ function App({ mode }) {
     <main className="rs-shell rs-search-page">
       {isHome ? (
         <section className={`rs-google-home ${hasHomeSearchMedia ? 'has-home-media' : ''}`}>
+          {hasHomeSearchMedia ? <MobileHomeTakeoverLogo /> : null}
           {hasHomeSearchMedia ? (
-            <HomeSearchMedia primary />
+            <HomeSearchMedia primary featuredFootballMatches={activeFeaturedFootballMatches} />
           ) : (
             <div className="rs-orbit-logo" aria-label="Rifnote Search">
               <h1 className="rs-google-logo">
@@ -744,7 +774,7 @@ function App({ mode }) {
             </div>
           )}
           <SearchPanel state={state} onSubmit={submitSearch} compact="home" />
-          <HomeQuickLinks activePill={homePill} items={homepagePills} onSelect={updateHomePill} />
+          <HomeQuickLinks activePill={homePill} items={homepagePills} onSelect={updateHomePill} showCategories={Boolean(siteCategories.length)} categoriesActive={showHomeCategories} onCategoriesToggle={toggleHomeCategories} />
         </section>
       ) : null}
 
@@ -752,7 +782,11 @@ function App({ mode }) {
         <div className="rs-main">
           {isHome ? (
             <>
-              <HomeHighlights activePill={activeHomePill.label} activeCategory={activeHomePill.category} archiveUrl={homeNotesArchiveUrl} leadStory={homeLeadStory} notes={homeNotes} loading={homeNotes === null} />
+              {showHomeCategories ? (
+                <HomeCategoryBrowser categories={siteCategories} />
+              ) : (
+                <HomeHighlights activePill={activeHomePill.label} activeCategory={activeHomePill.category} archiveUrl={homeNotesArchiveUrl} leadStory={homeLeadStory} notes={homeNotes} loading={homeNotes === null} />
+              )}
             </>
           ) : (
             <>
@@ -2094,20 +2128,8 @@ function StoryClusterPage() {
   const summary = decodeText(payload.summary || leadStory.excerpt || '');
   const heroImage = decodeText(payload.image_url || leadStory.image || leadStory.image_url || '');
   const sourceNames = Array.isArray(payload.sources) ? payload.sources : Object.values(payload.sources ?? {});
-  const sourceStories = stories.reduce((map, story) => {
-    const key = story.source_name || story.source_domain || '';
-    if (key && !map.has(key)) {
-      map.set(key, story);
-    }
-    return map;
-  }, new Map());
-  const relatedSearches = payload.related_searches ?? [];
   const sourceCount = Number(payload.source_count ?? sourceNames.length ?? stories.length);
   const leadUrl = leadStory.read_full_story_url || leadStory.original_url || leadStory.source_url;
-  const latestUpdate = payload.timeline_summary?.latest_update;
-  const brief = latestUpdate?.label
-    ? `Latest update from ${decodeText(latestUpdate.source_name)}: ${decodeText(latestUpdate.label)}`
-    : summary;
 
   return (
     <main className="rs-shell compact-page rs-story-aggregation-page">
@@ -2132,29 +2154,6 @@ function StoryClusterPage() {
               </div>
             </div>
           </article>
-
-          <section className="rs-story-topic-grid">
-            <Card className="rs-story-brief-card">
-              <CardHeader title="What’s going on" action={<Badge>Context</Badge>} />
-              <p>{brief}</p>
-              {relatedSearches.length ? (
-                <div className="rs-story-topic-chips">
-                  {relatedSearches.slice(0, 8).map((topic) => <a href={searchUrl(topic)} key={topic}>{decodeText(topic)}</a>)}
-                </div>
-              ) : null}
-            </Card>
-            <Card className="rs-story-source-card">
-              <CardHeader title="Who’s covering it" action={<Badge>{sourceCount || stories.length || 1} sources</Badge>} />
-              <div className="rs-story-source-list">
-                {(sourceNames.length ? sourceNames : stories.map((story) => story.source_name || story.source_domain).filter(Boolean)).slice(0, 10).map((source) => <span key={source}>{sourceStories.has(source) ? <SourceLogo story={sourceStories.get(source)} size="small" /> : <SourceLogo story={{ source_name: source }} size="small" />}{decodeText(source)}</span>)}
-              </div>
-            </Card>
-          </section>
-
-          <Card>
-            <CardHeader title="Timeline" action={<Badge>{payload.timeline?.length ?? 0} updates</Badge>} />
-            <div className="rs-timeline">{(payload.timeline ?? []).map((item) => <a key={`${item.time}-${item.label}`} href={item.url} target="_blank" rel="noreferrer"><small>{formatDate(item.time)}</small><strong>{decodeText(item.label)}</strong><SourceMention story={{ source_name: item.source_name, source_domain: item.source_domain || '', source_logo_url: item.source_logo_url || '', source_initials: item.source_initials || '' }} /></a>)}</div>
-          </Card>
           <Card>
             <CardHeader title="More on this story" action={<Badge>{stories.length} items</Badge>} />
             <ResultList results={stories} query={headline} state={sidebarState} />
@@ -4663,10 +4662,72 @@ function TransferNewsPage() {
   );
 }
 
-function HomeSearchMedia({ primary = false }) {
+function MobileHomeTakeoverLogo() {
+  const logoUrl = window.RIFNOTE_SEARCH?.siteLogoUrl || window.RIFNOTE_SEARCH?.siteIconUrl || '';
+  const logoSize = Math.max(28, Math.min(84, Number(window.RIFNOTE_SEARCH?.homeTakeoverLogoSizeMobile || 40)));
+
+  if (!logoUrl) {
+    return null;
+  }
+
+  return (
+    <a
+      className="rs-home-takeover-mobile-logo"
+      href={window.RIFNOTE_SEARCH?.homeUrl || '/'}
+      style={{ '--rs-home-takeover-logo-size': `${logoSize}px` }}
+      aria-label="Rifnote home"
+    >
+      <img src={logoUrl} alt="Rifnote" loading="eager" />
+    </a>
+  );
+}
+
+function HomeSearchMedia({ primary = false, featuredFootballMatches = [] }) {
+  const [takeover, setTakeover] = useState(window.RIFNOTE_SEARCH?.electionTakeover || null);
   const mediaUrl = window.RIFNOTE_SEARCH?.homeSearchMediaUrl || '';
   const mediaType = window.RIFNOTE_SEARCH?.homeSearchMediaType || 'image';
   const linkUrl = window.RIFNOTE_SEARCH?.homeSearchMediaLinkUrl || '';
+  const footballFixtures = Array.isArray(featuredFootballMatches)
+    ? featuredFootballMatches.filter((fixture) => fixture && !isFootballFixtureFinished(fixture))
+    : [];
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer = null;
+
+    async function loadElectionTakeover() {
+      try {
+        const restUrl = window.RIFNOTE_SEARCH?.restUrl || '/wp-json/';
+        const endpoint = `${restUrl.replace(/\/$/, '')}/rifnote/v1/election/takeover`;
+        const response = await fetch(endpoint);
+        if (!response.ok) {
+          return;
+        }
+        const payload = await response.json();
+        if (!cancelled) {
+          setTakeover(payload);
+        }
+      } catch (_) {}
+    }
+
+    loadElectionTakeover();
+    timer = window.setInterval(loadElectionTakeover, 30000);
+
+    return () => {
+      cancelled = true;
+      if (timer) {
+        window.clearInterval(timer);
+      }
+    };
+  }, []);
+
+  if (takeover?.enabled) {
+    return <ElectionTakeover takeover={takeover} primary={primary} />;
+  }
+
+  if (footballFixtures.length) {
+    return <HomeFeaturedFootballScoreboards fixtures={footballFixtures} primary={primary} />;
+  }
 
   if (!mediaUrl) {
     return null;
@@ -4693,32 +4754,376 @@ function HomeSearchMedia({ primary = false }) {
   );
 }
 
-function HomeQuickLinks({ activePill = 'Notes', items = defaultHomePills, onSelect }) {
+function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
+  const cleanFixtures = Array.isArray(fixtures) ? fixtures.filter((fixture) => fixture && !isFootballFixtureFinished(fixture)) : [];
+  const [active, setActive] = useState(0);
+  const [scoreMemory, setScoreMemory] = useState({});
+  const [goalFlash, setGoalFlash] = useState(null);
+  const scoreSignature = cleanFixtures.map((fixture) => {
+    const id = fixture.fixture_id || fixture.id || fixture.fixture?.id || `${fixture.home?.name || 'home'}-${fixture.away?.name || 'away'}-${fixture.date || ''}`;
+    return `${id}:${fixture.goals?.home ?? 0}-${fixture.goals?.away ?? 0}`;
+  }).join('|');
+
+  useEffect(() => {
+    if (cleanFixtures.length < 2) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(() => {
+      setActive((current) => (current + 1) % cleanFixtures.length);
+    }, 9000);
+
+    return () => window.clearInterval(timer);
+  }, [cleanFixtures.length]);
+
+  useEffect(() => {
+    if (!cleanFixtures.length) {
+      return;
+    }
+
+    setScoreMemory((current) => {
+      const next = { ...current };
+      let flash = null;
+
+      cleanFixtures.forEach((fixture) => {
+        const id = fixture.fixture_id || fixture.id || fixture.fixture?.id || `${fixture.home?.name || 'home'}-${fixture.away?.name || 'away'}-${fixture.date || ''}`;
+        const homeScore = Number(fixture.goals?.home ?? 0);
+        const awayScore = Number(fixture.goals?.away ?? 0);
+        const previous = current[id];
+
+        if (previous && (homeScore > previous.home || awayScore > previous.away)) {
+          const isHomeGoal = homeScore > previous.home;
+          const team = isHomeGoal ? fixture.home : fixture.away;
+          flash = {
+            id,
+            team: team?.name || (isHomeGoal ? 'Home team' : 'Away team'),
+            scorer: extractGoalScorer(fixture, isHomeGoal),
+            score: `${fixture.goals?.home ?? '-'} - ${fixture.goals?.away ?? '-'}`,
+          };
+        }
+
+        next[id] = { home: homeScore, away: awayScore };
+      });
+
+      if (flash) {
+        setGoalFlash(flash);
+      }
+
+      return next;
+    });
+  }, [scoreSignature]);
+
+  useEffect(() => {
+    if (!goalFlash) {
+      return undefined;
+    }
+
+    const timer = window.setTimeout(() => setGoalFlash(null), 4200);
+    return () => window.clearTimeout(timer);
+  }, [goalFlash]);
+
+  if (!cleanFixtures.length) {
+    return null;
+  }
+
+  const fixture = cleanFixtures[Math.min(active, cleanFixtures.length - 1)] || cleanFixtures[0];
+  const status = fixture.status_short || '';
+  const isLive = !['FT', 'AET', 'PEN', 'NS', 'PST', 'CANC'].includes(status);
+  const scoreHome = fixture.goals?.home ?? '-';
+  const scoreAway = fixture.goals?.away ?? '-';
+  const isUpcoming = ['NS', 'TBD'].includes(status);
+  const clock = fixture.elapsed
+    ? `${fixture.elapsed}${fixture.extra ? `+${fixture.extra}` : ''}'`
+    : status === 'NS'
+      ? (formatCountdown(fixture.date) || formatTime(fixture.date))
+      : (status || formatTime(fixture.date) || 'TBD');
+  const footballUrl = window.RIFNOTE_SEARCH?.featuredFootballUrl || `${window.RIFNOTE_SEARCH?.homeUrl || '/'}football/`;
+  const leagueName = fixture.league?.name || 'Football';
+  const round = fixture.league?.round || '';
+  const venue = [fixture.venue?.name, fixture.venue?.city].filter(Boolean).join(' · ');
+  const referee = fixture.referee || '';
+  const kickoff = formatFullDateTime(fixture.date);
+  const statusLabel = isLive ? 'Live now' : status === 'FT' ? 'Full-time' : isUpcoming ? 'Featured kickoff' : 'Featured match';
+
+  function move(direction) {
+    setActive((current) => (current + direction + cleanFixtures.length) % cleanFixtures.length);
+  }
+
+  return (
+    <section className={`rs-home-featured-football ${primary ? 'is-primary' : ''} ${isLive ? 'is-live' : ''}`} aria-label="Featured football match">
+      {goalFlash ? (
+        <div className="rs-home-goal-flash" role="status" aria-live="polite">
+          <span>Goal</span>
+          <b>{goalFlash.team}</b>
+          <small>{goalFlash.scorer}</small>
+          <strong>{goalFlash.score}</strong>
+        </div>
+      ) : null}
+      <div className="rs-home-featured-football-top">
+        <span className="rs-home-football-kicker">{statusLabel}</span>
+        <span className="rs-home-football-league">
+          {fixture.league?.logo ? <img src={fixture.league.logo} alt="" loading="lazy" /> : null}
+          <b>{leagueName}</b>
+          {round ? <em>{round}</em> : null}
+        </span>
+      </div>
+      <a className="rs-home-scoreboard" href={footballUrl} aria-label={`Open football page for ${fixture.home?.name || 'home team'} vs ${fixture.away?.name || 'away team'}`}>
+        <HomeScoreboardTeam team={fixture.home} large />
+        <div className="rs-home-scoreboard-score">
+          <b>{scoreHome} - {scoreAway}</b>
+          <small>{clock}</small>
+        </div>
+        <HomeScoreboardTeam team={fixture.away} align="right" large />
+      </a>
+      <div className="rs-home-football-details" aria-label="Featured match details">
+        <span><CalendarDays size={16} /> {kickoff}</span>
+        {venue ? <span><MapIcon size={16} /> {venue}</span> : null}
+        {referee ? <span><Shield size={16} /> Ref: {referee}</span> : null}
+      </div>
+      {cleanFixtures.length > 1 ? (
+        <div className="rs-home-scoreboard-controls" aria-label="Featured match carousel controls">
+          <button type="button" onClick={() => move(-1)} aria-label="Previous featured match"><ArrowLeft size={15} /></button>
+          <span>{active + 1}/{cleanFixtures.length}</span>
+          <button type="button" onClick={() => move(1)} aria-label="Next featured match"><ArrowRight size={15} /></button>
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function isFootballFixtureFinished(fixture) {
+  const status = String(fixture?.status_short || fixture?.fixture?.status?.short || '').toUpperCase();
+  const finishedStatuses = ['FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD', 'AWD', 'WO'];
+
+  if (finishedStatuses.includes(status)) {
+    return true;
+  }
+
+  const elapsed = Number(fixture?.elapsed ?? fixture?.fixture?.status?.elapsed ?? 0);
+  const goalsHome = fixture?.goals?.home;
+  const goalsAway = fixture?.goals?.away;
+
+  return elapsed >= 120 && goalsHome !== null && goalsHome !== undefined && goalsAway !== null && goalsAway !== undefined;
+}
+
+function extractGoalScorer(fixture, isHomeGoal) {
+  const candidates = [
+    ...(Array.isArray(fixture.events) ? fixture.events : []),
+    ...(Array.isArray(fixture.timeline) ? fixture.timeline : []),
+    ...(Array.isArray(fixture.goalscorers) ? fixture.goalscorers : []),
+    ...(Array.isArray(fixture.goal_scorers) ? fixture.goal_scorers : []),
+  ];
+  const teamId = isHomeGoal ? (fixture.home?.id || fixture.teams?.home?.id) : (fixture.away?.id || fixture.teams?.away?.id);
+  const teamName = isHomeGoal ? (fixture.home?.name || fixture.teams?.home?.name) : (fixture.away?.name || fixture.teams?.away?.name);
+  const goalEvents = candidates
+    .filter((event) => {
+      const eventType = `${event.type || event.detail || event.event_type || event.kind || ''}`.toLowerCase();
+      const isGoal = eventType.includes('goal') || eventType.includes('penalty');
+      const eventTeamId = event.team?.id || event.team_id;
+      const eventTeamName = event.team?.name || event.team_name;
+      return isGoal && (!teamId || !eventTeamId || Number(eventTeamId) === Number(teamId)) && (!teamName || !eventTeamName || eventTeamName === teamName);
+    })
+    .sort((a, b) => Number(b.elapsed || b.time?.elapsed || b.minute || 0) - Number(a.elapsed || a.time?.elapsed || a.minute || 0));
+  const latest = goalEvents[0] || fixture.last_goal || fixture.latest_goal || null;
+  const scorer = latest?.player?.name || latest?.player_name || latest?.scorer || latest?.name || '';
+  const minute = latest?.elapsed || latest?.time?.elapsed || latest?.minute || '';
+
+  if (scorer && minute) {
+    return `${scorer} · ${minute}'`;
+  }
+
+  return scorer || 'Goal update';
+}
+
+function HomeScoreboardTeam({ team = {}, align = 'left', large = false }) {
+  return (
+    <span className={`rs-home-scoreboard-team ${align === 'right' ? 'is-right' : ''} ${large ? 'is-large' : ''}`}>
+      {team.logo ? <img src={team.logo} alt="" loading="lazy" /> : <i>{shortTeamName(team.name || 'Team').slice(0, 2).toUpperCase()}</i>}
+      <b>{shortTeamName(team.name || 'Team')}</b>
+    </span>
+  );
+}
+
+function ElectionTakeover({ takeover, primary = false }) {
+  const [secondsLeft, setSecondsLeft] = useState(Math.max(0, Number(takeover?.countdown_seconds || 0)));
+  const isLive = takeover?.phase === 'live';
+  const parties = Array.isArray(takeover?.parties) ? takeover.parties : [];
+  const scope = takeover?.scope === 'national' ? 'national' : 'state';
+  const lgaResults = Array.isArray(takeover?.lga_results) ? takeover.lga_results : [];
+  const stateResults = Array.isArray(takeover?.state_results) ? takeover.state_results : [];
+  const pulseResults = scope === 'national' ? stateResults : lgaResults;
+  const coverageFallback = scope === 'national' ? 'Nigeria election' : 'Osun election';
+  const coverageUrl = takeover?.coverage_url || searchUrl(coverageFallback);
+  const mediaUrl = takeover?.media_url || '';
+  const mediaType = takeover?.media_type || 'image';
+  const electionState = scope === 'national' ? 'Nigeria' : decodeText(takeover?.state || 'Osun');
+
+  useEffect(() => {
+    setSecondsLeft(Math.max(0, Number(takeover?.countdown_seconds || 0)));
+  }, [takeover?.countdown_seconds]);
+
+  useEffect(() => {
+    if (isLive || secondsLeft <= 0) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(() => {
+      setSecondsLeft((value) => Math.max(0, value - 1));
+    }, 1000);
+
+    return () => window.clearInterval(timer);
+  }, [isLive, secondsLeft]);
+
+  const countdown = countdownParts(secondsLeft);
+  const reportingText = scope === 'national'
+    ? (takeover?.states_total ? `${Number(takeover.states_reporting || 0).toLocaleString()} of ${Number(takeover.states_total || 0).toLocaleString()} states` : 'National results desk')
+    : (takeover?.lgas_total ? `${Number(takeover.lgas_reporting || 0).toLocaleString()} of ${Number(takeover.lgas_total || 0).toLocaleString()} LGAs` : 'Results desk');
+  const unitsText = takeover?.units_total
+    ? `${Number(takeover.units_reporting || 0).toLocaleString()} of ${Number(takeover.units_total || 0).toLocaleString()} polling units`
+    : '';
+
+  return (
+    <section className={`rs-election-takeover ${primary ? 'is-primary' : ''} ${isLive ? 'is-live' : 'is-countdown'}`}>
+      <div className="rs-election-copy">
+        <span className="rs-election-eyebrow">{decodeText(takeover?.eyebrow || 'Osun Decides')}</span>
+        <h1>{decodeText(takeover?.title || 'Osun Decides')}</h1>
+        {takeover?.subtitle ? <p>{decodeText(takeover.subtitle)}</p> : null}
+        {!isLive ? (
+          <div className="rs-election-countdown" aria-label="Election countdown">
+            {countdown.map((part) => (
+              <span key={part.label}>
+                <strong>{part.value}</strong>
+                <small>{part.label}</small>
+              </span>
+            ))}
+          </div>
+        ) : (
+          <div className="rs-election-live-meta">
+            <Badge tone="success">Live results</Badge>
+            <span>{reportingText}</span>
+            {unitsText ? <span>{unitsText}</span> : null}
+          </div>
+        )}
+        <a className="rs-election-coverage-link" href={coverageUrl}>
+          {`Aggregate ${electionState} election news`} <ArrowRight size={18} />
+        </a>
+      </div>
+
+      <div className="rs-election-visual">
+        {mediaUrl && !isLive ? (
+          mediaType === 'video' ? <video src={mediaUrl} autoPlay muted loop playsInline preload="metadata" /> : <img src={mediaUrl} alt="" loading="eager" />
+        ) : (
+          <div className="rs-election-results">
+            <div className="rs-election-results-head">
+              <strong>{isLive ? 'Result tracker' : 'Ready for result night'}</strong>
+              <small>{takeover?.last_update_label || (isLive ? 'Updating live' : 'Countdown mode')}</small>
+            </div>
+            <div className="rs-election-party-list">
+              {parties.slice(0, 6).map((party) => (
+                <article className="rs-election-party" key={`${party.name}-${party.candidate}`}>
+                  <div className="rs-election-party-logo" style={{ '--party-color': party.color || '#ed1c24' }}>
+                    {party.logo_url ? <img src={party.logo_url} alt="" loading="lazy" /> : <span>{String(party.name || 'P').slice(0, 2).toUpperCase()}</span>}
+                  </div>
+                  <div>
+                    <b>{decodeText(party.name)}</b>
+                    {party.candidate ? <small>{decodeText(party.candidate)}</small> : null}
+                    <i><em style={{ width: `${Math.max(4, Number(party.bar_width || 0))}%`, background: party.color || '#ed1c24' }} /></i>
+                  </div>
+                  <strong>{Number(party.votes || 0).toLocaleString()}</strong>
+                </article>
+              ))}
+            </div>
+            {pulseResults.length ? (
+              <div className="rs-election-lga-pulse" aria-label={scope === 'national' ? 'Nigeria state results' : `${electionState} LGA results`}>
+                <div>
+                  <strong>{scope === 'national' ? 'State pulse' : `${electionState} LGA pulse`}</strong>
+                  <small>{`${Number(scope === 'national' ? takeover?.states_reporting || 0 : takeover?.lgas_reporting || 0).toLocaleString()} reporting`}</small>
+                </div>
+                <div className="rs-election-lga-list">
+                  {pulseResults.slice(0, 6).map((row) => (
+                    <span key={row.key || row.lga || row.state}>
+                      <b>{decodeText(scope === 'national' ? row.state : row.lga)}</b>
+                      <em>{row.leader_name ? `${decodeText(row.leader_name)} ${Number(row.leader_votes || 0).toLocaleString()}` : decodeText(row.status || 'Pending')}</em>
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+            <p>{decodeText(takeover?.result_note || 'Awaiting official result updates.')}</p>
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+function countdownParts(totalSeconds) {
+  const seconds = Math.max(0, Number(totalSeconds || 0));
+  const days = Math.floor(seconds / 86400);
+  const hours = Math.floor((seconds % 86400) / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+
+  return [
+    { label: 'days', value: String(days).padStart(2, '0') },
+    { label: 'hrs', value: String(hours).padStart(2, '0') },
+    { label: 'mins', value: String(minutes).padStart(2, '0') },
+    { label: 'secs', value: String(secs).padStart(2, '0') },
+  ];
+}
+
+function HomeQuickLinks({ activePill = 'Notes', items = defaultHomePills, onSelect, showCategories = false, categoriesActive = false, onCategoriesToggle }) {
   return (
     <div className="rs-google-quicklinks" aria-label="Homepage filters">
       {items.map((item) => (
         <button className={activePill === item.category ? 'active' : ''} key={`${item.label}-${item.category}`} type="button" onClick={() => onSelect?.(item)}>
-          {homePillIcon(item)}
           <span>{item.label}</span>
         </button>
       ))}
+      {showCategories ? (
+        <button className={`rs-home-categories-tab ${categoriesActive ? 'active' : ''}`} type="button" onClick={onCategoriesToggle}>
+          <span>Categories</span>
+        </button>
+      ) : null}
     </div>
   );
 }
 
-function homePillIcon(item = {}) {
-  const value = `${item.label || ''} ${item.category || ''}`.toLowerCase();
+function HomeCategoryBrowser({ categories = [] }) {
+  const [query, setQuery] = useState('');
+  const filtered = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) {
+      return categories;
+    }
 
-  if (item.is_notes || value.includes('note')) return <Newspaper size={15} />;
-  if (value.includes('football') || value.includes('sport')) return <Trophy size={15} />;
-  if (value.includes('world') || value.includes('global')) return <Globe2 size={15} />;
-  if (value.includes('nigeria') || value.includes('local')) return <MapIcon size={15} />;
-  if (value.includes('politic') || value.includes('government')) return <Landmark size={15} />;
-  if (value.includes('business') || value.includes('market') || value.includes('finance')) return <DollarSign size={15} />;
-  if (value.includes('tech')) return <Radio size={15} />;
-  if (value.includes('trend') || value.includes('hot')) return <Flame size={15} />;
+    return categories.filter((category) => `${category.name} ${category.slug}`.toLowerCase().includes(needle));
+  }, [categories, query]);
 
-  return <Newspaper size={15} />;
+  return (
+    <Card className="rs-home-category-browser">
+      <div className="rs-home-category-head">
+        <div>
+          <h2>Categories</h2>
+          <p>Jump into any desk on Rifnote.</p>
+        </div>
+        <label className="rs-home-category-search">
+          <Search size={18} />
+          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find a category" />
+        </label>
+      </div>
+      <div className="rs-home-category-pills">
+        {filtered.length ? filtered.map((category) => (
+          <a href={category.url} key={category.id || category.slug}>
+            <span>{category.name}</span>
+            {category.count ? <small>{category.count.toLocaleString()}</small> : null}
+          </a>
+        )) : (
+          <p>No category matched that search.</p>
+        )}
+      </div>
+    </Card>
+  );
 }
 
 function AdminStoryActions({ story, compact = false }) {
@@ -5331,6 +5736,26 @@ function formatTime(value) {
   return new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit' }).format(date);
 }
 
+function formatFullDateTime(value) {
+  if (!value) {
+    return 'Kickoff TBD';
+  }
+
+  const date = new Date(value);
+
+  if (Number.isNaN(date.getTime())) {
+    return 'Kickoff TBD';
+  }
+
+  return new Intl.DateTimeFormat(undefined, {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
 function formatCountdown(value) {
   if (!value) {
     return '';
@@ -5727,12 +6152,12 @@ function BottomNav({ state, onLiveOpen = () => {} }) {
   const homeUrl = window.RIFNOTE_SEARCH?.homeUrl ? window.RIFNOTE_SEARCH.homeUrl.replace(/\/$/, '') : '';
   const goTo = (path) => { window.location.href = homeUrl ? `${homeUrl}${path}` : path; };
   const openMenu = () => {
-    const mobileMenu = document.querySelector('.rs-mobile-menu summary');
-    if (mobileMenu) {
-      mobileMenu.click();
+    const trigger = document.querySelector('[data-rs-menu-open]');
+    if (trigger) {
+      trigger.click();
       return;
     }
-    document.querySelector('.rs-plugin-menu summary')?.click();
+    document.dispatchEvent(new CustomEvent('rifnote:open-menu'));
   };
   const items = [
     ['Home', <Home size={19} />, () => goTo('/search/')],

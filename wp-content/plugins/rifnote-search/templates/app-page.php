@@ -91,21 +91,7 @@ $category_icon_for_slug = static function ($slug) {
             <button type="submit"><span class="rs-search-button-text"><?php esc_html_e('Search', 'rifnote-search'); ?></span><svg class="rs-search-button-icon" aria-hidden="true" viewBox="0 0 24 24" focusable="false"><circle cx="11" cy="11" r="7"></circle><path d="m16 16 4 4"></path></svg></button>
         </form>
         <div class="rs-plugin-actions">
-            <details class="rs-plugin-menu">
-                <summary aria-label="<?php esc_attr_e('Open navigation menu', 'rifnote-search'); ?>">
-                    <span></span><span></span><span></span>
-                </summary>
-                <nav class="rs-plugin-nav" aria-label="<?php esc_attr_e('Rifnote Search navigation', 'rifnote-search'); ?>">
-                    <?php foreach ($nav_groups as $group) : ?>
-                        <section class="rs-plugin-nav-group">
-                            <b><?php echo esc_html($group['label']); ?></b>
-                            <?php foreach ($group['items'] as $item) : ?>
-                                <a href="<?php echo esc_url($item['url']); ?>"><?php echo esc_html($item['label']); ?></a>
-                            <?php endforeach; ?>
-                        </section>
-                    <?php endforeach; ?>
-                </nav>
-            </details>
+            <?php require RIFNOTE_SEARCH_DIR . 'templates/partials/menu-drawer.php'; ?>
             <button class="rs-plugin-install" type="button" hidden><?php esc_html_e('Install App', 'rifnote-search'); ?></button>
             <a class="rs-plugin-login" href="<?php echo esc_url($dashboard_url); ?>" aria-label="<?php esc_attr_e('Open user dashboard', 'rifnote-search'); ?>">
                 <svg aria-hidden="true" viewBox="0 0 24 24" focusable="false">
@@ -138,51 +124,10 @@ $category_icon_for_slug = static function ($slug) {
         <a href="<?php echo esc_url(home_url('/category/notes/')); ?>"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M6 4h12v16H6z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg></span><b><?php esc_html_e('Notes', 'rifnote-search'); ?></b></a>
         <a href="<?php echo esc_url(home_url('/football/')); ?>"><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9"/><path d="m12 7 4 3-1.5 5h-5L8 10zM4 11l4-1M16 10l4 1M9.5 15 8 20M14.5 15l1.5 5"/></svg></span><b><?php esc_html_e('Football', 'rifnote-search'); ?></b></a>
         <a class="is-live" href="#live-updates" data-rs-live-open><span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="4"/><path d="M4.9 4.9a10 10 0 0 0 0 14.2M19.1 4.9a10 10 0 0 1 0 14.2"/></svg></span><b><?php esc_html_e('LIVE', 'rifnote-search'); ?></b></a>
-        <details class="rs-mobile-menu">
-            <summary aria-label="<?php esc_attr_e('Open menu', 'rifnote-search'); ?>">
-                <span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
-                <b><?php esc_html_e('Menu', 'rifnote-search'); ?></b>
-            </summary>
-            <div class="rs-mobile-menu-panel">
-                <div class="rs-mobile-menu-sheet-head">
-                    <div>
-                        <strong><?php esc_html_e('Rifnote', 'rifnote-search'); ?></strong>
-                        <small><?php esc_html_e('News, scores, trends', 'rifnote-search'); ?></small>
-                    </div>
-                    <a class="rs-mobile-menu-account" href="<?php echo esc_url($dashboard_url); ?>" aria-label="<?php esc_attr_e('Open account', 'rifnote-search'); ?>">
-                        <svg viewBox="0 0 24 24" fill="none"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
-                    </a>
-                </div>
-                <div class="rs-mobile-menu-tabs" role="tablist" aria-label="<?php esc_attr_e('Mobile menu sections', 'rifnote-search'); ?>">
-                    <button class="is-active" type="button" role="tab" aria-selected="true" data-rs-mobile-tab="main"><?php esc_html_e('Main Menu', 'rifnote-search'); ?></button>
-                    <button type="button" role="tab" aria-selected="false" data-rs-mobile-tab="categories"><?php esc_html_e('Category list', 'rifnote-search'); ?></button>
-                </div>
-                <div class="rs-mobile-menu-tab-panel is-active" data-rs-mobile-panel="main">
-                    <?php foreach ($nav_groups as $group) : ?>
-                        <section class="rs-mobile-menu-group">
-                            <b><?php echo esc_html($group['label']); ?></b>
-                            <?php foreach ($group['items'] as $item) : ?>
-                                <a href="<?php echo esc_url($item['url']); ?>"><?php echo esc_html($item['label']); ?><span aria-hidden="true">›</span></a>
-                            <?php endforeach; ?>
-                        </section>
-                    <?php endforeach; ?>
-                </div>
-                <div class="rs-mobile-menu-tab-panel" data-rs-mobile-panel="categories">
-                    <div class="rs-mobile-menu-title">
-                        <h2><?php esc_html_e('Rifnote Categories', 'rifnote-search'); ?></h2>
-                    </div>
-                    <div class="rs-mobile-category-list">
-                        <?php foreach ($mobile_categories as $category) : ?>
-                            <a class="rs-mobile-category-link" href="<?php echo esc_url(get_category_link($category)); ?>">
-                                <span class="rs-mobile-category-icon" aria-hidden="true"><?php echo $category_icon_for_slug($category->slug); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
-                                <b><?php echo esc_html($category->name); ?></b>
-                                <span class="rs-mobile-category-arrow" aria-hidden="true">›</span>
-                            </a>
-                        <?php endforeach; ?>
-                    </div>
-                </div>
-            </div>
-        </details>
+        <button class="rs-mobile-menu-button" type="button" data-rs-menu-open aria-label="<?php esc_attr_e('Open menu', 'rifnote-search'); ?>">
+            <span aria-hidden="true"><svg viewBox="0 0 24 24" fill="none"><path d="M4 7h16M4 12h16M4 17h16"/></svg></span>
+            <b><?php esc_html_e('Menu', 'rifnote-search'); ?></b>
+        </button>
     </nav>
     <script>
         document.addEventListener('click', function(event) {

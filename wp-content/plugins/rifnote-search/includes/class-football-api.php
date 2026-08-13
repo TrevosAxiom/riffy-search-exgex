@@ -127,6 +127,7 @@ class Rifnote_Search_Football_API {
             'finished_cache_ttl' => max(60, min(7200, (int) get_option('rifnote_api_football_finished_cache_ttl', 900))),
             'details_cache_ttl' => max(60, min(7200, (int) get_option('rifnote_api_football_details_cache_ttl', 600))),
             'competitions' => self::competitions(),
+            'team_watchlist' => self::team_watchlist(),
         );
     }
 
@@ -209,6 +210,227 @@ class Rifnote_Search_Football_API {
         return array_slice($competitions, 0, 50);
     }
 
+    public static function team_watchlist() {
+        $raw = (string) get_option('rifnote_api_football_team_watchlist', '');
+        $ids = array();
+        $names = array();
+        $labels = array();
+
+        foreach (array_filter(array_map('trim', explode("\n", $raw))) as $line) {
+            $line = preg_replace('/\s+#.*$/', '', $line);
+            $line = trim((string) $line);
+
+            if ('' === $line) {
+                continue;
+            }
+
+            $parts = preg_split('/[:|,]/', $line, 2);
+            $team_id = isset($parts[0]) ? absint($parts[0]) : 0;
+            $team_name = isset($parts[1]) ? sanitize_text_field($parts[1]) : '';
+
+            if (!$team_id) {
+                $team_name = sanitize_text_field($line);
+            }
+
+            if ($team_id) {
+                $ids[$team_id] = true;
+            }
+
+            $name_key = self::normalize_team_name_key($team_name);
+            if ($name_key) {
+                $names[$name_key] = true;
+            }
+
+            if ($team_id || $team_name) {
+                $labels[] = array(
+                    'id' => $team_id,
+                    'name' => $team_name ? $team_name : sprintf(__('Team %d', 'rifnote-search'), $team_id),
+                );
+            }
+        }
+
+        return array(
+            'enabled' => !empty($ids) || !empty($names),
+            'ids' => $ids,
+            'names' => $names,
+            'labels' => array_slice($labels, 0, 250),
+        );
+    }
+
+    public static function stored_teams($limit = 200) {
+        global $wpdb;
+
+        self::maybe_install();
+
+        $limit = max(1, min(500, (int) $limit));
+        $table = self::fixtures_table();
+        $sql = $wpdb->prepare(
+            "SELECT team_id, team_name, SUM(appearances) AS appearances, MAX(last_seen) AS last_seen
+             FROM (
+                SELECT home_team_id AS team_id, home_team_name AS team_name, COUNT(*) AS appearances, MAX(updated_at) AS last_seen
+                FROM {$table}
+                WHERE home_team_id > 0 AND home_team_name <> ''
+                GROUP BY home_team_id, home_team_name
+                UNION ALL
+                SELECT away_team_id AS team_id, away_team_name AS team_name, COUNT(*) AS appearances, MAX(updated_at) AS last_seen
+                FROM {$table}
+                WHERE away_team_id > 0 AND away_team_name <> ''
+                GROUP BY away_team_id, away_team_name
+             ) teams
+             GROUP BY team_id, team_name
+             ORDER BY appearances DESC, team_name ASC
+             LIMIT %d",
+            $limit
+        );
+
+        return $wpdb->get_results($sql, ARRAY_A);
+    }
+
+    public static function stored_teams_by_competition($league_id = 0, $season = 0, $limit = 500) {
+        global $wpdb;
+
+        self::maybe_install();
+
+        $league_id = absint($league_id);
+        $season = absint($season);
+        $limit = max(1, min(1000, (int) $limit));
+        $table = self::fixtures_table();
+        $home_where = array('home_team_id > 0', "home_team_name <> ''");
+        $away_where = array('away_team_id > 0', "away_team_name <> ''");
+        $home_values = array();
+        $away_values = array();
+
+        if ($league_id) {
+            $home_where[] = 'league_id = %d';
+            $away_where[] = 'league_id = %d';
+            $home_values[] = $league_id;
+            $away_values[] = $league_id;
+        }
+
+        if ($season) {
+            $home_where[] = 'league_season = %d';
+            $away_where[] = 'league_season = %d';
+            $home_values[] = $season;
+            $away_values[] = $season;
+        }
+
+        $home_where_sql = implode(' AND ', $home_where);
+        $away_where_sql = implode(' AND ', $away_where);
+        $sql = "SELECT team_id, team_name, league_id, league_name, league_season, SUM(appearances) AS appearances, MAX(last_seen) AS last_seen
+             FROM (
+                SELECT home_team_id AS team_id, home_team_name AS team_name, league_id, league_name, league_season, COUNT(*) AS appearances, MAX(updated_at) AS last_seen
+                FROM {$table}
+                WHERE {$home_where_sql}
+                GROUP BY home_team_id, home_team_name, league_id, league_name, league_season
+                UNION ALL
+                SELECT away_team_id AS team_id, away_team_name AS team_name, league_id, league_name, league_season, COUNT(*) AS appearances, MAX(updated_at) AS last_seen
+                FROM {$table}
+                WHERE {$away_where_sql}
+                GROUP BY away_team_id, away_team_name, league_id, league_name, league_season
+             ) teams
+             GROUP BY team_id, team_name, league_id, league_name, league_season
+             ORDER BY league_name ASC, appearances DESC, team_name ASC
+             LIMIT %d";
+
+        return $wpdb->get_results($wpdb->prepare($sql, array_merge($home_values, $away_values, array($limit))), ARRAY_A);
+    }
+
+    public static function stored_matches_for_date($date = '', $limit = 160, $apply_team_watchlist = true) {
+        global $wpdb;
+
+        self::maybe_install();
+
+        $table = self::fixtures_table();
+        $date = sanitize_text_field($date ? $date : wp_date('Y-m-d'));
+        $where = array('DATE(fixture_date) = %s');
+        $values = array($date);
+        $competitions = self::competitions();
+
+        if ($competitions) {
+            $competition_clauses = array();
+
+            foreach ($competitions as $competition) {
+                $league_id = (int) ($competition['league_id'] ?? 0);
+                $season = (int) ($competition['season'] ?? 0);
+
+                if (!$league_id || !$season) {
+                    continue;
+                }
+
+                $competition_clauses[] = '(league_id = %d AND league_season = %d)';
+                $values[] = $league_id;
+                $values[] = $season;
+            }
+
+            if ($competition_clauses) {
+                $where[] = '(' . implode(' OR ', $competition_clauses) . ')';
+            }
+        }
+
+        $sql = $wpdb->prepare(
+            "SELECT payload FROM {$table} WHERE " . implode(' AND ', $where) . ' ORDER BY fixture_date ASC LIMIT %d',
+            array_merge($values, array(max(1, min(300, (int) $limit))))
+        );
+        $rows = $wpdb->get_col($sql);
+        $fixtures = array_values(array_filter(array_map(array(__CLASS__, 'decode_json'), $rows)));
+
+        return $apply_team_watchlist ? self::filter_fixtures_by_team_watchlist($fixtures, self::team_watchlist()) : $fixtures;
+    }
+
+    public static function homepage_featured_fixture_ids() {
+        $raw = (string) get_option('rifnote_home_featured_football_matches', '');
+        $ids = array();
+
+        foreach (preg_split('/[\s,]+/', $raw) as $item) {
+            $fixture_id = absint($item);
+
+            if ($fixture_id) {
+                $ids[] = $fixture_id;
+            }
+        }
+
+        return array_slice(array_values(array_unique($ids)), 0, 12);
+    }
+
+    public static function featured_homepage_matches($limit = 8) {
+        global $wpdb;
+
+        self::maybe_install();
+
+        $ids = array_slice(self::homepage_featured_fixture_ids(), 0, max(1, min(12, (int) $limit)));
+        if (!$ids) {
+            return array();
+        }
+
+        $table = self::fixtures_table();
+        $sql = $wpdb->prepare(
+            "SELECT fixture_id, payload FROM {$table} WHERE fixture_id IN (" . implode(',', array_fill(0, count($ids), '%d')) . ')',
+            $ids
+        );
+        $rows = $wpdb->get_results($sql, ARRAY_A);
+
+        if (!$rows) {
+            return array();
+        }
+
+        $by_id = array();
+        foreach ($rows as $row) {
+            $fixture = self::decode_json($row['payload'] ?? '');
+            if (is_array($fixture)) {
+                $by_id[(int) ($row['fixture_id'] ?? 0)] = $fixture;
+            }
+        }
+
+        $fixtures = array();
+        foreach ($ids as $fixture_id) {
+            if (!empty($by_id[$fixture_id])) {
+                $fixtures[] = $by_id[$fixture_id];
+            }
+        }
+
+        return $fixtures;
+    }
+
     public static function live_payload($force = false) {
         $settings = self::settings();
         $transient_key = 'rifnote_api_football_live_payload';
@@ -216,7 +438,7 @@ class Rifnote_Search_Football_API {
         if (!$force) {
             $transient = get_transient($transient_key);
             if (is_array($transient)) {
-                return $transient;
+                return self::apply_team_visibility_to_payload($transient, $settings);
             }
 
             $cached = self::cached_payload('live', $settings['live_cache_ttl'], array(
@@ -224,6 +446,7 @@ class Rifnote_Search_Football_API {
                 'live_window' => true,
             ));
             if (is_array($cached)) {
+                $cached = self::apply_team_visibility_to_payload($cached, $settings);
                 set_transient($transient_key, $cached, (int) $settings['live_cache_ttl']);
                 return $cached;
             }
@@ -252,6 +475,7 @@ class Rifnote_Search_Football_API {
         $fixtures = self::filter_live_window(
             self::filter_fixtures_by_competitions(array_map(array(__CLASS__, 'normalize_fixture'), $response['response'] ?? array()), $settings['competitions'])
         );
+        $fixtures = self::filter_fixtures_by_team_watchlist($fixtures, $settings['team_watchlist']);
 
         $payload = array(
             'provider' => 'api-football',
@@ -288,7 +512,7 @@ class Rifnote_Search_Football_API {
                 'allow_stale' => true,
             ));
             if (is_array($cached)) {
-                return $cached;
+                return self::apply_team_visibility_to_payload($cached, $settings);
             }
 
             if (!empty($settings['api_key'])) {
@@ -335,7 +559,7 @@ class Rifnote_Search_Football_API {
             'updated_at' => gmdate(DATE_ATOM),
             'poll_after' => $settings['fixture_cache_ttl'],
             'competitions' => $settings['competitions'],
-            'fixtures' => (!$league && !$season) ? self::filter_fixtures_by_competitions(array_map(array(__CLASS__, 'normalize_fixture'), $response['response'] ?? array()), $settings['competitions']) : array_map(array(__CLASS__, 'normalize_fixture'), $response['response'] ?? array()),
+            'fixtures' => self::filter_fixtures_by_team_watchlist((!$league && !$season) ? self::filter_fixtures_by_competitions(array_map(array(__CLASS__, 'normalize_fixture'), $response['response'] ?? array()), $settings['competitions']) : array_map(array(__CLASS__, 'normalize_fixture'), $response['response'] ?? array()), $settings['team_watchlist']),
             'errors' => $response['errors'] ?? array(),
         );
 
@@ -360,7 +584,7 @@ class Rifnote_Search_Football_API {
                 'allow_stale' => true,
             ));
             if (is_array($cached)) {
-                return $cached;
+                return self::apply_team_visibility_to_payload($cached, $settings);
             }
 
             if (!empty($settings['api_key'])) {
@@ -402,6 +626,10 @@ class Rifnote_Search_Football_API {
                 $payload = self::upcoming_for_competition($per_competition, (int) $competition['league_id'], (int) $competition['season'], $force, $window_hours);
 
                 foreach ($payload['fixtures'] ?? array() as $fixture) {
+                    if (!self::fixture_matches_team_watchlist($fixture, $settings['team_watchlist'])) {
+                        continue;
+                    }
+
                     $fixture['watchlist_label'] = $competition['label'];
                     $all_fixtures[$fixture['id'] ?: md5(wp_json_encode($fixture))] = $fixture;
                 }
@@ -448,7 +676,7 @@ class Rifnote_Search_Football_API {
                 'allow_stale' => true,
             ));
             if (is_array($cached)) {
-                return $cached;
+                return self::apply_team_visibility_to_payload($cached, $settings);
             }
 
             return self::empty_payload('', 'upcoming', !empty($settings['api_key']), $settings, array(
@@ -481,7 +709,7 @@ class Rifnote_Search_Football_API {
             'configured' => true,
             'updated_at' => gmdate(DATE_ATOM),
             'poll_after' => $settings['upcoming_cache_ttl'],
-            'fixtures' => self::filter_upcoming_window(array_map(array(__CLASS__, 'normalize_fixture'), $response['response'] ?? array()), $window_hours),
+            'fixtures' => self::filter_fixtures_by_team_watchlist(self::filter_upcoming_window(array_map(array(__CLASS__, 'normalize_fixture'), $response['response'] ?? array()), $window_hours), $settings['team_watchlist']),
             'errors' => $response['errors'] ?? array(),
         );
 
@@ -530,12 +758,21 @@ class Rifnote_Search_Football_API {
             }
         }
 
+        $watchlist = $settings['team_watchlist'] ?? self::team_watchlist();
+        if (!empty($watchlist['enabled']) && !empty($watchlist['ids'])) {
+            $team_ids = array_map('absint', array_keys($watchlist['ids']));
+            $where[] = '(home_team_id IN (' . implode(',', array_fill(0, count($team_ids), '%d')) . ') OR away_team_id IN (' . implode(',', array_fill(0, count($team_ids), '%d')) . '))';
+            $values = array_merge($values, $team_ids, $team_ids);
+        }
+
         $sql = $wpdb->prepare(
             "SELECT payload FROM {$table} WHERE " . implode(' AND ', $where) . ' ORDER BY fixture_date DESC LIMIT %d',
             array_merge($values, array($limit))
         );
         $rows = $wpdb->get_col($sql);
         $fixtures = array_values(array_filter(array_map(array(__CLASS__, 'decode_json'), $rows)));
+        $fixtures = self::filter_fixtures_by_team_watchlist($fixtures, $settings['team_watchlist']);
+        $fixtures = array_slice($fixtures, 0, $limit);
 
         return array(
             'provider' => !empty($settings['api_key']) ? 'api-football' : 'database',
@@ -565,7 +802,7 @@ class Rifnote_Search_Football_API {
                 'allow_stale' => true,
             ));
             if (is_array($cached)) {
-                return $cached;
+                return self::apply_team_visibility_to_payload($cached, $settings);
             }
 
             if (!empty($settings['api_key'])) {
@@ -599,6 +836,10 @@ class Rifnote_Search_Football_API {
             $payload = self::fixtures_payload($date, (int) $competition['league_id'], (int) $competition['season'], $force);
 
             foreach ($payload['fixtures'] ?? array() as $fixture) {
+                if (!self::fixture_matches_team_watchlist($fixture, $settings['team_watchlist'])) {
+                    continue;
+                }
+
                 $fixture['watchlist_label'] = $competition['label'];
                 $all_fixtures[$fixture['id'] ?: md5(wp_json_encode($fixture))] = $fixture;
             }
@@ -1639,6 +1880,13 @@ class Rifnote_Search_Football_API {
             }
         }
 
+        $watchlist = self::team_watchlist();
+        if (!empty($watchlist['enabled']) && !empty($watchlist['ids'])) {
+            $team_ids = array_map('absint', array_keys($watchlist['ids']));
+            $where[] = '(home_team_id IN (' . implode(',', array_fill(0, count($team_ids), '%d')) . ') OR away_team_id IN (' . implode(',', array_fill(0, count($team_ids), '%d')) . '))';
+            $values = array_merge($values, $team_ids, $team_ids);
+        }
+
         $limit = !empty($args['next']) ? max(1, min(100, (int) $args['next'])) : 100;
         $sql = $wpdb->prepare(
             "SELECT payload FROM {$table} WHERE " . implode(' AND ', $where) . ' ORDER BY fixture_date ASC LIMIT %d',
@@ -1665,8 +1913,10 @@ class Rifnote_Search_Football_API {
             'updated_at' => gmdate(DATE_ATOM),
             'poll_after' => (int) $ttl,
             'competitions' => $settings['competitions'],
+            'team_watchlist' => $settings['team_watchlist']['labels'] ?? array(),
+            'team_watchlist_active' => !empty($settings['team_watchlist']['enabled']),
             'window_hours' => !empty($args['future_hours']) ? (int) $args['future_hours'] : null,
-            'fixtures' => $fixtures,
+            'fixtures' => self::filter_fixtures_by_team_watchlist($fixtures, $settings['team_watchlist']),
             'errors' => array(),
             'source' => 'database',
         );
@@ -1797,6 +2047,63 @@ class Rifnote_Search_Football_API {
         }
 
         return $filtered;
+    }
+
+    private static function apply_team_visibility_to_payload($payload, $settings = null) {
+        if (!is_array($payload) || empty($payload['fixtures']) || !is_array($payload['fixtures'])) {
+            return $payload;
+        }
+
+        $settings = is_array($settings) ? $settings : self::settings();
+        $watchlist = $settings['team_watchlist'] ?? self::team_watchlist();
+        $payload['fixtures'] = self::filter_fixtures_by_team_watchlist($payload['fixtures'], $watchlist);
+        $payload['team_watchlist'] = $watchlist['labels'] ?? array();
+        $payload['team_watchlist_active'] = !empty($watchlist['enabled']);
+
+        return $payload;
+    }
+
+    private static function filter_fixtures_by_team_watchlist($fixtures, $watchlist = null) {
+        $watchlist = is_array($watchlist) ? $watchlist : self::team_watchlist();
+
+        if (empty($watchlist['enabled'])) {
+            return array_values((array) $fixtures);
+        }
+
+        return array_values(array_filter((array) $fixtures, function ($fixture) use ($watchlist) {
+            return self::fixture_matches_team_watchlist($fixture, $watchlist);
+        }));
+    }
+
+    private static function fixture_matches_team_watchlist($fixture, $watchlist = null) {
+        $watchlist = is_array($watchlist) ? $watchlist : self::team_watchlist();
+
+        if (empty($watchlist['enabled'])) {
+            return true;
+        }
+
+        $ids = $watchlist['ids'] ?? array();
+        $names = $watchlist['names'] ?? array();
+        $home_id = (int) ($fixture['home']['id'] ?? 0);
+        $away_id = (int) ($fixture['away']['id'] ?? 0);
+
+        if (($home_id && isset($ids[$home_id])) || ($away_id && isset($ids[$away_id]))) {
+            return true;
+        }
+
+        $home_name = self::normalize_team_name_key($fixture['home']['name'] ?? '');
+        $away_name = self::normalize_team_name_key($fixture['away']['name'] ?? '');
+
+        return ($home_name && isset($names[$home_name])) || ($away_name && isset($names[$away_name]));
+    }
+
+    private static function normalize_team_name_key($name) {
+        $name = html_entity_decode(wp_strip_all_tags((string) $name), ENT_QUOTES | ENT_HTML5, 'UTF-8');
+        $name = strtolower(remove_accents($name));
+        $name = preg_replace('/[^a-z0-9]+/', ' ', $name);
+        $name = trim(preg_replace('/\s+/', ' ', $name));
+
+        return $name;
     }
 
     private static function store_payload_fixtures($payload, $cache_group, $ttl) {
