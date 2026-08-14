@@ -148,6 +148,16 @@ class Rifnote_Search_RSS_Warehouse {
             return;
         }
 
+        if ('purge_legacy_wp' === $action) {
+            $summary = Rifnote_Search_Ingestion::cleanup_all_local_rss_posts(5000);
+            echo '<div class="notice notice-success is-dismissible"><p>' . esc_html(sprintf(
+                __('Legacy WordPress RSS purge removed %1$d post(s). Run again if more than %2$d legacy items remain.', 'rifnote-search'),
+                (int) ($summary['deleted'] ?? 0),
+                (int) ($summary['limit'] ?? 5000)
+            )) . '</p></div>';
+            return;
+        }
+
         if ('warehouse_item_update' === $action) {
             $item_id = absint($_POST['warehouse_item_id'] ?? 0);
             $fields = array(
@@ -271,6 +281,7 @@ class Rifnote_Search_RSS_Warehouse {
         }
         self::action_button('reset_cursor', __('Reset queue cursor', 'rifnote-search'), 'secondary');
         self::action_button('cleanup_legacy_wp', __('Clean legacy WP RSS posts', 'rifnote-search'), 'secondary');
+        self::action_button('purge_legacy_wp', __('Purge all legacy WP RSS posts', 'rifnote-search'), 'delete', __('This permanently deletes every WordPress post marked as legacy RSS. Manual/admin posts are not targeted. Continue?', 'rifnote-search'));
         echo '</div>';
 
         echo '<div class="card" style="max-width:none;"><h2>' . esc_html__('Last warehouse run', 'rifnote-search') . '</h2>';
@@ -486,11 +497,12 @@ class Rifnote_Search_RSS_Warehouse {
         echo '<tr><th scope="row"><label for="' . esc_attr($option) . '">' . esc_html($label) . '</label></th><td><input id="' . esc_attr($option) . '" type="number" min="' . esc_attr($min) . '" max="' . esc_attr($max) . '" name="' . esc_attr($option) . '" value="' . esc_attr(get_option($option, $defaults[$option] ?? '')) . '" /><p class="description">' . esc_html($description) . '</p></td></tr>';
     }
 
-    private static function action_button($action, $label, $type = 'secondary') {
+    private static function action_button($action, $label, $type = 'secondary', $confirm = '') {
         echo '<form method="post" style="display:inline-block;margin:0 8px 8px 0;">';
         wp_nonce_field('rifnote_rss_warehouse_action', 'rifnote_rss_warehouse_nonce');
         echo '<input type="hidden" name="rifnote_rss_action" value="' . esc_attr($action) . '" />';
-        submit_button($label, $type, 'submit', false);
+        $attrs = $confirm ? array('onclick' => 'return confirm(' . wp_json_encode($confirm) . ');') : array();
+        submit_button($label, $type, 'submit', false, $attrs);
         echo '</form>';
     }
 

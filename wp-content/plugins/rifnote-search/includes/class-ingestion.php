@@ -662,6 +662,37 @@ class Rifnote_Search_Ingestion {
         );
     }
 
+    public static function cleanup_all_local_rss_posts($limit = 1000) {
+        global $wpdb;
+
+        $limit = max(1, min(5000, absint($limit)));
+        $markers = self::legacy_rss_post_marker_sql();
+
+        $post_ids = $wpdb->get_col($wpdb->prepare(
+            "SELECT ID FROM {$wpdb->posts}
+             WHERE post_type = 'post'
+               AND post_status IN ('publish','draft','pending','future','private','trash')
+               AND ID IN ({$markers})
+             ORDER BY post_date_gmt ASC
+             LIMIT %d",
+            $limit
+        ));
+
+        $deleted = 0;
+        foreach ($post_ids as $post_id) {
+            if (wp_delete_post((int) $post_id, true)) {
+                $deleted++;
+            }
+        }
+
+        return array(
+            'ok' => true,
+            'found' => count($post_ids),
+            'deleted' => $deleted,
+            'limit' => $limit,
+        );
+    }
+
     public static function hide_legacy_rss_posts_from_admin($query) {
         if (!is_admin() || !$query->is_main_query() || !function_exists('get_current_screen')) {
             return;
