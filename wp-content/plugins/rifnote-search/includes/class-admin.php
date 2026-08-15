@@ -486,6 +486,7 @@ class Rifnote_Search_Admin {
     private static function home_notes_pages() {
         return array(
             'rifnote-search-home-notes' => array('title' => __('Homepage Notes', 'rifnote-search'), 'menu' => __('Homepage Notes', 'rifnote-search'), 'section' => 'home-notes'),
+            'rifnote-search-featured-tab' => array('title' => __('Featured Homepage Tab', 'rifnote-search'), 'menu' => __('Featured Tab', 'rifnote-search'), 'section' => 'featured-tab'),
         );
     }
 
@@ -561,7 +562,7 @@ class Rifnote_Search_Admin {
             $pages = self::social_pages();
         }
 
-        if ('rifnote-search-home-notes' === $current_page) {
+        if (in_array($current_page, array('rifnote-search-home-notes', 'rifnote-search-featured-tab'), true)) {
             $pages = self::home_notes_pages();
         }
 
@@ -939,6 +940,7 @@ class Rifnote_Search_Admin {
             'rifnote_search_settings',
             'rifnote_rss_warehouse_settings',
             'rifnote_home_notes_settings',
+            'rifnote_home_featured_tab_settings',
             'rifnote_search_football_settings',
             'rifnote_customgpt_settings',
             'rifnote_social_settings',
@@ -2649,6 +2651,124 @@ class Rifnote_Search_Admin {
         return "Notes|Notes\nNigeria|Nigeria\nWorld|World\nFootball|Football\nPolitics|Politics\nBusiness|Business\nTech|Tech";
     }
 
+    public static function default_home_featured_tab() {
+        return array(
+            'enabled' => false,
+            'label' => 'Featured',
+            'source' => 'category',
+            'category_id' => 0,
+            'tag_id' => 0,
+            'query' => '',
+        );
+    }
+
+    public static function sanitize_home_featured_tab($value) {
+        $defaults = self::default_home_featured_tab();
+        $value = is_array($value) ? $value : array();
+        $source = sanitize_key($value['source'] ?? $defaults['source']);
+
+        if (!in_array($source, array('category', 'tag', 'search'), true)) {
+            $source = $defaults['source'];
+        }
+
+        $label = sanitize_text_field($value['label'] ?? $defaults['label']);
+        $query = sanitize_text_field($value['query'] ?? '');
+
+        return array(
+            'enabled' => !empty($value['enabled']),
+            'label' => $label ? $label : $defaults['label'],
+            'source' => $source,
+            'category_id' => absint($value['category_id'] ?? 0),
+            'tag_id' => absint($value['tag_id'] ?? 0),
+            'query' => $query,
+        );
+    }
+
+    public static function home_featured_tab() {
+        return self::sanitize_home_featured_tab(get_option('rifnote_home_featured_tab', self::default_home_featured_tab()));
+    }
+
+    public static function home_featured_tab_query_args($settings = null, $limit = 5) {
+        $settings = is_array($settings) ? self::sanitize_home_featured_tab($settings) : self::home_featured_tab();
+
+        if (empty($settings['enabled'])) {
+            return array();
+        }
+
+        $args = array(
+            'post_type' => 'post',
+            'post_status' => 'publish',
+            'posts_per_page' => max(1, min(12, absint($limit))),
+            'orderby' => 'date',
+            'order' => 'DESC',
+            'fields' => 'ids',
+        );
+
+        if ('category' === $settings['source']) {
+            if (empty($settings['category_id'])) {
+                return array();
+            }
+
+            $args['cat'] = (int) $settings['category_id'];
+        } elseif ('tag' === $settings['source']) {
+            if (empty($settings['tag_id'])) {
+                return array();
+            }
+
+            $args['tag_id'] = (int) $settings['tag_id'];
+        } elseif ('search' === $settings['source']) {
+            if (empty($settings['query'])) {
+                return array();
+            }
+
+            $args['s'] = $settings['query'];
+        }
+
+        return $args;
+    }
+
+    public static function home_featured_tab_post_ids($limit = 5, $settings = null) {
+        $args = self::home_featured_tab_query_args($settings, $limit);
+
+        return $args ? get_posts($args) : array();
+    }
+
+    public static function home_featured_tab_archive_url($settings = null) {
+        $settings = is_array($settings) ? self::sanitize_home_featured_tab($settings) : self::home_featured_tab();
+
+        if (empty($settings['enabled'])) {
+            return '';
+        }
+
+        if ('category' === $settings['source'] && !empty($settings['category_id'])) {
+            $link = get_category_link((int) $settings['category_id']);
+            return is_wp_error($link) ? '' : $link;
+        }
+
+        if ('tag' === $settings['source'] && !empty($settings['tag_id'])) {
+            $link = get_tag_link((int) $settings['tag_id']);
+            return is_wp_error($link) ? '' : $link;
+        }
+
+        if ('search' === $settings['source'] && !empty($settings['query'])) {
+            return add_query_arg('q', rawurlencode($settings['query']), home_url('/'));
+        }
+
+        return '';
+    }
+
+    public static function is_featured_home_pill($pill, $pill_key = '') {
+        $settings = self::home_featured_tab();
+
+        if (empty($settings['enabled'])) {
+            return false;
+        }
+
+        $pill_key = $pill_key ? sanitize_key($pill_key) : self::home_pill_key($pill);
+
+        return 'featured' === $pill_key || '__featured__' === $pill || 0 === strcasecmp((string) $pill, (string) $settings['label']);
+    }
+
     public static function sanitize_home_pills($value) {
         $lines = array();
 
@@ -2779,6 +2899,7 @@ class Rifnote_Search_Admin {
         $value = get_option('rifnote_home_pills', self::default_home_pills());
         $value = self::sanitize_home_pills($value);
         $items = array();
+        $featured = self::home_featured_tab();
 
         foreach (explode("\n", $value) as $line) {
             $parts = array_map('trim', explode('|', $line, 2));
@@ -2796,7 +2917,17 @@ class Rifnote_Search_Admin {
             );
         }
 
-        if (!$items || empty($items[0]['is_notes'])) {
+        if (!empty($featured['enabled'])) {
+            $items = array_values(array_filter($items, function($item) {
+                return empty($item['is_notes']);
+            }));
+            array_unshift($items, array(
+                'label' => $featured['label'] ? $featured['label'] : 'Featured',
+                'category' => '__featured__',
+                'is_notes' => true,
+                'is_featured' => true,
+            ));
+        } elseif (!$items || empty($items[0]['is_notes'])) {
             array_unshift($items, array('label' => 'Notes', 'category' => 'Notes', 'is_notes' => true));
         }
 
@@ -2907,6 +3038,7 @@ class Rifnote_Search_Admin {
         register_setting('rifnote_home_notes_settings', 'rifnote_home_note_post_ids', array('type' => 'array', 'sanitize_callback' => array(__CLASS__, 'sanitize_home_note_post_ids'), 'default' => array()));
         register_setting('rifnote_home_notes_settings', 'rifnote_home_pill_story_ids', array('type' => 'array', 'sanitize_callback' => array(__CLASS__, 'sanitize_home_pill_story_ids'), 'default' => array()));
         register_setting('rifnote_home_notes_settings', 'rifnote_home_pills', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_home_pills'), 'default' => self::default_home_pills()));
+        register_setting('rifnote_home_featured_tab_settings', 'rifnote_home_featured_tab', array('type' => 'array', 'sanitize_callback' => array(__CLASS__, 'sanitize_home_featured_tab'), 'default' => self::default_home_featured_tab()));
         register_setting('rifnote_search_settings', 'rifnote_smart_rss_enabled', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true));
         register_setting('rifnote_search_settings', 'rifnote_smart_rss_list', array('type' => 'string', 'sanitize_callback' => array('Rifnote_Search_Ingestion', 'sanitize_smart_rss_list'), 'default' => ''));
         register_setting('rifnote_search_settings', 'rifnote_smart_rss_interval_minutes', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_smart_rss_interval'), 'default' => 5));
@@ -3212,10 +3344,11 @@ class Rifnote_Search_Admin {
         $is_analytics_admin_page = 0 === strpos($current_admin_page, 'rifnote-search-analytics');
         $is_social_admin_page = 0 === strpos($current_admin_page, 'rifnote-search-social');
         $is_home_notes_admin_page = 'rifnote-search-home-notes' === $current_admin_page;
+        $is_featured_tab_admin_page = 'rifnote-search-featured-tab' === $current_admin_page;
         ?>
         <div class="wrap">
-            <h1><?php echo esc_html($is_home_notes_admin_page ? __('Homepage Notes', 'rifnote-search') : ($is_social_admin_page ? __('Rifnote Social', 'rifnote-search') : ($is_analytics_admin_page ? __('Rifnote Analytics', 'rifnote-search') : ($is_ads_admin_page ? __('Rifnote Ads', 'rifnote-search') : __('Rifnote Search', 'rifnote-search'))))); ?></h1>
-            <p><?php echo esc_html($is_home_notes_admin_page ? __('Curate the five story summary notes shown on the homepage without touching logo, media or platform settings.', 'rifnote-search') : ($is_social_admin_page ? __('Import social posts and videos into the database as searchable Rifnote stories with clean titles, snippets, source metadata and platform attribution.', 'rifnote-search') : ($is_analytics_admin_page ? __('Track app usage, users, guests, recurring visitors, search intent, content engagement and ad performance.', 'rifnote-search') : ($is_ads_admin_page ? __('Operate advertiser requests, campaign approvals, sponsored placements, pressure-point pricing and ad settings.', 'rifnote-search') : __('Operate Rifnote Search as a plugin-owned discovery platform: search, publishers, growth, legal, release and settings.', 'rifnote-search'))))); ?></p>
+            <h1><?php echo esc_html($is_featured_tab_admin_page ? __('Featured Homepage Tab', 'rifnote-search') : ($is_home_notes_admin_page ? __('Homepage Notes', 'rifnote-search') : ($is_social_admin_page ? __('Rifnote Social', 'rifnote-search') : ($is_analytics_admin_page ? __('Rifnote Analytics', 'rifnote-search') : ($is_ads_admin_page ? __('Rifnote Ads', 'rifnote-search') : __('Rifnote Search', 'rifnote-search')))))); ?></h1>
+            <p><?php echo esc_html($is_featured_tab_admin_page ? __('Let a category, tag or search query temporarily take over the first homepage pill without touching the normal Notes desk.', 'rifnote-search') : ($is_home_notes_admin_page ? __('Curate the five story summary notes shown on the homepage without touching logo, media or platform settings.', 'rifnote-search') : ($is_social_admin_page ? __('Import social posts and videos into the database as searchable Rifnote stories with clean titles, snippets, source metadata and platform attribution.', 'rifnote-search') : ($is_analytics_admin_page ? __('Track app usage, users, guests, recurring visitors, search intent, content engagement and ad performance.', 'rifnote-search') : ($is_ads_admin_page ? __('Operate advertiser requests, campaign approvals, sponsored placements, pressure-point pricing and ad settings.', 'rifnote-search') : __('Operate Rifnote Search as a plugin-owned discovery platform: search, publishers, growth, legal, release and settings.', 'rifnote-search')))))); ?></p>
             <?php self::render_admin_tabs(); ?>
             <?php if ($is_social_admin_page) : ?>
                 <?php self::render_social_admin_page($social_settings, $social_last_run, $social_recent_posts); ?>
@@ -3235,6 +3368,12 @@ class Rifnote_Search_Admin {
 
             <?php if (self::is_section('home-notes')) : ?>
                 <?php self::render_home_notes_admin_page(); ?>
+            </div>
+            <?php return; ?>
+            <?php endif; ?>
+
+            <?php if (self::is_section('featured-tab')) : ?>
+                <?php self::render_home_featured_tab_admin_page(); ?>
             </div>
             <?php return; ?>
             <?php endif; ?>
@@ -6288,6 +6427,69 @@ class Rifnote_Search_Admin {
           }
         });
         </script>';
+    }
+
+    private static function render_home_featured_tab_admin_page() {
+        $settings = self::home_featured_tab();
+        $categories = get_terms(array('taxonomy' => 'category', 'hide_empty' => false, 'orderby' => 'name', 'order' => 'ASC'));
+        $tags = get_terms(array('taxonomy' => 'post_tag', 'hide_empty' => false, 'orderby' => 'name', 'order' => 'ASC', 'number' => 250));
+        $preview_ids = self::home_featured_tab_post_ids(5, $settings);
+
+        echo '<div class="rs-admin-hero rs-home-notes-hero"><div><span>' . esc_html__('Homepage takeover', 'rifnote-search') . '</span><h2>' . esc_html__('Featured first tab', 'rifnote-search') . '</h2><p>' . esc_html__('Use this when a big topic deserves the first slot. It replaces Notes on the homepage until you switch it off, then Notes returns automatically.', 'rifnote-search') . '</p></div><div class="rs-admin-hero-meter"><b>' . esc_html($settings['enabled'] ? __('On', 'rifnote-search') : __('Off', 'rifnote-search')) . '</b><small>' . esc_html__('homepage tab', 'rifnote-search') . '</small></div></div>';
+
+        echo '<div class="rs-admin-analytics-grid rs-admin-analytics-grid-main rs-home-notes-grid">';
+        echo '<div class="rs-admin-card"><h2>' . esc_html__('Featured tab setup', 'rifnote-search') . '</h2><p>' . esc_html__('Pick a source. Category and tag are best for fast editorial control; search works when you want a topic-driven feed.', 'rifnote-search') . '</p>';
+        echo '<form method="post" action="options.php">';
+        settings_fields('rifnote_home_featured_tab_settings');
+        echo '<table class="form-table" role="presentation"><tbody>';
+        echo '<tr><th scope="row">' . esc_html__('Enable takeover', 'rifnote-search') . '</th><td><label><input type="checkbox" name="rifnote_home_featured_tab[enabled]" value="1" ' . checked(!empty($settings['enabled']), true, false) . ' /> ' . esc_html__('Replace Notes as the first homepage pill', 'rifnote-search') . '</label></td></tr>';
+        echo '<tr><th scope="row"><label for="rifnote-home-featured-label">' . esc_html__('Tab label', 'rifnote-search') . '</label></th><td><input id="rifnote-home-featured-label" class="regular-text" type="text" name="rifnote_home_featured_tab[label]" value="' . esc_attr($settings['label']) . '" placeholder="' . esc_attr__('Featured', 'rifnote-search') . '" /></td></tr>';
+        echo '<tr><th scope="row"><label for="rifnote-home-featured-source">' . esc_html__('Content source', 'rifnote-search') . '</label></th><td><select id="rifnote-home-featured-source" name="rifnote_home_featured_tab[source]">';
+        foreach (array('category' => __('Category', 'rifnote-search'), 'tag' => __('Tag', 'rifnote-search'), 'search' => __('Search query', 'rifnote-search')) as $value => $label) {
+            echo '<option value="' . esc_attr($value) . '" ' . selected($settings['source'], $value, false) . '>' . esc_html($label) . '</option>';
+        }
+        echo '</select></td></tr>';
+        echo '<tr><th scope="row"><label for="rifnote-home-featured-category">' . esc_html__('Category', 'rifnote-search') . '</label></th><td><select id="rifnote-home-featured-category" name="rifnote_home_featured_tab[category_id]"><option value="0">' . esc_html__('Choose a category', 'rifnote-search') . '</option>';
+        foreach (is_array($categories) ? $categories : array() as $term) {
+            echo '<option value="' . esc_attr((int) $term->term_id) . '" ' . selected((int) $settings['category_id'], (int) $term->term_id, false) . '>' . esc_html($term->name) . '</option>';
+        }
+        echo '</select></td></tr>';
+        echo '<tr><th scope="row"><label for="rifnote-home-featured-tag">' . esc_html__('Tag', 'rifnote-search') . '</label></th><td><select id="rifnote-home-featured-tag" name="rifnote_home_featured_tab[tag_id]"><option value="0">' . esc_html__('Choose a tag', 'rifnote-search') . '</option>';
+        foreach (is_array($tags) ? $tags : array() as $term) {
+            echo '<option value="' . esc_attr((int) $term->term_id) . '" ' . selected((int) $settings['tag_id'], (int) $term->term_id, false) . '>' . esc_html($term->name) . '</option>';
+        }
+        echo '</select></td></tr>';
+        echo '<tr><th scope="row"><label for="rifnote-home-featured-query">' . esc_html__('Search query', 'rifnote-search') . '</label></th><td><input id="rifnote-home-featured-query" class="regular-text" type="text" name="rifnote_home_featured_tab[query]" value="' . esc_attr($settings['query']) . '" placeholder="' . esc_attr__('Osun election, World Cup final, transfer window...', 'rifnote-search') . '" /><p class="description">' . esc_html__('Used only when Content source is Search query.', 'rifnote-search') . '</p></td></tr>';
+        echo '</tbody></table>';
+        submit_button(__('Save featured tab', 'rifnote-search'), 'primary');
+        echo '</form></div>';
+
+        echo '<div class="rs-admin-card"><h2>' . esc_html__('Current preview', 'rifnote-search') . '</h2>';
+        if (!$settings['enabled']) {
+            echo '<p>' . esc_html__('Featured takeover is off. Notes is still the first homepage pill.', 'rifnote-search') . '</p>';
+        } elseif (!$preview_ids) {
+            echo '<p>' . esc_html__('No matching published posts yet. Check the selected source or add matching stories.', 'rifnote-search') . '</p>';
+        } else {
+            echo '<div class="rs-home-note-slots">';
+            foreach ($preview_ids as $index => $post_id) {
+                $post = get_post($post_id);
+                if (!$post) {
+                    continue;
+                }
+
+                echo '<article>';
+                echo '<div class="rs-home-note-slot-head"><span>' . esc_html(sprintf(__('Item %d', 'rifnote-search'), $index + 1)) . '</span></div>';
+                echo '<strong>' . esc_html(get_the_title($post)) . '</strong>';
+                echo '<small>' . esc_html(get_the_date('M j, Y g:i A', $post)) . '</small>';
+                echo '</article>';
+            }
+            echo '</div>';
+            $archive_url = self::home_featured_tab_archive_url($settings);
+            if ($archive_url) {
+                echo '<p><a class="button" href="' . esc_url($archive_url) . '" target="_blank" rel="noopener">' . esc_html__('Open archive', 'rifnote-search') . '</a></p>';
+            }
+        }
+        echo '</div></div>';
     }
 
     private static function render_ads_admin_page($section, $launch_summary, $sponsor_requests, $sponsored, $ad_inventory, $audience_summary, $ad_performance) {

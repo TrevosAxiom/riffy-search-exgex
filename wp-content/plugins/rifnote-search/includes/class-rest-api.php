@@ -668,10 +668,13 @@ class Rifnote_Search_REST_API {
         $pill = $request ? sanitize_text_field((string) $request->get_param('pill')) : 'Notes';
         $pill = $pill ? $pill : 'Notes';
         $pill_key = class_exists('Rifnote_Search_Admin') ? Rifnote_Search_Admin::home_pill_key($pill) : sanitize_key($pill);
-        $is_notes = 0 === strcasecmp($pill, 'Notes') || 'notes' === $pill_key;
+        $is_featured = class_exists('Rifnote_Search_Admin') && Rifnote_Search_Admin::is_featured_home_pill($pill, $pill_key);
+        $is_notes = !$is_featured && (0 === strcasecmp($pill, 'Notes') || 'notes' === $pill_key);
         $post_ids = array();
 
-        if ($is_notes) {
+        if ($is_featured) {
+            $post_ids = Rifnote_Search_Admin::home_featured_tab_post_ids(6);
+        } elseif ($is_notes) {
             $manual_post_ids = get_option('rifnote_home_note_post_ids', array());
             $notes_category_id = class_exists('Rifnote_Search_Admin') ? Rifnote_Search_Admin::ensure_notes_category() : 0;
 
@@ -741,7 +744,7 @@ class Rifnote_Search_REST_API {
             }
         }
 
-        if (!$stories && !$is_notes) {
+        if (!$stories && !$is_notes && !$is_featured) {
             $fallback = Rifnote_Search_Engine::payload(array(
                 'query' => '',
                 'category' => $pill,
@@ -751,8 +754,8 @@ class Rifnote_Search_REST_API {
             $stories = is_array($fallback['results'] ?? null) ? $fallback['results'] : array();
         }
 
-        $archive_url = '';
-        $archive_term = get_term_by('slug', $pill_key, 'category');
+        $archive_url = $is_featured && class_exists('Rifnote_Search_Admin') ? Rifnote_Search_Admin::home_featured_tab_archive_url() : '';
+        $archive_term = $archive_url ? null : get_term_by('slug', $pill_key, 'category');
 
         if (!$archive_term || is_wp_error($archive_term)) {
             $archive_term = get_term_by('name', $pill, 'category');
@@ -768,6 +771,7 @@ class Rifnote_Search_REST_API {
             'stories' => $stories,
             'pill' => $pill,
             'is_notes' => $is_notes,
+            'is_featured' => $is_featured,
             'curated' => $has_curated_posts,
             'limit' => $limit,
             'archive_url' => $archive_url,

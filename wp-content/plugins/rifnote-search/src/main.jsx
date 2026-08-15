@@ -221,13 +221,24 @@ function SourceBadge({ story }) {
 
 function SourceLogo({ story, size = 'default' }) {
   const initials = decodeText(story.source_initials || story.source_name || story.source_domain || 'R').slice(0, 2).toUpperCase();
+  const logoMap = window.RIFNOTE_SEARCH?.sourceLogoMap || {};
+  const domain = String(story.source_domain || domainFromUrl(story.source_url || story.original_url || story.read_full_story_url || '') || '').toLowerCase().replace(/^www\./, '');
+  const logoUrl = story.source_logo_url || (domain && logoMap[domain] ? logoMap[domain] : '');
 
   return (
     <span className={`rs-source-logo ${size === 'small' ? 'is-small' : ''} ${size === 'large' ? 'is-large' : ''}`}>
-      {story.source_logo_url ? <img src={story.source_logo_url} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.display = 'none'; }} /> : null}
+      {logoUrl ? <img src={logoUrl} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.display = 'none'; }} /> : null}
       <b>{initials}</b>
     </span>
   );
+}
+
+function domainFromUrl(url = '') {
+  try {
+    return new URL(url).hostname.replace(/^www\./, '');
+  } catch (_) {
+    return '';
+  }
 }
 
 function SourceMention({ story, showDomain = false, showTime = false, className = '' }) {
@@ -5182,7 +5193,8 @@ function AdminStoryActions({ story, compact = false }) {
 }
 
 function HomeHighlights({ activePill = 'Notes', activeCategory = 'Notes', archiveUrl = '', leadStory = null, notes = null, loading }) {
-  const isNotes = activePill === 'Notes';
+  const isFeaturedTab = activeCategory === '__featured__' || activeCategory === 'Featured';
+  const isNotes = activePill === 'Notes' && !isFeaturedTab;
   const noteStories = useMemo(() => (Array.isArray(notes) ? notes.slice(0, 5) : []), [notes]);
   const [openNoteId, setOpenNoteId] = useState('');
   const title = isNotes ? 'Live Notes' : activePill;

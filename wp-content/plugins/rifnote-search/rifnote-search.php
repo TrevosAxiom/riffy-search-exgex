@@ -3,7 +3,7 @@
  * Plugin Name: Rifnote Search
  * Plugin URI: https://rifnote.com/
  * Description: AI-powered news search and publisher discovery plugin for Rifnote.
- * Version: 0.2.11
+ * Version: 0.2.12
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Rifnote
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RIFNOTE_SEARCH_VERSION', '0.2.11');
+define('RIFNOTE_SEARCH_VERSION', '0.2.12');
 define('RIFNOTE_SEARCH_FILE', __FILE__);
 define('RIFNOTE_SEARCH_DIR', plugin_dir_path(__FILE__));
 define('RIFNOTE_SEARCH_URL', plugin_dir_url(__FILE__));
@@ -527,12 +527,37 @@ JS;
             'featuredFootballMatches' => class_exists('Rifnote_Search_Football_API') ? Rifnote_Search_Football_API::featured_homepage_matches(8) : array(),
             'featuredFootballUrl' => home_url('/football/'),
             'homePills' => class_exists('Rifnote_Search_Admin') ? Rifnote_Search_Admin::home_pills() : array(),
+            'sourceLogoMap' => $this->source_logo_context(),
             'siteCategories' => $this->site_categories_context(),
             'showExcerpts' => (bool) get_option('rifnote_show_story_excerpts', true),
             'showAiCards' => (bool) get_option('rifnote_show_ai_cards', true),
             'canManageOptions' => current_user_can('manage_options'),
             'canManagePosts' => current_user_can('edit_posts'),
         );
+    }
+
+    private function source_logo_context() {
+        $logos = array();
+        $overrides = get_option('rifnote_source_logo_overrides', array());
+        $cache = get_option('rifnote_source_logo_cache', array());
+
+        foreach (array($cache, $overrides) as $source) {
+            if (!is_array($source)) {
+                continue;
+            }
+
+            foreach ($source as $domain => $value) {
+                $domain = preg_replace('/^www\./', '', strtolower(trim((string) $domain)));
+                $logo_url = is_array($value) ? ($value['logo_url'] ?? '') : $value;
+                $logo_url = esc_url_raw((string) $logo_url);
+
+                if ($domain && $logo_url) {
+                    $logos[$domain] = $logo_url;
+                }
+            }
+        }
+
+        return $logos;
     }
 
     private function site_categories_context() {
