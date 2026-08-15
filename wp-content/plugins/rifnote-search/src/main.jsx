@@ -331,6 +331,27 @@ function youtubeThumbnail(story) {
   return id ? `https://i.ytimg.com/vi/${id}/hqdefault.jpg` : '';
 }
 
+function vimeoVideoId(url = '') {
+  const value = String(url || '');
+  const match = value.match(/vimeo\.com\/(?:video\/)?([0-9]{6,})/);
+  return match?.[1] || '';
+}
+
+function externalVideoEmbedUrl(url = '') {
+  const value = String(url || '');
+  const youtubeId = youtubeVideoId(value);
+  if (youtubeId) {
+    return `https://www.youtube.com/embed/${youtubeId}?autoplay=1&mute=1&loop=1&playlist=${youtubeId}&controls=1&rel=0&modestbranding=1&playsinline=1`;
+  }
+
+  const vimeoId = vimeoVideoId(value);
+  if (vimeoId) {
+    return `https://player.vimeo.com/video/${vimeoId}?autoplay=1&muted=1&loop=1&title=0&byline=0&portrait=0`;
+  }
+
+  return '';
+}
+
 function getStoryEmbedHtml(story = {}) {
   return story?.social_embed_html || story?.embed_html || story?.oembed_html || story?.embed || '';
 }
@@ -643,10 +664,9 @@ function App({ mode }) {
   const activeFeaturedFootballMatches = featuredFootballMatches.filter((fixture) => fixture && !isFootballFixtureFinished(fixture));
   const isElectionTakeoverActive = Boolean(window.RIFNOTE_SEARCH?.electionTakeover?.enabled);
   const hasFeaturedFootballTakeover = activeFeaturedFootballMatches.length > 0;
-  const homeSearchMediaType = String(window.RIFNOTE_SEARCH?.homeSearchMediaType || 'image').toLowerCase();
-  const isAdminHomepageImageActive = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl) && homeSearchMediaType !== 'video' && !isElectionTakeoverActive && !hasFeaturedFootballTakeover;
+  const hasAdminHomepageMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl) && !isElectionTakeoverActive && !hasFeaturedFootballTakeover;
   const hasHomeSearchMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl || isElectionTakeoverActive || hasFeaturedFootballTakeover);
-  const showMobileTakeoverLogo = hasHomeSearchMedia && !isAdminHomepageImageActive;
+  const showMobileTakeoverLogo = hasHomeSearchMedia && !hasAdminHomepageMedia;
 
   if (mode === 'search-bar') {
     return <SearchPanel state={state} onSubmit={submitSearch} compact />;
@@ -4749,22 +4769,33 @@ function HomeSearchMedia({ primary = false, featuredFootballMatches = [] }) {
     return null;
   }
 
-  const media = mediaType === 'video' ? (
+  const embedUrl = externalVideoEmbedUrl(mediaUrl);
+  const isEmbed = Boolean(embedUrl);
+  const mediaClassName = `rs-home-search-media ${primary ? 'is-primary' : ''} ${linkUrl && !isEmbed ? 'is-linkable' : ''} ${isEmbed ? 'is-video-embed' : ''}`;
+  const media = isEmbed ? (
+    <iframe
+      src={embedUrl}
+      title="Rifnote homepage featured video"
+      loading="eager"
+      allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
+      allowFullScreen
+    />
+  ) : mediaType === 'video' ? (
     <video src={mediaUrl} autoPlay muted loop playsInline preload="metadata" />
   ) : (
     <img src={mediaUrl} alt="" loading="eager" />
   );
 
-  if (linkUrl) {
+  if (linkUrl && !isEmbed) {
     return (
-      <a className={`rs-home-search-media ${primary ? 'is-primary' : ''} is-linkable`} href={linkUrl} aria-label="Open featured homepage story">
+      <a className={mediaClassName} href={linkUrl} aria-label="Open featured homepage story">
         {media}
       </a>
     );
   }
 
   return (
-    <div className={`rs-home-search-media ${primary ? 'is-primary' : ''}`} aria-hidden="true">
+    <div className={mediaClassName} aria-hidden={!isEmbed}>
       {media}
     </div>
   );

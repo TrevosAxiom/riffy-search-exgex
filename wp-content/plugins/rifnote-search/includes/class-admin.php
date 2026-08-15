@@ -587,7 +587,7 @@ class Rifnote_Search_Admin {
                     'rifnote_default_story_image_url' => array('label' => __('Global default story image', 'rifnote-search'), 'type' => 'media', 'library' => 'image', 'description' => __('Used when a post and its category have no story image.', 'rifnote-search')),
                     'rifnote_home_search_media_url' => array('label' => __('Homepage big media', 'rifnote-search'), 'type' => 'media', 'library' => ''),
                     'rifnote_home_search_media_link_url' => array('label' => __('Homepage media link', 'rifnote-search'), 'type' => 'url', 'description' => __('Optional custom URL or search URL for the homepage media.', 'rifnote-search')),
-                    'rifnote_home_search_media_type' => array('label' => __('Homepage media type', 'rifnote-search'), 'type' => 'select', 'options' => array('image' => __('Image / GIF', 'rifnote-search'), 'video' => __('Video', 'rifnote-search'))),
+                    'rifnote_home_search_media_type' => array('label' => __('Homepage media type', 'rifnote-search'), 'type' => 'select', 'options' => array('image' => __('Image / GIF', 'rifnote-search'), 'video' => __('Uploaded video', 'rifnote-search'), 'embed' => __('YouTube / Vimeo', 'rifnote-search'))),
                     'rifnote_home_lead_post_id' => array('label' => __('Lead headline post ID', 'rifnote-search'), 'type' => 'number', 'min' => 0),
                 ),
             ),
@@ -2448,6 +2448,12 @@ class Rifnote_Search_Admin {
         return max(28, min(84, $size));
     }
 
+    public static function sanitize_home_search_media_type($value) {
+        $value = sanitize_key($value);
+
+        return in_array($value, array('image', 'video', 'embed'), true) ? $value : 'image';
+    }
+
     public static function google_font_choices() {
         return array(
             'Google Sans' => __('Google Sans / Product Sans stack', 'rifnote-search'),
@@ -3034,7 +3040,7 @@ class Rifnote_Search_Admin {
         register_setting('rifnote_search_settings', 'rifnote_typography_body_weight', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_font_weight'), 'default' => 430));
         register_setting('rifnote_search_settings', 'rifnote_home_search_media_url', array('type' => 'string', 'sanitize_callback' => 'esc_url_raw', 'default' => ''));
         register_setting('rifnote_search_settings', 'rifnote_home_search_media_link_url', array('type' => 'string', 'sanitize_callback' => 'esc_url_raw', 'default' => ''));
-        register_setting('rifnote_search_settings', 'rifnote_home_search_media_type', array('type' => 'string', 'sanitize_callback' => 'sanitize_key', 'default' => 'image'));
+        register_setting('rifnote_search_settings', 'rifnote_home_search_media_type', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_home_search_media_type'), 'default' => 'image'));
         register_setting('rifnote_home_notes_settings', 'rifnote_home_note_post_ids', array('type' => 'array', 'sanitize_callback' => array(__CLASS__, 'sanitize_home_note_post_ids'), 'default' => array()));
         register_setting('rifnote_home_notes_settings', 'rifnote_home_pill_story_ids', array('type' => 'array', 'sanitize_callback' => array(__CLASS__, 'sanitize_home_pill_story_ids'), 'default' => array()));
         register_setting('rifnote_home_notes_settings', 'rifnote_home_pills', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_home_pills'), 'default' => self::default_home_pills()));
@@ -3484,7 +3490,7 @@ class Rifnote_Search_Admin {
                             <th scope="row"><label for="rifnote_home_search_media_url"><?php esc_html_e('Homepage search big media', 'rifnote-search'); ?></label></th>
                             <td>
                                 <div class="rs-media-field">
-                                    <input id="rifnote_home_search_media_url" class="large-text rs-media-url" type="url" name="rifnote_home_search_media_url" value="<?php echo esc_attr(get_option('rifnote_home_search_media_url', '')); ?>" placeholder="Image, GIF, or MP4/WebM URL" />
+                                    <input id="rifnote_home_search_media_url" class="large-text rs-media-url" type="url" name="rifnote_home_search_media_url" value="<?php echo esc_attr(get_option('rifnote_home_search_media_url', '')); ?>" placeholder="Image, GIF, MP4/WebM, YouTube, or Vimeo URL" />
                                     <p>
                                         <button type="button" class="button rs-media-picker" data-target="#rifnote_home_search_media_url" data-title="<?php esc_attr_e('Choose homepage media', 'rifnote-search'); ?>" data-button="<?php esc_attr_e('Use media', 'rifnote-search'); ?>"><?php esc_html_e('Choose from Media Library', 'rifnote-search'); ?></button>
                                         <button type="button" class="button rs-media-clear" data-target="#rifnote_home_search_media_url"><?php esc_html_e('Clear', 'rifnote-search'); ?></button>
@@ -3492,7 +3498,7 @@ class Rifnote_Search_Admin {
                                 </div>
                                 <p>
                                     <select name="rifnote_home_search_media_type">
-                                        <?php foreach (array('image' => __('Image / GIF', 'rifnote-search'), 'video' => __('Video', 'rifnote-search')) as $type => $label) : ?>
+                                        <?php foreach (array('image' => __('Image / GIF', 'rifnote-search'), 'video' => __('Uploaded video', 'rifnote-search'), 'embed' => __('YouTube / Vimeo', 'rifnote-search')) as $type => $label) : ?>
                                             <option value="<?php echo esc_attr($type); ?>" <?php selected(get_option('rifnote_home_search_media_type', 'image'), $type); ?>><?php echo esc_html($label); ?></option>
                                         <?php endforeach; ?>
                                     </select>
@@ -3501,7 +3507,7 @@ class Rifnote_Search_Admin {
                                     <label for="rifnote_home_search_media_link_url"><strong><?php esc_html_e('Media click URL', 'rifnote-search'); ?></strong></label><br />
                                     <input id="rifnote_home_search_media_link_url" class="large-text" type="url" name="rifnote_home_search_media_link_url" value="<?php echo esc_attr(get_option('rifnote_home_search_media_link_url', '')); ?>" placeholder="<?php echo esc_attr(home_url('/search/?q=world cup final')); ?>" />
                                 </p>
-                                <p class="description"><?php esc_html_e('Optional media shown as the main homepage visual. Add any URL, including a Rifnote search URL, to make the doodle/image clickable.', 'rifnote-search'); ?></p>
+                                <p class="description"><?php esc_html_e('Optional media shown as the main homepage visual. Supports images, GIFs, uploaded MP4/WebM files, YouTube links and Vimeo links. The media click URL applies to images and uploaded videos.', 'rifnote-search'); ?></p>
                             </td>
                         </tr>
                     </tbody>
