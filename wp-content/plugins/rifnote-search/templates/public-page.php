@@ -67,14 +67,12 @@ $get_source_payload = static function ($post_id) {
 };
 $story_link_for_post = static function ($post_id) use ($get_source_payload) {
     $source = $get_source_payload($post_id);
-    $is_external = !empty($source['has_external_source']);
-    $url = $is_external ? ($source['read_full_story_url'] ?: ($source['original_url'] ?? '')) : get_permalink($post_id);
     $cluster_id = get_post_meta($post_id, 'story_cluster_id', true) ? get_post_meta($post_id, 'story_cluster_id', true) : 'post_' . $post_id;
     $has_story_hub = class_exists('Rifnote_Search_Aggregation') ? Rifnote_Search_Aggregation::post_has_story_hub($post_id) : false;
 
     return array(
-        'url' => $url ? $url : get_permalink($post_id),
-        'external' => $is_external,
+        'url' => get_permalink($post_id),
+        'external' => false,
         'source' => $source,
         'has_story_hub' => (bool) $has_story_hub,
         'story_url' => $has_story_hub ? home_url('/story/' . rawurlencode($cluster_id) . '/') : '',

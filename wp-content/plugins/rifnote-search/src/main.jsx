@@ -341,12 +341,12 @@ function externalVideoEmbedUrl(url = '') {
   const value = String(url || '');
   const youtubeId = youtubeVideoId(value);
   if (youtubeId) {
-    return `https://www.youtube.com/embed/${youtubeId}?autoplay=1&mute=1&loop=1&playlist=${youtubeId}&controls=1&rel=0&modestbranding=1&playsinline=1`;
+    return `https://www.youtube-nocookie.com/embed/${youtubeId}?autoplay=1&mute=1&loop=1&playlist=${youtubeId}&controls=0&disablekb=1&fs=0&iv_load_policy=3&rel=0&modestbranding=1&playsinline=1`;
   }
 
   const vimeoId = vimeoVideoId(value);
   if (vimeoId) {
-    return `https://player.vimeo.com/video/${vimeoId}?autoplay=1&muted=1&loop=1&title=0&byline=0&portrait=0`;
+    return `https://player.vimeo.com/video/${vimeoId}?autoplay=1&muted=1&loop=1&background=1&controls=0&title=0&byline=0&portrait=0&badge=0&dnt=1`;
   }
 
   return '';
