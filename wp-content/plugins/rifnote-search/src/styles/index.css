@@ -517,7 +517,7 @@
   max-height: none;
 }
 
-.rs-home-search-sound-hint {
+.rs-home-search-sound-toggle {
   position: absolute;
   right: 14px;
   bottom: 14px;
@@ -530,11 +530,24 @@
   border-radius: 999px;
   background: rgb(15 23 36 / 82%);
   color: #fff;
+  cursor: pointer;
   font-size: .78rem;
   font-weight: 900;
   letter-spacing: .01em;
   box-shadow: 0 16px 38px rgb(15 23 36 / 22%);
-  pointer-events: none;
+  pointer-events: auto;
+  transition: transform .18s ease, background .18s ease, box-shadow .18s ease;
+}
+
+.rs-home-search-sound-toggle:hover,
+.rs-home-search-sound-toggle:focus-visible {
+  background: #ed1c24;
+  box-shadow: 0 18px 42px rgb(237 28 36 / 24%);
+  transform: translateY(-1px);
+}
+
+.rs-home-search-sound-toggle.is-on {
+  background: #ed1c24;
 }
 
 .rs-home-takeover-mobile-logo {
@@ -11688,7 +11701,7 @@ body.rifnote-search-plugin-page .rs-match-modal-close,
     width: min(390px, 96vw);
   }
 
-  .rs-home-search-sound-hint {
+  .rs-home-search-sound-toggle {
     right: 10px;
     bottom: 10px;
     padding: 7px 10px;

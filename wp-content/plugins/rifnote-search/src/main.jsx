@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { ArrowLeft, ArrowRight, Bookmark, CalendarDays, Clock3, Cloud, CloudRain, CloudSun, DollarSign, ExternalLink, Flame, Globe2, Goal, Home, Landmark, Map as MapIcon, Menu, Newspaper, Pencil, Play, Radio, RotateCcw, Search, Shield, Sun, Trash2, TrendingUp, Trophy, UserRound, Volume2 } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Bookmark, CalendarDays, Clock3, Cloud, CloudRain, CloudSun, DollarSign, ExternalLink, Flame, Globe2, Goal, Home, Landmark, Map as MapIcon, Menu, Newspaper, Pencil, Play, Radio, RotateCcw, Search, Shield, Sun, Trash2, TrendingUp, Trophy, UserRound, Volume2, VolumeX } from 'lucide-react';
 import { getAdInventory, getAdvertiserDashboard, getAnonKey, getDailyBriefing, getFeedDiagnostics, getFootballFinished, getFootballFixtureDetails, getFootballFixtures, getFootballLive, getFootballPlayerProfile, getFootballPlayers, getFootballTeamProfile, getFootballTeams, getFootballTransfers, getFootballUpcoming, getForYou, getHomeLeadStory, getHomeNotes, getLiveMarkets, getLiveWeather, getNotifications, getPublisherStats, getRifnoteAiAnswer, getSocialEmbed, getSourceProfile, getStoryCluster, getSuggestions, getTrendingTopics, getWidget, getWorldWeather, registerDevice, saveAlert, savePreference, searchRifnote, subscribeNewsletter, submitAdvertiserPaymentProof, submitAdvertiserSignup, submitBetaFeedback, submitLegalRequest, submitPublisherSignup, submitPublisherStory, submitSponsorRequest, subscribeNoResult, trackAnalyticsEvent, trackSponsoredClick, trashStory, updateAdvertiserProfile, updateNotification, uploadMedia } from './api.js';
 import { rifnoteCategories, searchTabs } from './data/rifnote.js';
 import './styles/index.css';
@@ -337,19 +337,44 @@ function vimeoVideoId(url = '') {
   return match?.[1] || '';
 }
 
-function externalVideoEmbedUrl(url = '') {
+function externalVideoEmbedUrl(url = '', options = {}) {
   const value = String(url || '');
+  const muted = options.muted !== false;
   const youtubeId = youtubeVideoId(value);
   if (youtubeId) {
-    return `https://www.youtube-nocookie.com/embed/${youtubeId}?autoplay=1&mute=1&loop=1&playlist=${youtubeId}&controls=0&disablekb=1&fs=0&iv_load_policy=3&rel=0&modestbranding=1&playsinline=1`;
+    return `https://www.youtube-nocookie.com/embed/${youtubeId}?autoplay=1&mute=${muted ? '1' : '0'}&loop=1&playlist=${youtubeId}&controls=0&disablekb=1&fs=0&iv_load_policy=3&rel=0&modestbranding=1&playsinline=1`;
   }
 
   const vimeoId = vimeoVideoId(value);
   if (vimeoId) {
-    return `https://player.vimeo.com/video/${vimeoId}?autoplay=1&muted=1&loop=1&background=1&controls=0&title=0&byline=0&portrait=0&badge=0&dnt=1`;
+    const background = muted ? '&background=1' : '';
+    return `https://player.vimeo.com/video/${vimeoId}?autoplay=1&muted=${muted ? '1' : '0'}&loop=1${background}&controls=0&title=0&byline=0&portrait=0&badge=0&dnt=1`;
   }
 
   return '';
+}
+
+function loadExternalScript(src, id, onLoad = () => {}) {
+  if (!src || typeof document === 'undefined') return;
+  const existing = id ? document.getElementById(id) : null;
+  if (existing) {
+    if (existing.dataset.loaded === 'true') {
+      onLoad();
+    } else {
+      existing.addEventListener('load', onLoad, { once: true });
+    }
+    return;
+  }
+
+  const script = document.createElement('script');
+  if (id) script.id = id;
+  script.src = src;
+  script.async = true;
+  script.onload = () => {
+    script.dataset.loaded = 'true';
+    onLoad();
+  };
+  document.body.appendChild(script);
 }
 
 function getStoryEmbedHtml(story = {}) {
@@ -1260,12 +1285,31 @@ function SocialStoryCard({ story, query = '' }) {
 }
 
 function SmartEmbedHtml({ html = '', className = '' }) {
+  const embedRef = useRef(null);
+
   useEffect(() => {
-    window.twttr?.widgets?.load?.();
-    window.instgrm?.Embeds?.process?.();
-    window.FB?.XFBML?.parse?.();
-    if (window.tiktokEmbedLoad) {
-      window.tiktokEmbedLoad();
+    const node = embedRef.current;
+    if (!node || !html) return;
+
+    if (node.querySelector('.twitter-tweet, blockquote.twitter-tweet')) {
+      const hydrateTweets = () => window.twttr?.widgets?.load?.(node);
+      if (window.twttr?.widgets?.load) {
+        hydrateTweets();
+      } else {
+        loadExternalScript('https://platform.twitter.com/widgets.js', 'rifnote-twitter-widgets', hydrateTweets);
+      }
+    }
+
+    if (node.querySelector('.instagram-media')) {
+      loadExternalScript('https://www.instagram.com/embed.js', 'rifnote-instagram-embed', () => window.instgrm?.Embeds?.process?.());
+    }
+
+    if (node.querySelector('.fb-post, .fb-video')) {
+      loadExternalScript('https://connect.facebook.net/en_US/sdk.js#xfbml=1&version=v20.0', 'rifnote-facebook-sdk', () => window.FB?.XFBML?.parse?.(node));
+    }
+
+    if (node.querySelector('.tiktok-embed')) {
+      loadExternalScript('https://www.tiktok.com/embed.js', 'rifnote-tiktok-embed', () => window.tiktokEmbedLoad?.());
     }
   }, [html]);
 
@@ -1273,7 +1317,7 @@ function SmartEmbedHtml({ html = '', className = '' }) {
     return null;
   }
 
-  return <div className={`rs-smart-embed-html ${className}`} dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div ref={embedRef} className={`rs-smart-embed-html ${className}`} dangerouslySetInnerHTML={{ __html: html }} />;
 }
 
 function LiveRail({ state, open = false, onClose = () => {} }) {
@@ -4720,6 +4764,7 @@ function MobileHomeTakeoverLogo() {
 
 function HomeSearchMedia({ primary = false, featuredFootballMatches = [] }) {
   const [takeover, setTakeover] = useState(window.RIFNOTE_SEARCH?.electionTakeover || null);
+  const [soundOn, setSoundOn] = useState(false);
   const mediaUrl = window.RIFNOTE_SEARCH?.homeSearchMediaUrl || '';
   const mediaType = window.RIFNOTE_SEARCH?.homeSearchMediaType || 'image';
   const linkUrl = window.RIFNOTE_SEARCH?.homeSearchMediaLinkUrl || '';
@@ -4769,7 +4814,7 @@ function HomeSearchMedia({ primary = false, featuredFootballMatches = [] }) {
     return null;
   }
 
-  const embedUrl = externalVideoEmbedUrl(mediaUrl);
+  const embedUrl = externalVideoEmbedUrl(mediaUrl, { muted: !soundOn });
   const isEmbed = Boolean(embedUrl);
   const isUploadedVideo = !isEmbed && mediaType === 'video';
   const mediaClassName = `rs-home-search-media ${primary ? 'is-primary' : ''} ${linkUrl && !isEmbed ? 'is-linkable' : ''} ${isEmbed ? 'is-video-embed' : ''} ${isUploadedVideo ? 'is-uploaded-video' : ''}`;
@@ -4782,15 +4827,24 @@ function HomeSearchMedia({ primary = false, featuredFootballMatches = [] }) {
       allowFullScreen
     />
   ) : isUploadedVideo ? (
-    <video src={mediaUrl} autoPlay muted loop playsInline controls preload="metadata" />
+    <video src={mediaUrl} autoPlay muted={!soundOn} loop playsInline controls preload="metadata" />
   ) : (
     <img src={mediaUrl} alt="" loading="eager" />
   );
   const soundHint = (isEmbed || isUploadedVideo) ? (
-    <span className="rs-home-search-sound-hint" aria-hidden="true">
-      <Volume2 size={16} strokeWidth={2.5} />
-      Sound
-    </span>
+    <button
+      className={`rs-home-search-sound-toggle ${soundOn ? 'is-on' : ''}`}
+      type="button"
+      onClick={(event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setSoundOn((current) => !current);
+      }}
+      aria-label={soundOn ? 'Mute featured video' : 'Play featured video with sound'}
+    >
+      {soundOn ? <Volume2 size={17} strokeWidth={2.5} /> : <VolumeX size={17} strokeWidth={2.5} />}
+      <span>{soundOn ? 'Sound on' : 'Tap for sound'}</span>
+    </button>
   ) : null;
 
   if (linkUrl && !isEmbed) {
@@ -4803,7 +4857,7 @@ function HomeSearchMedia({ primary = false, featuredFootballMatches = [] }) {
   }
 
   return (
-    <div className={mediaClassName} aria-hidden={!isEmbed}>
+    <div className={mediaClassName} aria-hidden={!(isEmbed || isUploadedVideo)}>
       {media}
       {soundHint}
     </div>
