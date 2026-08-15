@@ -501,6 +501,11 @@
   background: #0f1724;
 }
 
+.rs-home-search-media.is-primary.is-video-embed,
+.rs-home-search-media.is-primary.is-uploaded-video {
+  width: min(820px, 82vw);
+}
+
 .rs-home-search-media.is-primary img,
 .rs-home-search-media.is-primary video {
   object-fit: contain;
@@ -510,6 +515,26 @@
 .rs-home-search-media.is-primary.is-video-embed {
   height: auto;
   max-height: none;
+}
+
+.rs-home-search-sound-hint {
+  position: absolute;
+  right: 14px;
+  bottom: 14px;
+  z-index: 2;
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  padding: 9px 12px;
+  border: 1px solid rgb(255 255 255 / 38%);
+  border-radius: 999px;
+  background: rgb(15 23 36 / 82%);
+  color: #fff;
+  font-size: .78rem;
+  font-weight: 900;
+  letter-spacing: .01em;
+  box-shadow: 0 16px 38px rgb(15 23 36 / 22%);
+  pointer-events: none;
 }
 
 .rs-home-takeover-mobile-logo {
@@ -11656,6 +11681,18 @@ body.rifnote-search-plugin-page .rs-match-modal-close,
 
   .rs-home-search-media.is-primary.is-video-embed {
     height: auto;
+  }
+
+  .rs-home-search-media.is-primary.is-video-embed,
+  .rs-home-search-media.is-primary.is-uploaded-video {
+    width: min(390px, 96vw);
+  }
+
+  .rs-home-search-sound-hint {
+    right: 10px;
+    bottom: 10px;
+    padding: 7px 10px;
+    font-size: .72rem;
   }
 }
 

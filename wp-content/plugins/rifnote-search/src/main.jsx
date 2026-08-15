@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { ArrowLeft, ArrowRight, Bookmark, CalendarDays, Clock3, Cloud, CloudRain, CloudSun, DollarSign, ExternalLink, Flame, Globe2, Goal, Home, Landmark, Map as MapIcon, Menu, Newspaper, Pencil, Play, Radio, RotateCcw, Search, Shield, Sun, Trash2, TrendingUp, Trophy, UserRound } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Bookmark, CalendarDays, Clock3, Cloud, CloudRain, CloudSun, DollarSign, ExternalLink, Flame, Globe2, Goal, Home, Landmark, Map as MapIcon, Menu, Newspaper, Pencil, Play, Radio, RotateCcw, Search, Shield, Sun, Trash2, TrendingUp, Trophy, UserRound, Volume2 } from 'lucide-react';
 import { getAdInventory, getAdvertiserDashboard, getAnonKey, getDailyBriefing, getFeedDiagnostics, getFootballFinished, getFootballFixtureDetails, getFootballFixtures, getFootballLive, getFootballPlayerProfile, getFootballPlayers, getFootballTeamProfile, getFootballTeams, getFootballTransfers, getFootballUpcoming, getForYou, getHomeLeadStory, getHomeNotes, getLiveMarkets, getLiveWeather, getNotifications, getPublisherStats, getRifnoteAiAnswer, getSocialEmbed, getSourceProfile, getStoryCluster, getSuggestions, getTrendingTopics, getWidget, getWorldWeather, registerDevice, saveAlert, savePreference, searchRifnote, subscribeNewsletter, submitAdvertiserPaymentProof, submitAdvertiserSignup, submitBetaFeedback, submitLegalRequest, submitPublisherSignup, submitPublisherStory, submitSponsorRequest, subscribeNoResult, trackAnalyticsEvent, trackSponsoredClick, trashStory, updateAdvertiserProfile, updateNotification, uploadMedia } from './api.js';
 import { rifnoteCategories, searchTabs } from './data/rifnote.js';
 import './styles/index.css';
@@ -4771,7 +4771,8 @@ function HomeSearchMedia({ primary = false, featuredFootballMatches = [] }) {
 
   const embedUrl = externalVideoEmbedUrl(mediaUrl);
   const isEmbed = Boolean(embedUrl);
-  const mediaClassName = `rs-home-search-media ${primary ? 'is-primary' : ''} ${linkUrl && !isEmbed ? 'is-linkable' : ''} ${isEmbed ? 'is-video-embed' : ''}`;
+  const isUploadedVideo = !isEmbed && mediaType === 'video';
+  const mediaClassName = `rs-home-search-media ${primary ? 'is-primary' : ''} ${linkUrl && !isEmbed ? 'is-linkable' : ''} ${isEmbed ? 'is-video-embed' : ''} ${isUploadedVideo ? 'is-uploaded-video' : ''}`;
   const media = isEmbed ? (
     <iframe
       src={embedUrl}
@@ -4780,16 +4781,23 @@ function HomeSearchMedia({ primary = false, featuredFootballMatches = [] }) {
       allow="autoplay; fullscreen; picture-in-picture; encrypted-media"
       allowFullScreen
     />
-  ) : mediaType === 'video' ? (
-    <video src={mediaUrl} autoPlay muted loop playsInline preload="metadata" />
+  ) : isUploadedVideo ? (
+    <video src={mediaUrl} autoPlay muted loop playsInline controls preload="metadata" />
   ) : (
     <img src={mediaUrl} alt="" loading="eager" />
   );
+  const soundHint = (isEmbed || isUploadedVideo) ? (
+    <span className="rs-home-search-sound-hint" aria-hidden="true">
+      <Volume2 size={16} strokeWidth={2.5} />
+      Sound
+    </span>
+  ) : null;
 
   if (linkUrl && !isEmbed) {
     return (
       <a className={mediaClassName} href={linkUrl} aria-label="Open featured homepage story">
         {media}
+        {soundHint}
       </a>
     );
   }
@@ -4797,6 +4805,7 @@ function HomeSearchMedia({ primary = false, featuredFootballMatches = [] }) {
   return (
     <div className={mediaClassName} aria-hidden={!isEmbed}>
       {media}
+      {soundHint}
     </div>
   );
 }
