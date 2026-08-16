@@ -4947,13 +4947,11 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
     : status === 'NS'
       ? (formatCountdown(fixture.date) || formatTime(fixture.date))
       : (status || formatTime(fixture.date) || 'TBD');
-  const footballUrl = window.RIFNOTE_SEARCH?.featuredFootballUrl || `${window.RIFNOTE_SEARCH?.homeUrl || '/'}football/`;
   const leagueName = fixture.league?.name || 'Football';
   const round = fixture.league?.round || '';
   const venue = [fixture.venue?.name, fixture.venue?.city].filter(Boolean).join(' · ');
-  const referee = fixture.referee || '';
-  const kickoff = formatFullDateTime(fixture.date);
-  const statusLabel = isLive ? 'Live now' : status === 'FT' ? 'Full-time' : isUpcoming ? 'Featured kickoff' : 'Featured match';
+  const headline = [leagueName, round].filter(Boolean).join(' - ');
+  const centerValue = isUpcoming ? (formatTime(fixture.date) || clock || 'TBD') : `${scoreHome} - ${scoreAway}`;
 
   function move(direction) {
     setActive((current) => (current + direction + cleanFixtures.length) % cleanFixtures.length);
@@ -4970,28 +4968,19 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
         </div>
       ) : null}
       <div className="rs-home-featured-football-top">
-        <span className="rs-home-football-kicker">{statusLabel}</span>
-        <span className="rs-home-football-league">
-          {fixture.league?.logo ? <img src={fixture.league.logo} alt="" loading="lazy" /> : null}
-          <b>{leagueName}</b>
-          {round ? <em>{round}</em> : null}
-        </span>
+        <span className="rs-home-football-league">{headline}</span>
       </div>
-      <a className="rs-home-scoreboard" href={footballUrl} aria-label={`Open football page for ${fixture.home?.name || 'home team'} vs ${fixture.away?.name || 'away team'}`}>
+      <div className="rs-home-scoreboard" aria-label={`${fixture.home?.name || 'home team'} vs ${fixture.away?.name || 'away team'}`}>
         <HomeScoreboardTeam team={fixture.home} large />
         <div className="rs-home-scoreboard-score">
-          <b>{scoreHome} - {scoreAway}</b>
-          <small>{clock}</small>
+          <b>{centerValue}</b>
+          {isLive && clock ? <small>{clock}</small> : null}
         </div>
         <HomeScoreboardTeam team={fixture.away} align="right" large />
-      </a>
-      <div className="rs-home-football-details" aria-label="Featured match details">
-        <span><CalendarDays size={16} /> {kickoff}</span>
-        {venue ? <span><MapIcon size={16} /> {venue}</span> : null}
-        {referee ? <span><Shield size={16} /> Ref: {referee}</span> : null}
       </div>
+      {venue ? <div className="rs-home-football-venue">Venue: <b>{venue}</b></div> : null}
       {cleanFixtures.length > 1 ? (
-        <div className="rs-home-scoreboard-controls" aria-label="Featured match carousel controls">
+        <div className="rs-home-scoreboard-controls is-hidden-visual" aria-label="Featured match carousel controls">
           <button type="button" onClick={() => move(-1)} aria-label="Previous featured match"><ArrowLeft size={15} /></button>
           <span>{active + 1}/{cleanFixtures.length}</span>
           <button type="button" onClick={() => move(1)} aria-label="Next featured match"><ArrowRight size={15} /></button>
@@ -5046,10 +5035,11 @@ function extractGoalScorer(fixture, isHomeGoal) {
 }
 
 function HomeScoreboardTeam({ team = {}, align = 'left', large = false }) {
+  const displayName = shortTeamName(team.name || 'Team', 18);
   return (
     <span className={`rs-home-scoreboard-team ${align === 'right' ? 'is-right' : ''} ${large ? 'is-large' : ''}`}>
-      {team.logo ? <img src={team.logo} alt="" loading="lazy" /> : <i>{shortTeamName(team.name || 'Team').slice(0, 2).toUpperCase()}</i>}
-      <b>{shortTeamName(team.name || 'Team')}</b>
+      {team.logo ? <img src={team.logo} alt="" loading="lazy" /> : <i>{displayName.slice(0, 2).toUpperCase()}</i>}
+      <b title={team.name || 'Team'}>{displayName}</b>
     </span>
   );
 }
@@ -6401,9 +6391,34 @@ function LiveTeamMini({ team = {}, align = 'left' }) {
   );
 }
 
-function shortTeamName(name = '') {
-  const clean = String(name).replace(/\b(Football Club|FC|CF|SC|AFC|United|Club)\b/gi, '').replace(/\s+/g, ' ').trim();
-  return clean.length > 12 ? `${clean.slice(0, 11).trim()}…` : clean || name;
+function shortTeamName(name = '', limit = 12) {
+  const original = decodeText(name || 'Team').replace(/\s+/g, ' ').trim();
+  const compactNames = {
+    'Manchester City': 'Man City',
+    'Manchester United': 'Man United',
+    'Newcastle United': 'Newcastle',
+    'Tottenham Hotspur': 'Tottenham',
+    'Nottingham Forest': 'Nottm Forest',
+    'West Ham United': 'West Ham',
+    'Brighton & Hove Albion': 'Brighton',
+    'Wolverhampton Wanderers': 'Wolves',
+    'Paris Saint Germain': 'PSG',
+    'Paris Saint-Germain': 'PSG',
+    'Internazionale': 'Inter',
+    'Inter Milan': 'Inter',
+    'Borussia Mönchengladbach': 'Gladbach',
+    'Borussia Monchengladbach': 'Gladbach',
+    'Bayer 04 Leverkusen': 'Leverkusen',
+    'Real Betis Balompie': 'Real Betis',
+    'Real Betis Balompié': 'Real Betis',
+  };
+  const normalized = original.replace(/\s+FC$/i, '').trim();
+  const mapped = compactNames[original] || compactNames[normalized];
+  const clean = (mapped || normalized)
+    .replace(/\b(Football Club|Association Football Club)\b/gi, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return clean.length > limit ? `${clean.slice(0, Math.max(1, limit - 1)).trim()}…` : clean || original;
 }
 
 function SignalCard({ title, icon, items = [], live = false, type = 'signal' }) {
