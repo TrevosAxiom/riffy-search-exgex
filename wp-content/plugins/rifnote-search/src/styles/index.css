@@ -1596,6 +1596,27 @@
   font-weight: 780;
 }
 
+.rs-home-goal-test {
+  position: relative;
+  z-index: 2;
+  justify-self: center;
+  width: fit-content;
+  border: 1px solid rgb(237 28 36 / 28%);
+  border-radius: 999px;
+  background: rgb(237 28 36 / 8%);
+  color: #ed1c24;
+  cursor: pointer;
+  font-size: 0.78rem;
+  font-weight: 850;
+  padding: 8px 13px;
+}
+
+.rs-home-goal-test:hover,
+.rs-home-goal-test:focus-visible {
+  background: #ed1c24;
+  color: #fff;
+}
+
 .rs-home-scoreboard-controls {
   position: relative;
   z-index: 1;

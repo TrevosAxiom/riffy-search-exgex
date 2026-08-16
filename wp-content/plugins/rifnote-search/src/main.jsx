@@ -3237,7 +3237,8 @@ function FootballHub() {
   const [scoreStatus, setScoreStatus] = useState({ loading: true, error: '', lastRefresh: null });
   const [activeBoard, setActiveBoard] = useState('live');
   const [activeCompetition, setActiveCompetition] = useState('all');
-  const [selectedDate, setSelectedDate] = useState(() => formatDateInput(new Date()));
+  const initialFixtureParam = useRef(getInitialFootballFixtureParam());
+  const [selectedDate, setSelectedDate] = useState(() => getInitialFootballDate());
   const [selectedFixture, setSelectedFixture] = useState(null);
   const [modalFixture, setModalFixture] = useState(null);
   const [matchDetailOpen, setMatchDetailOpen] = useState(false);
@@ -3337,6 +3338,26 @@ function FootballHub() {
       setActiveBoard('finished');
     }
   }, [activeBoard, finishedFixtures.length, liveFixtures.length, scoreStatus.loading, upcomingFixtures.length]);
+
+  useEffect(() => {
+    const target = initialFixtureParam.current;
+
+    if (!target || !allFixtures.length) {
+      return;
+    }
+
+    const fixture = allFixtures.find((item) => getFixtureDeepLinkId(item) === target || getFixtureKey(item) === target);
+
+    if (!fixture) {
+      return;
+    }
+
+    setActiveBoard(getFixtureBoardKey(fixture));
+    setActiveCompetition('all');
+    setSelectedFixture(fixture);
+    setMatchDetailOpen(true);
+    initialFixtureParam.current = '';
+  }, [allFixtures]);
 
   useEffect(() => {
     if (!modalFixture) {
@@ -3454,6 +3475,48 @@ function fixtureDateInput(fixture = {}) {
   }
 
   return formatDateInput(fixture.date || Number(fixture.timestamp) * 1000);
+}
+
+function getInitialFootballFixtureParam() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    return params.get('fixture') || params.get('fixture_id') || params.get('match') || '';
+  } catch (error) {
+    return '';
+  }
+}
+
+function getInitialFootballDate() {
+  try {
+    const params = new URLSearchParams(window.location.search);
+    const date = params.get('date') || '';
+
+    if (/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      return date;
+    }
+  } catch (error) {
+    // Keep the football page usable if the browser blocks URL parsing.
+  }
+
+  return formatDateInput(new Date());
+}
+
+function getFixtureDeepLinkId(fixture = {}) {
+  return String(fixture.fixture_id || fixture.id || fixture.fixture?.id || '');
+}
+
+function getFixtureBoardKey(fixture = {}) {
+  const status = String(fixture.status_short || '').toUpperCase();
+
+  if (['FT', 'AET', 'PEN'].includes(status)) {
+    return 'finished';
+  }
+
+  if (['NS', 'TBD'].includes(status)) {
+    return 'upcoming';
+  }
+
+  return 'live';
 }
 
 function isFixtureOnInputDate(fixture = {}, selectedDate = '') {
@@ -4952,9 +5015,23 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
   const venue = [fixture.venue?.name, fixture.venue?.city].filter(Boolean).join(' · ');
   const headline = [leagueName, round].filter(Boolean).join(' - ');
   const centerValue = isUpcoming ? (formatTime(fixture.date) || clock || 'TBD') : `${scoreHome} - ${scoreAway}`;
+  const matchUrl = getFootballFixtureUrl(fixture);
+  const canTestGoalAnimation = Boolean(window.RIFNOTE_SEARCH?.canManageOptions);
 
   function move(direction) {
     setActive((current) => (current + direction + cleanFixtures.length) % cleanFixtures.length);
+  }
+
+  function testGoalAnimation() {
+    const isHomeGoal = Number(scoreHome || 0) >= Number(scoreAway || 0);
+    const team = isHomeGoal ? fixture.home : fixture.away;
+
+    setGoalFlash({
+      id: `admin-test-${Date.now()}`,
+      team: team?.name || (isHomeGoal ? 'Home team' : 'Away team'),
+      scorer: 'Admin test',
+      score: isUpcoming ? '1 - 0' : `${scoreHome} - ${scoreAway}`,
+    });
   }
 
   return (
@@ -4970,15 +5047,20 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
       <div className="rs-home-featured-football-top">
         <span className="rs-home-football-league">{headline}</span>
       </div>
-      <div className="rs-home-scoreboard" aria-label={`${fixture.home?.name || 'home team'} vs ${fixture.away?.name || 'away team'}`}>
+      <a className="rs-home-scoreboard" href={matchUrl} aria-label={`Open ${fixture.home?.name || 'home team'} vs ${fixture.away?.name || 'away team'} match page`}>
         <HomeScoreboardTeam team={fixture.home} large />
         <div className="rs-home-scoreboard-score">
           <b>{centerValue}</b>
           {isLive && clock ? <small>{clock}</small> : null}
         </div>
         <HomeScoreboardTeam team={fixture.away} align="right" large />
-      </div>
+      </a>
       {venue ? <div className="rs-home-football-venue">Venue: <b>{venue}</b></div> : null}
+      {canTestGoalAnimation ? (
+        <button className="rs-home-goal-test" type="button" onClick={testGoalAnimation}>
+          Test goal animation
+        </button>
+      ) : null}
       {cleanFixtures.length > 1 ? (
         <div className="rs-home-scoreboard-controls is-hidden-visual" aria-label="Featured match carousel controls">
           <button type="button" onClick={() => move(-1)} aria-label="Previous featured match"><ArrowLeft size={15} /></button>
@@ -5003,6 +5085,32 @@ function isFootballFixtureFinished(fixture) {
   const goalsAway = fixture?.goals?.away;
 
   return elapsed >= 120 && goalsHome !== null && goalsHome !== undefined && goalsAway !== null && goalsAway !== undefined;
+}
+
+function getFootballFixtureUrl(fixture = {}) {
+  const fallback = window.RIFNOTE_SEARCH?.featuredFootballUrl || `${window.RIFNOTE_SEARCH?.homeUrl || '/'}football/`;
+  const fixtureId = getFixtureDeepLinkId(fixture);
+
+  if (!fixtureId) {
+    return fallback;
+  }
+
+  try {
+    const url = new URL(fallback, window.location.origin);
+    url.searchParams.set('fixture', fixtureId);
+
+    const date = fixtureDateInput(fixture);
+
+    if (date) {
+      url.searchParams.set('date', date);
+    }
+
+    return url.toString();
+  } catch (error) {
+    const separator = fallback.includes('?') ? '&' : '?';
+    const date = fixtureDateInput(fixture);
+    return `${fallback}${separator}fixture=${encodeURIComponent(fixtureId)}${date ? `&date=${encodeURIComponent(date)}` : ''}`;
+  }
 }
 
 function extractGoalScorer(fixture, isHomeGoal) {
