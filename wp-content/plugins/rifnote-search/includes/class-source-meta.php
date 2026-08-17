@@ -435,6 +435,52 @@ class Rifnote_Search_Source_Meta {
         return esc_url_raw(trailingslashit($parts['scheme'] . '://' . $parts['host'] . (isset($parts['path']) ? dirname($parts['path']) : '')) . $url);
     }
 
+    private static function is_editorial_local_story($post_id, $origin_model, $origin_channel, $source_type) {
+        $import_channels = array(
+            'rss',
+            'news_api',
+            'newsapi',
+            'publisher',
+            'publisher_api',
+            'customgpt',
+            'customgpt_social',
+            'customgpt_aggregation',
+            'manual_social',
+            'social',
+            'youtube',
+            'video',
+            'warehouse',
+            'data_api',
+        );
+        $import_models = array('GPT', 'CustomGPT', 'TheNewsAPI', 'NewsAPI', 'RSS Feed', 'Publisher Submission', 'Social Import', 'Manual Social');
+        $import_source_types = array('external', 'submitted', 'rss', 'social', 'video', 'syndicated');
+
+        if ($origin_channel && in_array($origin_channel, $import_channels, true)) {
+            return false;
+        }
+
+        if ($origin_model && in_array($origin_model, $import_models, true)) {
+            return false;
+        }
+
+        if ($source_type && in_array($source_type, $import_source_types, true)) {
+            return false;
+        }
+
+        if ('admin' === $origin_channel || 0 === strcasecmp($origin_model, 'Rifnote Admin')) {
+            return true;
+        }
+
+        $post = get_post($post_id);
+        $user = $post ? get_userdata((int) $post->post_author) : false;
+
+        if (!$user) {
+            return false;
+        }
+
+        return (bool) array_intersect(array('administrator', 'editor', 'author'), (array) $user->roles);
+    }
+
     public static function source_payload($post_id) {
         $original_url = get_post_meta($post_id, 'original_url', true);
         $read_full_story_url = get_post_meta($post_id, 'read_full_story_url', true);
@@ -452,7 +498,8 @@ class Rifnote_Search_Source_Meta {
         $home_url = home_url('/');
         $home_domain = self::source_domain($home_url);
         $outbound_domain = self::source_domain($outbound_url);
-        $is_admin_story = 'admin' === $origin_channel || 0 === strcasecmp($origin_model, 'Rifnote Admin');
+        $source_type = $source_type ? self::sanitize_source_type($source_type) : 'original';
+        $is_admin_story = self::is_editorial_local_story($post_id, $origin_model, $origin_channel, $source_type);
         $is_rifnote_story = $is_admin_story || !$original_url || ($outbound_domain && $home_domain === $outbound_domain);
 
         if ($is_rifnote_story) {
@@ -484,7 +531,7 @@ class Rifnote_Search_Source_Meta {
             'read_full_story_url' => esc_url_raw($outbound_url),
             'canonical_url' => esc_url_raw($is_rifnote_story ? $post_url : ($canonical_url ? $canonical_url : ($original_url ? $original_url : $post_url))),
             'publisher_id' => (int) get_post_meta($post_id, 'publisher_id', true),
-            'source_type' => $source_type ? self::sanitize_source_type($source_type) : 'original',
+            'source_type' => $source_type,
             'origin_model' => $origin_model,
             'origin_actor' => $origin_actor,
             'origin_channel' => $origin_channel,

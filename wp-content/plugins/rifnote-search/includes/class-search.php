@@ -52,17 +52,15 @@ class Rifnote_Search_Engine {
     public static function candidate_ids($request_args) {
         $indexed_ids = Rifnote_Search_Index::candidate_ids($request_args);
 
-        if ($indexed_ids) {
-            return $indexed_ids;
-        }
-
         $query = $request_args['query'];
         $base_args = self::base_args($request_args);
-        $ids = array();
+        $ids = $indexed_ids ? array_map('intval', $indexed_ids) : array();
 
         if ('' === $query) {
             $recent = new WP_Query(array_merge($base_args, array('orderby' => 'date', 'order' => 'DESC')));
-            return array_map('intval', $recent->posts);
+            $ids = array_merge($ids, $recent->posts);
+
+            return array_values(array_unique(array_map('intval', $ids)));
         }
 
         $text_query = new WP_Query(array_merge($base_args, array('s' => $query)));
