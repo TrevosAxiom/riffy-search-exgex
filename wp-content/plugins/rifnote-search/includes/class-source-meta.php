@@ -442,10 +442,24 @@ class Rifnote_Search_Source_Meta {
         $canonical_url = get_post_meta($post_id, 'canonical_url', true);
         $source_name = get_post_meta($post_id, 'source_name', true);
         $source_type = get_post_meta($post_id, 'source_type', true);
+        $origin_model = self::normalize_text((string) get_post_meta($post_id, 'rifnote_origin_model', true));
+        $origin_actor = self::normalize_text((string) get_post_meta($post_id, 'rifnote_origin_actor', true));
+        $origin_channel = sanitize_key((string) get_post_meta($post_id, 'rifnote_origin_channel', true));
         $social_platform = sanitize_key((string) get_post_meta($post_id, 'rifnote_social_platform', true));
         $social_embed_html = (string) get_post_meta($post_id, 'rifnote_social_embed_html', true);
         $post_url = get_permalink($post_id);
         $outbound_url = $read_full_story_url ? $read_full_story_url : ($original_url ? $original_url : $post_url);
+        $home_url = home_url('/');
+        $home_domain = self::source_domain($home_url);
+        $outbound_domain = self::source_domain($outbound_url);
+        $is_admin_story = 'admin' === $origin_channel || 0 === strcasecmp($origin_model, 'Rifnote Admin');
+        $is_rifnote_story = $is_admin_story || !$original_url || ($outbound_domain && $home_domain === $outbound_domain);
+
+        if ($is_rifnote_story) {
+            $source_url = $source_url ? $source_url : $home_url;
+            $source_name = $source_name ? $source_name : get_bloginfo('name');
+            $outbound_url = $post_url;
+        }
 
         if (!$source_url && $outbound_url) {
             $source_url = self::source_home_from_url($outbound_url);
@@ -466,11 +480,15 @@ class Rifnote_Search_Source_Meta {
             'source_domain' => self::source_domain($source_url ? $source_url : $outbound_url),
             'source_logo_url' => self::source_logo_url($post_id, $source_url, $outbound_url),
             'source_initials' => self::source_initials($source_name ? $source_name : get_bloginfo('name'), self::source_domain($source_url ? $source_url : $outbound_url)),
-            'original_url' => esc_url_raw($original_url ? $original_url : $outbound_url),
+            'original_url' => esc_url_raw($is_rifnote_story ? $post_url : ($original_url ? $original_url : $outbound_url)),
             'read_full_story_url' => esc_url_raw($outbound_url),
-            'canonical_url' => esc_url_raw($canonical_url ? $canonical_url : ($original_url ? $original_url : $post_url)),
+            'canonical_url' => esc_url_raw($is_rifnote_story ? $post_url : ($canonical_url ? $canonical_url : ($original_url ? $original_url : $post_url))),
             'publisher_id' => (int) get_post_meta($post_id, 'publisher_id', true),
             'source_type' => $source_type ? self::sanitize_source_type($source_type) : 'original',
+            'origin_model' => $origin_model,
+            'origin_actor' => $origin_actor,
+            'origin_channel' => $origin_channel,
+            'is_rifnote_story' => (bool) $is_rifnote_story,
             'social_platform' => $social_platform,
             'social_author_handle' => self::normalize_text((string) get_post_meta($post_id, 'rifnote_social_author_handle', true)),
             'social_post_id' => self::normalize_text((string) get_post_meta($post_id, 'rifnote_social_post_id', true)),

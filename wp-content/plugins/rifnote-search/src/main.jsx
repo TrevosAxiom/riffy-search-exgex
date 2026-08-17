@@ -142,6 +142,30 @@ function trackStoryClick(story, eventType = 'source_click', query = '') {
   });
 }
 
+function isInternalUrl(url = '') {
+  if (!url || url === '#') {
+    return true;
+  }
+
+  try {
+    return new URL(url, window.location.origin).origin === window.location.origin;
+  } catch (_) {
+    return false;
+  }
+}
+
+function linkPropsForUrl(url = '') {
+  return isInternalUrl(url) ? {} : { target: '_blank', rel: 'noreferrer' };
+}
+
+function storyReadUrl(story) {
+  if (story?.is_rifnote_story) {
+    return story.permalink || story.story_url || story.read_full_story_url || '#';
+  }
+
+  return story?.read_full_story_url || story?.original_url || story?.story_url || story?.permalink || '#';
+}
+
 function Card({ children, className = '', accent = false }) {
   return <section className={`rs-card ${accent ? 'accent' : ''} ${className}`}>{children}</section>;
 }
@@ -5743,7 +5767,8 @@ function StoryCard({ story, query = '' }) {
 
 function SearchResultItem({ story, query = '', compact = false }) {
   const hasStoryHub = Boolean(story.has_story_hub && story.story_url);
-  const storyUrl = story.read_full_story_url || story.original_url || story.story_url || '#';
+  const storyUrl = storyReadUrl(story);
+  const titleLinkProps = linkPropsForUrl(storyUrl);
 
   return (
     <article className={`rs-story-card rs-search-result-item ${compact ? 'rs-story-card-compact' : ''}`}>
@@ -5753,7 +5778,7 @@ function SearchResultItem({ story, query = '', compact = false }) {
         <span>{decodeText(story.source_name || story.source_domain || 'Rifnote')}</span>
       </div>
       <h2>
-        <a href={storyUrl} target="_blank" rel="noreferrer" onClick={() => trackStoryClick(story, 'read_full_story_click', query)}>{decodeText(story.headline)}</a>
+        <a href={storyUrl} {...titleLinkProps} onClick={() => trackStoryClick(story, 'read_full_story_click', query)}>{decodeText(story.headline)}</a>
       </h2>
       {showStoryExcerpts ? <p>{trimWords(story.excerpt, 23)}</p> : null}
       <div className="rs-result-time-row">

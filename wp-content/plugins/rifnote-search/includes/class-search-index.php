@@ -70,11 +70,13 @@ class Rifnote_Search_Index {
         $entities = get_post_meta($post_id, 'entities', true);
         $headline = Rifnote_Search_Source_Meta::normalize_text(get_the_title($post));
         $excerpt = Rifnote_Search_Source_Meta::normalize_text(Rifnote_Search_Engine::plain_excerpt($post), true);
+        $content = Rifnote_Search_Source_Meta::normalize_text(wp_strip_all_tags($post->post_content), true);
         $cluster_id = get_post_meta($post_id, 'story_cluster_id', true);
 
         $search_text = implode(' ', array_filter(array(
             $headline,
             $excerpt,
+            $content,
             $source['source_name'],
             $source['source_domain'],
             $categories ? implode(' ', wp_list_pluck($categories, 'name')) : '',
