@@ -1129,7 +1129,7 @@ function FootballSearchMatch({ fixture }) {
   const isUpcoming = status === 'NS';
   const homeGoals = fixture.goals?.home ?? '-';
   const awayGoals = fixture.goals?.away ?? '-';
-  const leagueName = fixture.league?.name || fixture.watchlist_label || 'Football';
+  const leagueName = getFootballCompetitionLabel(fixture, { includeRound: false });
   const fixtureDate = formatDate(fixture.date);
   const fixtureTime = formatTime(fixture.date);
   const matchState = isUpcoming ? (formatCountdown(fixture.date) || 'Upcoming') : (fixture.status_long || status || 'Match');
@@ -3426,7 +3426,7 @@ function FootballHub() {
         <div className="rs-pitchside-controls">
           <FootballDateNav selectedDate={selectedDate} onChange={setSelectedDate} />
           <div className="rs-pitchside-health">
-            <span className={scoreStatus.loading ? 'is-loading' : ''}><i />{footballConfigured ? 'API-Football' : 'Setup'}</span>
+            <span className={scoreStatus.loading ? 'is-loading' : ''}><i />{footballConfigured ? 'Live data' : 'Setup'}</span>
             <small>{footballStatusMessage}</small>
             {scoreStatus.lastRefresh ? <small>{scoreStatus.lastRefresh.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</small> : null}
             <button type="button" onClick={() => refreshFootball({ force: true })}>Sync</button>
@@ -3558,6 +3558,24 @@ function getCompetitionKey(fixture = {}) {
     .replace(/^-|-$/g, '') || 'football';
 }
 
+function getFootballRoundLabel(fixture = {}) {
+  const round = String(fixture?.league?.round || fixture?.round || '').trim();
+
+  if (!round || /^regular\s+season(?:\s*[-–—]\s*\d+)?$/i.test(round)) {
+    return '';
+  }
+
+  return round.replace(/\s*[-–—]\s*regular\s+season(?:\s*[-–—]\s*\d+)?/ig, '').trim();
+}
+
+function getFootballCompetitionLabel(fixture = {}, options = {}) {
+  const includeRound = options.includeRound !== false;
+  const league = fixture?.league?.name || fixture?.watchlist_label || 'Football';
+  const round = includeRound ? getFootballRoundLabel(fixture) : '';
+
+  return [league, round].filter(Boolean).join(' · ');
+}
+
 function getCompetitionTabs(fixtures = []) {
   const competitions = new Map();
 
@@ -3574,7 +3592,7 @@ function getCompetitionTabs(fixtures = []) {
       key,
       count: 1,
       logo: fixture.league?.logo || '',
-      label: fixture.watchlist_label || fixture.league?.name || 'Football',
+      label: getFootballCompetitionLabel(fixture, { includeRound: false }),
       country: fixture.league?.country || '',
     });
   });
@@ -3693,7 +3711,7 @@ function groupFixturesByCompetition(fixtures = []) {
     if (!groups.has(key)) {
       groups.set(key, {
         key,
-        label: fixture.league?.name || fixture.watchlist_label || 'Football',
+        label: getFootballCompetitionLabel(fixture, { includeRound: false }),
         logo: fixture.league?.logo || '',
         fixtures: [],
       });
@@ -3789,7 +3807,7 @@ function FootballPitchsideDetail({ fixture, loading = false, configured = false,
       <section className="rs-pitchside-detail empty" aria-label="Selected match">
         <Goal size={42} />
         <h2>{configured ? 'Nothing scheduled in this view.' : 'Football setup needed.'}</h2>
-        <p>{configured ? 'Switch tabs or sync the saved fixtures.' : 'Add your API key, season, and league/cup IDs in Football settings.'}</p>
+        <p>{configured ? 'Switch tabs or sync the saved fixtures.' : 'Add your football data credentials, season, and league/cup IDs in Football settings.'}</p>
       </section>
     );
   }
@@ -3808,7 +3826,7 @@ function FootballPitchsideDetail({ fixture, loading = false, configured = false,
         Matches
       </button>
       <header>
-        <span>{fixture.league?.name || fixture.watchlist_label || 'Football'}{fixture.league?.round ? ` · ${fixture.league.round}` : ''}</span>
+        <span>{getFootballCompetitionLabel(fixture)}</span>
         <b>{venue || formatDate(fixture.date)}</b>
       </header>
       <div className="rs-pitchside-scoreboard">
@@ -3883,8 +3901,8 @@ function FeaturedMatchCard({ fixture, configured = false, loading = false, onSel
         <CardHeader title="Nothing on the board yet" action={<Badge>{configured ? '24h' : 'Setup'}</Badge>} />
         <div className="rs-featured-empty">
           <Goal size={40} />
-          <h2>{configured ? 'No live or upcoming games right now.' : 'Connect API-Football first.'}</h2>
-          <p>{configured ? 'The next saved kickoff will show here.' : 'Add the API key and competition IDs in Football settings.'}</p>
+          <h2>{configured ? 'No live or upcoming games right now.' : 'Football setup needed.'}</h2>
+          <p>{configured ? 'The next saved kickoff will show here.' : 'Add football data credentials and competition IDs in Football settings.'}</p>
         </div>
       </Card>
     );
@@ -3900,7 +3918,7 @@ function FeaturedMatchCard({ fixture, configured = false, loading = false, onSel
       <CardHeader title={title} action={<Badge tone={isLive ? 'danger' : ''}>{isLive ? 'Live' : clock}</Badge>} />
       <div className="rs-featured-match-league">
         {fixture.league?.logo ? <img src={fixture.league.logo} alt="" loading="lazy" /> : <Trophy size={20} />}
-        <span>{fixture.league?.name || fixture.watchlist_label || 'Football'}{fixture.league?.round ? ` · ${fixture.league.round}` : ''}</span>
+        <span>{getFootballCompetitionLabel(fixture)}</span>
       </div>
       <div className="rs-featured-scoreline">
         <FeaturedTeam team={fixture.home} />
@@ -4015,7 +4033,7 @@ function LiveMatchCard({ fixture, onSelect }) {
     <article className={`rs-live-match ${isLive ? 'is-live' : ''}`}>
       <div className="rs-live-match-league">
         <span>{fixture.league?.logo ? <img src={fixture.league.logo} alt="" loading="lazy" /> : null}{fixture.league?.name || 'Football'}</span>
-        <small>{fixture.league?.round || fixture.league?.country || ''}</small>
+        <small>{getFootballRoundLabel(fixture) || fixture.league?.country || ''}</small>
       </div>
       <div className="rs-live-match-teams">
         <TeamLine team={fixture.home} goals={homeGoals} />
@@ -4115,7 +4133,7 @@ function MatchDetailsModal({ fixture, onClose }) {
           <div>
             <span>{fixture.league?.country || fixture.watchlist_label || 'Football'}</span>
             <h2>{fixture.league?.name || 'Match details'}</h2>
-            <p>{fixture.league?.round || formatDate(fixture.date)}</p>
+            <p>{getFootballRoundLabel(fixture) || formatDate(fixture.date)}</p>
           </div>
         </header>
 
@@ -4361,7 +4379,7 @@ function FixturesCard({ fixtures = [], configured = false, message = '', onSelec
       <div className="rs-fixture-list">
         {fixtures.length ? fixtures.slice(0, 6).map((fixture) => (
           <article key={fixture.id || `${fixture.home?.name}-${fixture.away?.name}-${fixture.date}`}>
-            <span>{fixture.league?.name || fixture.watchlist_label || 'Football'}{fixture.league?.round ? ` · ${fixture.league.round}` : ''}</span>
+            <span>{getFootballCompetitionLabel(fixture)}</span>
             <div className="rs-fixture-teams">
               <FixtureTeam team={fixture.home} />
               <strong>vs</strong>
@@ -4373,9 +4391,9 @@ function FixturesCard({ fixtures = [], configured = false, message = '', onSelec
           </article>
         )) : (
           <article>
-            <span>{configured ? 'API-Football' : 'Setup needed'}</span>
-            <strong>{message || (configured ? 'No upcoming fixtures stored for the configured leagues/cups in the next 24 hours.' : 'Add an API-Football key and league/cup IDs in Football settings.')}</strong>
-            <Badge>{configured ? 'Live API' : 'Config'}</Badge>
+            <span>{configured ? 'Live data' : 'Setup needed'}</span>
+            <strong>{message || (configured ? 'No upcoming fixtures stored for the configured leagues/cups in the next 24 hours.' : 'Add your football data key and league/cup IDs in Football settings.')}</strong>
+            <Badge>{configured ? 'Live' : 'Config'}</Badge>
           </article>
         )}
       </div>
@@ -4831,7 +4849,7 @@ function TransferNewsPage() {
 
 function MobileHomeTakeoverLogo() {
   const logoUrl = window.RIFNOTE_SEARCH?.siteLogoUrl || window.RIFNOTE_SEARCH?.siteIconUrl || '';
-  const logoSize = Math.max(28, Math.min(84, Number(window.RIFNOTE_SEARCH?.homeTakeoverLogoSizeMobile || 40)));
+  const logoSize = Math.max(28, Number(window.RIFNOTE_SEARCH?.homeTakeoverLogoSizeMobile || 40));
 
   if (!logoUrl) {
     return null;
@@ -5015,6 +5033,8 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
       return undefined;
     }
 
+    playGoalCelebrationSound();
+
     const timer = window.setTimeout(() => setGoalFlash(null), 4200);
     return () => window.clearTimeout(timer);
   }, [goalFlash]);
@@ -5034,10 +5054,8 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
     : status === 'NS'
       ? (formatCountdown(fixture.date) || formatTime(fixture.date))
       : (status || formatTime(fixture.date) || 'TBD');
-  const leagueName = fixture.league?.name || 'Football';
-  const round = fixture.league?.round || '';
+  const headline = getFootballCompetitionLabel(fixture);
   const venue = [fixture.venue?.name, fixture.venue?.city].filter(Boolean).join(' · ');
-  const headline = [leagueName, round].filter(Boolean).join(' - ');
   const centerValue = isUpcoming ? (formatTime(fixture.date) || clock || 'TBD') : `${scoreHome} - ${scoreAway}`;
   const matchUrl = getFootballFixtureUrl(fixture);
   const canTestGoalAnimation = Boolean(window.RIFNOTE_SEARCH?.canManageOptions);
@@ -5061,12 +5079,17 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
   return (
     <section className={`rs-home-featured-football ${primary ? 'is-primary' : ''} ${isLive ? 'is-live' : ''}`} aria-label="Featured football match">
       {goalFlash ? (
-        <div className="rs-home-goal-flash" role="status" aria-live="polite">
-          <span>Goal</span>
+        <a className="rs-home-goal-flash" href={matchUrl} role="status" aria-live="polite" aria-label={`Goal for ${goalFlash.team}. Open match details`}>
+          <span className="rs-home-goal-net" aria-hidden="true">
+            <i />
+            <em />
+          </span>
+          <span className="rs-home-goal-kicker">Goal</span>
           <b>{goalFlash.team}</b>
           <small>{goalFlash.scorer}</small>
           <strong>{goalFlash.score}</strong>
-        </div>
+          <u>Tap for match details</u>
+        </a>
       ) : null}
       <div className="rs-home-featured-football-top">
         <span className="rs-home-football-league">{headline}</span>
@@ -5164,6 +5187,65 @@ function extractGoalScorer(fixture, isHomeGoal) {
   }
 
   return scorer || 'Goal update';
+}
+
+function playGoalCelebrationSound() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+
+  if (!AudioContext) {
+    return;
+  }
+
+  try {
+    const context = new AudioContext();
+    const master = context.createGain();
+    master.gain.setValueAtTime(0.0001, context.currentTime);
+    master.gain.exponentialRampToValueAtTime(0.18, context.currentTime + 0.05);
+    master.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 1.45);
+    master.connect(context.destination);
+
+    [261.63, 329.63, 392, 523.25].forEach((frequency, index) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = index % 2 ? 'triangle' : 'sine';
+      oscillator.frequency.setValueAtTime(frequency, context.currentTime + (index * 0.08));
+      gain.gain.setValueAtTime(0.0001, context.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.16, context.currentTime + 0.08 + (index * 0.08));
+      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.75 + (index * 0.08));
+      oscillator.connect(gain);
+      gain.connect(master);
+      oscillator.start(context.currentTime + (index * 0.08));
+      oscillator.stop(context.currentTime + 1.1 + (index * 0.08));
+    });
+
+    const bufferSize = context.sampleRate * 1.2;
+    const buffer = context.createBuffer(1, bufferSize, context.sampleRate);
+    const data = buffer.getChannelData(0);
+
+    for (let i = 0; i < bufferSize; i += 1) {
+      const envelope = Math.sin((i / bufferSize) * Math.PI);
+      data[i] = (Math.random() * 2 - 1) * envelope * 0.16;
+    }
+
+    const crowd = context.createBufferSource();
+    const crowdGain = context.createGain();
+    crowd.buffer = buffer;
+    crowdGain.gain.setValueAtTime(0.0001, context.currentTime);
+    crowdGain.gain.exponentialRampToValueAtTime(0.12, context.currentTime + 0.12);
+    crowdGain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 1.35);
+    crowd.connect(crowdGain);
+    crowdGain.connect(master);
+    crowd.start(context.currentTime + 0.06);
+    crowd.stop(context.currentTime + 1.35);
+
+    window.setTimeout(() => context.close().catch(() => {}), 1600);
+  } catch (error) {
+    // Some browsers block audio until interaction. The visual celebration still runs.
+  }
 }
 
 function HomeScoreboardTeam({ team = {}, align = 'left', large = false }) {
@@ -6495,7 +6577,7 @@ function LiveScores({ live = false }) {
 
   return (
     <Card className={live ? 'rs-live-card' : ''}>
-      <CardHeader title={scoreMode === 'live' ? 'Live scores' : 'Upcoming'} action={<LiveBadge label={configured ? 'API' : 'DB'} date={updatedAt} />} />
+      <CardHeader title={scoreMode === 'live' ? 'Live scores' : 'Upcoming'} action={<LiveBadge label="Live" date={updatedAt} />} />
       {rows.length ? (
         <div className="rs-score-strip">{rows.map((row, index) => (
           <button className={pulse % 2 === index % 2 ? 'is-live-pulse rs-score-strip-row' : 'rs-score-strip-row'} type="button" key={row.id} onClick={() => setSelectedFixture(row.fixture)}>

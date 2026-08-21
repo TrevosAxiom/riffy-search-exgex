@@ -583,7 +583,7 @@ class Rifnote_Search_Admin {
                 'fields' => array(
                     'rifnote_site_logo_url' => array('label' => __('Site logo', 'rifnote-search'), 'type' => 'media', 'library' => 'image', 'description' => __('Main desktop logo. Mobile uses the compact favicon-style mark.', 'rifnote-search')),
                     'rifnote_site_logo_width_desktop' => array('label' => __('Desktop logo width', 'rifnote-search'), 'type' => 'number', 'min' => 80, 'max' => 420, 'suffix' => 'px'),
-                    'rifnote_home_takeover_logo_size_mobile' => array('label' => __('Mobile homepage takeover logo size', 'rifnote-search'), 'type' => 'number', 'min' => 28, 'max' => 84, 'suffix' => 'px'),
+                    'rifnote_home_takeover_logo_size_mobile' => array('label' => __('Mobile homepage takeover logo size', 'rifnote-search'), 'type' => 'number', 'min' => 28, 'suffix' => 'px'),
                     'rifnote_default_story_image_url' => array('label' => __('Global default story image', 'rifnote-search'), 'type' => 'media', 'library' => 'image', 'description' => __('Used when a post and its category have no story image.', 'rifnote-search')),
                     'rifnote_home_search_media_url' => array('label' => __('Homepage big media', 'rifnote-search'), 'type' => 'media', 'library' => ''),
                     'rifnote_home_search_media_link_url' => array('label' => __('Homepage media link', 'rifnote-search'), 'type' => 'url', 'description' => __('Optional custom URL or search URL for the homepage media.', 'rifnote-search')),
@@ -2445,7 +2445,7 @@ class Rifnote_Search_Admin {
             return 40;
         }
 
-        return max(28, min(84, $size));
+        return max(28, $size);
     }
 
     public static function sanitize_home_search_media_type($value) {
@@ -3468,7 +3468,7 @@ class Rifnote_Search_Admin {
                         <tr>
                             <th scope="row"><label for="rifnote_home_takeover_logo_size_mobile"><?php esc_html_e('Mobile homepage takeover logo size', 'rifnote-search'); ?></label></th>
                             <td>
-                                <input id="rifnote_home_takeover_logo_size_mobile" class="small-text" type="number" min="28" max="84" step="1" name="rifnote_home_takeover_logo_size_mobile" value="<?php echo esc_attr(self::sanitize_mobile_logo_size(get_option('rifnote_home_takeover_logo_size_mobile', 40))); ?>" />
+                                <input id="rifnote_home_takeover_logo_size_mobile" class="small-text" type="number" min="28" step="1" name="rifnote_home_takeover_logo_size_mobile" value="<?php echo esc_attr(self::sanitize_mobile_logo_size(get_option('rifnote_home_takeover_logo_size_mobile', 40))); ?>" />
                                 <span><?php esc_html_e('px', 'rifnote-search'); ?></span>
                                 <p class="description"><?php esc_html_e('Shown at the top center of the mobile homepage when featured media, election, video or match scoreboard replaces the normal Rifnote wordmark.', 'rifnote-search'); ?></p>
                             </td>
