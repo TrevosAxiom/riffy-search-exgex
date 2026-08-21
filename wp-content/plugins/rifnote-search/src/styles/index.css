@@ -17570,4 +17570,57 @@ body.rifnote-search-plugin-page .rs-mobile-menu-button:focus-visible {
   body.rifnote-search-plugin-page .rs-menu-row b {
     font-size: 1.18rem;
   }
+
+  body.rifnote-search-plugin-page .rs-plugin-header.is-search-home.has-mobile-home-takeover {
+    display: grid !important;
+    grid-template-columns: 1fr !important;
+    justify-items: center !important;
+    align-items: center !important;
+    min-height: calc(var(--rs-mobile-home-logo-size, 40px) + 18px) !important;
+    margin: 0 !important;
+    padding: 9px 16px !important;
+    border: 0 !important;
+    background: transparent !important;
+    box-shadow: none !important;
+  }
+
+  body.rifnote-search-plugin-page .rs-plugin-header.is-search-home.has-mobile-home-takeover .rs-plugin-search,
+  body.rifnote-search-plugin-page .rs-plugin-header.is-search-home.has-mobile-home-takeover .rs-plugin-actions,
+  body.rifnote-search-plugin-page .rs-plugin-header.is-search-home.has-mobile-home-takeover .rs-plugin-logo,
+  body.rifnote-search-plugin-page .rs-plugin-header.is-search-home.has-mobile-home-takeover .rs-plugin-mark,
+  body.rifnote-search-plugin-page .rs-plugin-header.is-search-home.has-mobile-home-takeover .rs-plugin-brand > span {
+    display: none !important;
+  }
+
+  body.rifnote-search-plugin-page .rs-plugin-header.is-search-home.has-mobile-home-takeover .rs-plugin-brand,
+  body.rifnote-search-plugin-page .rs-plugin-header.is-search-home.has-mobile-home-takeover .rs-plugin-brand.has-site-logo {
+    display: grid !important;
+    grid-column: 1 !important;
+    width: var(--rs-mobile-home-logo-size, 40px) !important;
+    min-width: var(--rs-mobile-home-logo-size, 40px) !important;
+    height: var(--rs-mobile-home-logo-size, 40px) !important;
+    place-items: center !important;
+    justify-self: center !important;
+    margin: 0 auto !important;
+    padding: 0 !important;
+  }
+
+  body.rifnote-search-plugin-page .rs-plugin-header.is-search-home.has-mobile-home-takeover .rs-plugin-favicon {
+    display: block !important;
+    width: var(--rs-mobile-home-logo-size, 40px) !important;
+    min-width: var(--rs-mobile-home-logo-size, 40px) !important;
+    height: var(--rs-mobile-home-logo-size, 40px) !important;
+    max-width: none !important;
+    object-fit: contain !important;
+    border-radius: 12px !important;
+  }
+
+  body.rifnote-search-plugin-page:has(.rs-plugin-header.is-search-home.has-mobile-home-takeover) .rs-google-home.has-home-media,
+  body.rifnote-search-plugin-page:has(.rs-plugin-header.is-search-home.has-mobile-home-takeover) .rs-google-home {
+    padding-top: 4px !important;
+  }
+
+  body.rifnote-search-plugin-page:has(.rs-plugin-header.is-search-home.has-mobile-home-takeover) .rs-home-takeover-mobile-logo {
+    display: none !important;
+  }
 }

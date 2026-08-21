@@ -515,16 +515,6 @@ function App({ mode }) {
   const searchTabLabel = activeTab === 'Football' ? 'football hit' : activeTab === 'Videos' ? 'video' : activeTab === 'Social' ? 'social post' : activeTab === 'Sources' ? 'source' : 'result';
 
   useEffect(() => {
-    const header = document.querySelector('.rs-plugin-header');
-
-    if (!header) {
-      return;
-    }
-
-    header.classList.toggle('is-search-home', mode === 'app' && isHome);
-  }, [isHome, mode]);
-
-  useEffect(() => {
     trackAnalyticsEvent({
       event_type: 'page_view',
       category: state.category,
@@ -717,6 +707,27 @@ function App({ mode }) {
   const hasHomeSearchMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl || isElectionTakeoverActive || hasFeaturedFootballTakeover);
   const showMobileTakeoverLogo = hasHomeSearchMedia && !hasAdminHomepageMedia;
 
+  useEffect(() => {
+    const header = document.querySelector('.rs-plugin-header');
+
+    if (!header) {
+      return;
+    }
+
+    const isSearchHome = mode === 'app' && isHome;
+    const hasMobileTakeoverHeader = isSearchHome && showMobileTakeoverLogo;
+    const logoSize = Math.max(28, Number(window.RIFNOTE_SEARCH?.homeTakeoverLogoSizeMobile || 40));
+
+    header.classList.toggle('is-search-home', isSearchHome);
+    header.classList.toggle('has-mobile-home-takeover', hasMobileTakeoverHeader);
+
+    if (hasMobileTakeoverHeader) {
+      header.style.setProperty('--rs-mobile-home-logo-size', `${logoSize}px`);
+    } else {
+      header.style.removeProperty('--rs-mobile-home-logo-size');
+    }
+  }, [isHome, mode, showMobileTakeoverLogo]);
+
   if (mode === 'search-bar') {
     return <SearchPanel state={state} onSubmit={submitSearch} compact />;
   }
@@ -837,7 +848,6 @@ function App({ mode }) {
     <main className="rs-shell rs-search-page">
       {isHome ? (
         <section className={`rs-google-home ${hasHomeSearchMedia ? 'has-home-media' : ''}`}>
-          {showMobileTakeoverLogo ? <MobileHomeTakeoverLogo /> : null}
           {hasHomeSearchMedia ? (
             <HomeSearchMedia primary featuredFootballMatches={activeFeaturedFootballMatches} />
           ) : (
@@ -4848,7 +4858,7 @@ function TransferNewsPage() {
 }
 
 function MobileHomeTakeoverLogo() {
-  const logoUrl = window.RIFNOTE_SEARCH?.siteLogoUrl || window.RIFNOTE_SEARCH?.siteIconUrl || '';
+  const logoUrl = window.RIFNOTE_SEARCH?.siteIconUrl || window.RIFNOTE_SEARCH?.siteLogoUrl || '';
   const logoSize = Math.max(28, Number(window.RIFNOTE_SEARCH?.homeTakeoverLogoSizeMobile || 40));
 
   if (!logoUrl) {
@@ -5212,8 +5222,7 @@ function getFeaturedMatchClock(fixture = {}, now = Date.now()) {
   const extra = Number(fixture.extra ?? fixture.fixture?.status?.extra ?? 0);
 
   if (elapsed > 0) {
-    const estimated = estimateLiveElapsedFromKickoff(fixture, elapsed, now);
-    return `${estimated}${extra ? `+${extra}` : ''}'`;
+    return `${elapsed}${extra ? `+${extra}` : ''}'`;
   }
 
   if (status === 'NS' || status === 'TBD') {
@@ -5221,22 +5230,6 @@ function getFeaturedMatchClock(fixture = {}, now = Date.now()) {
   }
 
   return status || formatTime(fixture.date || fixture.fixture?.date) || 'TBD';
-}
-
-function estimateLiveElapsedFromKickoff(fixture = {}, fallbackElapsed = 0, now = Date.now()) {
-  const kickoff = new Date(fixture.date || fixture.fixture?.date || '');
-
-  if (Number.isNaN(kickoff.getTime())) {
-    return fallbackElapsed;
-  }
-
-  const estimated = Math.floor((now - kickoff.getTime()) / 60000);
-
-  if (estimated <= fallbackElapsed) {
-    return fallbackElapsed;
-  }
-
-  return Math.max(fallbackElapsed, Math.min(120, estimated));
 }
 
 function hasExplicitVarCancellation(fixture = {}) {
