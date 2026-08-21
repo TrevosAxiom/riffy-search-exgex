@@ -5006,13 +5006,16 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
         const awayScore = Number(fixture.goals?.away ?? 0);
         const previous = current[id];
 
-        if (previous && (homeScore > previous.home || awayScore > previous.away)) {
-          const isHomeGoal = homeScore > previous.home;
+        if (previous && (homeScore !== previous.home || awayScore !== previous.away)) {
+          const isGoal = homeScore > previous.home || awayScore > previous.away;
+          const isHomeGoal = isGoal ? homeScore > previous.home : homeScore < previous.home;
           const team = isHomeGoal ? fixture.home : fixture.away;
           flash = {
             id,
+            type: isGoal ? 'goal' : 'var',
             team: team?.name || (isHomeGoal ? 'Home team' : 'Away team'),
-            scorer: extractGoalScorer(fixture, isHomeGoal),
+            logo: team?.logo || '',
+            scorer: isGoal ? extractGoalScorer(fixture, isHomeGoal) : extractGoalScorer(fixture, isHomeGoal, true),
             score: `${fixture.goals?.home ?? '-'} - ${fixture.goals?.away ?? '-'}`,
           };
         }
@@ -5033,9 +5036,13 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
       return undefined;
     }
 
-    playGoalCelebrationSound();
+    if (goalFlash.type === 'var') {
+      playVarDecisionSound();
+    } else {
+      playGoalCelebrationSound();
+    }
 
-    const timer = window.setTimeout(() => setGoalFlash(null), 4200);
+    const timer = window.setTimeout(() => setGoalFlash(null), 5200);
     return () => window.clearTimeout(timer);
   }, [goalFlash]);
 
@@ -5070,21 +5077,42 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
 
     setGoalFlash({
       id: `admin-test-${Date.now()}`,
+      type: 'goal',
       team: team?.name || (isHomeGoal ? 'Home team' : 'Away team'),
+      logo: team?.logo || '',
       scorer: 'Admin test',
       score: isUpcoming ? '1 - 0' : `${scoreHome} - ${scoreAway}`,
+    });
+  }
+
+  function testVarAnimation() {
+    const isHomeGoal = Number(scoreHome || 0) >= Number(scoreAway || 0);
+    const team = isHomeGoal ? fixture.home : fixture.away;
+
+    setGoalFlash({
+      id: `admin-var-test-${Date.now()}`,
+      type: 'var',
+      team: team?.name || (isHomeGoal ? 'Home team' : 'Away team'),
+      logo: team?.logo || '',
+      scorer: 'Goal cancelled after review',
+      score: isUpcoming ? '0 - 0' : `${scoreHome} - ${scoreAway}`,
     });
   }
 
   return (
     <section className={`rs-home-featured-football ${primary ? 'is-primary' : ''} ${isLive ? 'is-live' : ''}`} aria-label="Featured football match">
       {goalFlash ? (
-        <a className="rs-home-goal-flash" href={matchUrl} role="status" aria-live="polite" aria-label={`Goal for ${goalFlash.team}. Open match details`}>
-          <span className="rs-home-goal-net" aria-hidden="true">
-            <i />
-            <em />
+        <a className={`rs-home-goal-flash is-${goalFlash.type || 'goal'}`} href={matchUrl} role="status" aria-live="polite" aria-label={`${goalFlash.type === 'var' ? 'VAR update' : 'Goal'} for ${goalFlash.team}. Open match details`}>
+          <span className="rs-home-goal-post-scene" aria-hidden="true">
+            <i className="rs-home-goal-post-frame" />
+            <i className="rs-home-goal-net" />
+            <em className="rs-home-goal-ball" />
+            {goalFlash.type === 'var' ? <strong className="rs-home-var-screen">VAR</strong> : null}
           </span>
-          <span className="rs-home-goal-kicker">Goal</span>
+          <span className="rs-home-goal-team-mark">
+            {goalFlash.logo ? <img src={goalFlash.logo} alt="" loading="eager" /> : <i>{String(goalFlash.team || 'GO').slice(0, 2).toUpperCase()}</i>}
+          </span>
+          <span className="rs-home-goal-kicker">{goalFlash.type === 'var' ? 'VAR check' : 'Goal'}</span>
           <b>{goalFlash.team}</b>
           <small>{goalFlash.scorer}</small>
           <strong>{goalFlash.score}</strong>
@@ -5104,9 +5132,14 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
       </a>
       {venue ? <div className="rs-home-football-venue">Venue: <b>{venue}</b></div> : null}
       {canTestGoalAnimation ? (
-        <button className="rs-home-goal-test" type="button" onClick={testGoalAnimation}>
-          Test goal animation
-        </button>
+        <div className="rs-home-goal-test-row">
+          <button className="rs-home-goal-test" type="button" onClick={testGoalAnimation}>
+            Test goal animation
+          </button>
+          <button className="rs-home-goal-test" type="button" onClick={testVarAnimation}>
+            Test VAR animation
+          </button>
+        </div>
       ) : null}
       {cleanFixtures.length > 1 ? (
         <div className="rs-home-scoreboard-controls is-hidden-visual" aria-label="Featured match carousel controls">
@@ -5160,7 +5193,7 @@ function getFootballFixtureUrl(fixture = {}) {
   }
 }
 
-function extractGoalScorer(fixture, isHomeGoal) {
+function extractGoalScorer(fixture, isHomeGoal, cancelled = false) {
   const candidates = [
     ...(Array.isArray(fixture.events) ? fixture.events : []),
     ...(Array.isArray(fixture.timeline) ? fixture.timeline : []),
@@ -5186,7 +5219,50 @@ function extractGoalScorer(fixture, isHomeGoal) {
     return `${scorer} · ${minute}'`;
   }
 
+  if (cancelled) {
+    return scorer ? `${scorer} · goal cancelled` : 'Goal cancelled after review';
+  }
+
   return scorer || 'Goal update';
+}
+
+function playVarDecisionSound() {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+
+  if (!AudioContext) {
+    return;
+  }
+
+  try {
+    const context = new AudioContext();
+    const master = context.createGain();
+    master.gain.setValueAtTime(0.0001, context.currentTime);
+    master.gain.exponentialRampToValueAtTime(0.14, context.currentTime + 0.04);
+    master.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 1.25);
+    master.connect(context.destination);
+
+    [220, 185, 146].forEach((frequency, index) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      oscillator.type = 'square';
+      oscillator.frequency.setValueAtTime(frequency, context.currentTime + (index * 0.18));
+      gain.gain.setValueAtTime(0.0001, context.currentTime + (index * 0.18));
+      gain.gain.exponentialRampToValueAtTime(0.13, context.currentTime + 0.04 + (index * 0.18));
+      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.16 + (index * 0.18));
+      oscillator.connect(gain);
+      gain.connect(master);
+      oscillator.start(context.currentTime + (index * 0.18));
+      oscillator.stop(context.currentTime + 0.24 + (index * 0.18));
+    });
+
+    window.setTimeout(() => context.close().catch(() => {}), 1400);
+  } catch (error) {
+    // Browsers can block audio until interaction; the VAR visual still runs.
+  }
 }
 
 function playGoalCelebrationSound() {
