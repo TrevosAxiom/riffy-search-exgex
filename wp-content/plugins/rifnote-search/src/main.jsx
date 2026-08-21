@@ -4974,6 +4974,7 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
   const [active, setActive] = useState(0);
   const [scoreMemory, setScoreMemory] = useState({});
   const [goalFlash, setGoalFlash] = useState(null);
+  const [clockTick, setClockTick] = useState(() => Date.now());
   const scoreSignature = cleanFixtures.map((fixture) => {
     const id = fixture.fixture_id || fixture.id || fixture.fixture?.id || `${fixture.home?.name || 'home'}-${fixture.away?.name || 'away'}-${fixture.date || ''}`;
     return `${id}:${fixture.goals?.home ?? 0}-${fixture.goals?.away ?? 0}`;
@@ -4988,6 +4989,15 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
       setActive((current) => (current + 1) % cleanFixtures.length);
     }, 9000);
 
+    return () => window.clearInterval(timer);
+  }, [cleanFixtures.length]);
+
+  useEffect(() => {
+    if (!cleanFixtures.length) {
+      return undefined;
+    }
+
+    const timer = window.setInterval(() => setClockTick(Date.now()), 15000);
     return () => window.clearInterval(timer);
   }, [cleanFixtures.length]);
 
@@ -5008,6 +5018,13 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
 
         if (previous && (homeScore !== previous.home || awayScore !== previous.away)) {
           const isGoal = homeScore > previous.home || awayScore > previous.away;
+          const hasCancelledGoal = !isGoal && hasExplicitVarCancellation(fixture);
+
+          if (!isGoal && !hasCancelledGoal) {
+            next[id] = { home: homeScore, away: awayScore };
+            return;
+          }
+
           const isHomeGoal = isGoal ? homeScore > previous.home : homeScore < previous.home;
           const team = isHomeGoal ? fixture.home : fixture.away;
           flash = {
@@ -5056,11 +5073,7 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
   const scoreHome = fixture.goals?.home ?? '-';
   const scoreAway = fixture.goals?.away ?? '-';
   const isUpcoming = ['NS', 'TBD'].includes(status);
-  const clock = fixture.elapsed
-    ? `${fixture.elapsed}${fixture.extra ? `+${fixture.extra}` : ''}'`
-    : status === 'NS'
-      ? (formatCountdown(fixture.date) || formatTime(fixture.date))
-      : (status || formatTime(fixture.date) || 'TBD');
+  const clock = getFeaturedMatchClock(fixture, clockTick);
   const headline = getFootballCompetitionLabel(fixture);
   const venue = [fixture.venue?.name, fixture.venue?.city].filter(Boolean).join(' · ');
   const centerValue = isUpcoming ? (formatTime(fixture.date) || clock || 'TBD') : `${scoreHome} - ${scoreAway}`;
@@ -5080,7 +5093,7 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
       type: 'goal',
       team: team?.name || (isHomeGoal ? 'Home team' : 'Away team'),
       logo: team?.logo || '',
-      scorer: 'Admin test',
+      scorer: 'Goal update',
       score: isUpcoming ? '1 - 0' : `${scoreHome} - ${scoreAway}`,
     });
   }
@@ -5191,6 +5204,62 @@ function getFootballFixtureUrl(fixture = {}) {
     const date = fixtureDateInput(fixture);
     return `${fallback}${separator}fixture=${encodeURIComponent(fixtureId)}${date ? `&date=${encodeURIComponent(date)}` : ''}`;
   }
+}
+
+function getFeaturedMatchClock(fixture = {}, now = Date.now()) {
+  const status = String(fixture.status_short || fixture.fixture?.status?.short || '').toUpperCase();
+  const elapsed = Number(fixture.elapsed ?? fixture.fixture?.status?.elapsed ?? 0);
+  const extra = Number(fixture.extra ?? fixture.fixture?.status?.extra ?? 0);
+
+  if (elapsed > 0) {
+    const estimated = estimateLiveElapsedFromKickoff(fixture, elapsed, now);
+    return `${estimated}${extra ? `+${extra}` : ''}'`;
+  }
+
+  if (status === 'NS' || status === 'TBD') {
+    return formatCountdown(fixture.date || fixture.fixture?.date, now) || formatTime(fixture.date || fixture.fixture?.date) || 'TBD';
+  }
+
+  return status || formatTime(fixture.date || fixture.fixture?.date) || 'TBD';
+}
+
+function estimateLiveElapsedFromKickoff(fixture = {}, fallbackElapsed = 0, now = Date.now()) {
+  const kickoff = new Date(fixture.date || fixture.fixture?.date || '');
+
+  if (Number.isNaN(kickoff.getTime())) {
+    return fallbackElapsed;
+  }
+
+  const estimated = Math.floor((now - kickoff.getTime()) / 60000);
+
+  if (estimated <= fallbackElapsed) {
+    return fallbackElapsed;
+  }
+
+  return Math.max(fallbackElapsed, Math.min(120, estimated));
+}
+
+function hasExplicitVarCancellation(fixture = {}) {
+  const candidates = [
+    ...(Array.isArray(fixture.events) ? fixture.events : []),
+    ...(Array.isArray(fixture.timeline) ? fixture.timeline : []),
+    ...(Array.isArray(fixture.goalscorers) ? fixture.goalscorers : []),
+    ...(Array.isArray(fixture.goal_scorers) ? fixture.goal_scorers : []),
+  ];
+
+  return candidates.some((event) => {
+    const text = [
+      event.type,
+      event.detail,
+      event.event_type,
+      event.kind,
+      event.comments,
+      event.comment,
+      event.description,
+    ].filter(Boolean).join(' ').toLowerCase();
+
+    return text.includes('var') || text.includes('disallowed') || text.includes('cancelled') || text.includes('canceled') || text.includes('goal cancelled') || text.includes('goal canceled');
+  });
 }
 
 function extractGoalScorer(fixture, isHomeGoal, cancelled = false) {
@@ -6148,7 +6217,7 @@ function formatFullDateTime(value) {
   }).format(date);
 }
 
-function formatCountdown(value) {
+function formatCountdown(value, now = Date.now()) {
   if (!value) {
     return '';
   }
@@ -6159,7 +6228,7 @@ function formatCountdown(value) {
     return '';
   }
 
-  const diff = date.getTime() - Date.now();
+  const diff = date.getTime() - now;
 
   if (diff <= 0) {
     return 'Starting soon';
