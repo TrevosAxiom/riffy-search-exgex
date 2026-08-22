@@ -36,6 +36,11 @@ class Rifnote_Search_Football_API {
         return $wpdb->prefix . 'rifnote_football_fixtures';
     }
 
+    public static function standings_table() {
+        global $wpdb;
+        return $wpdb->prefix . 'rifnote_football_standings';
+    }
+
     public static function install() {
         global $wpdb;
 
@@ -44,6 +49,7 @@ class Rifnote_Search_Football_API {
         $charset_collate = $wpdb->get_charset_collate();
         $usage = self::usage_table();
         $fixtures = self::fixtures_table();
+        $standings = self::standings_table();
 
         dbDelta("CREATE TABLE {$usage} (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -99,6 +105,32 @@ class Rifnote_Search_Football_API {
             KEY cache_expires_at (cache_expires_at)
         ) {$charset_collate};");
 
+        dbDelta("CREATE TABLE {$standings} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            league_id BIGINT UNSIGNED NOT NULL,
+            league_name VARCHAR(190) NULL,
+            league_country VARCHAR(100) NULL,
+            league_logo VARCHAR(255) NULL,
+            league_season INT DEFAULT 0,
+            group_name VARCHAR(190) NOT NULL DEFAULT '',
+            team_id BIGINT UNSIGNED DEFAULT 0,
+            team_name VARCHAR(190) NULL,
+            team_logo VARCHAR(255) NULL,
+            rank_position INT DEFAULT 0,
+            points INT DEFAULT 0,
+            goals_diff INT DEFAULT 0,
+            form VARCHAR(40) NULL,
+            payload LONGTEXT NOT NULL,
+            cache_expires_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY  (id),
+            UNIQUE KEY league_team_group (league_id, league_season, group_name, team_id),
+            KEY league_id (league_id),
+            KEY league_season (league_season),
+            KEY group_name (group_name),
+            KEY cache_expires_at (cache_expires_at)
+        ) {$charset_collate};");
+
         update_option('rifnote_search_football_db_version', RIFNOTE_SEARCH_VERSION);
     }
 
@@ -107,8 +139,9 @@ class Rifnote_Search_Football_API {
 
         $usage = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', self::usage_table()));
         $fixtures = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', self::fixtures_table()));
+        $standings = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', self::standings_table()));
 
-        if (get_option('rifnote_search_football_db_version') !== RIFNOTE_SEARCH_VERSION || !$usage || !$fixtures) {
+        if (get_option('rifnote_search_football_db_version') !== RIFNOTE_SEARCH_VERSION || !$usage || !$fixtures || !$standings) {
             self::install();
         }
     }
@@ -472,7 +505,7 @@ class Rifnote_Search_Football_API {
         $fixtures = array();
         foreach ($ids as $fixture_id) {
             if (!empty($by_id[$fixture_id])) {
-                $fixtures[] = $by_id[$fixture_id];
+                $fixtures[] = self::hydrate_fixture($by_id[$fixture_id]);
             }
         }
 
@@ -523,7 +556,7 @@ class Rifnote_Search_Football_API {
         $fixtures = self::filter_live_window(
             self::filter_fixtures_by_competitions(array_map(array(__CLASS__, 'normalize_fixture'), $response['response'] ?? array()), $settings['competitions'])
         );
-        $fixtures = self::filter_fixtures_by_team_watchlist($fixtures, $settings['team_watchlist']);
+        $fixtures = self::filter_fixtures_by_team_watchlist(self::hydrate_fixtures($fixtures), $settings['team_watchlist']);
 
         $payload = array(
             'provider' => 'api-football',
@@ -602,6 +635,7 @@ class Rifnote_Search_Football_API {
         $fixtures = (!$league && !$season)
             ? self::filter_fixtures_by_competitions(array_map(array(__CLASS__, 'normalize_fixture'), $response['response'] ?? array()), $settings['competitions'])
             : array_map(array(__CLASS__, 'normalize_fixture'), $response['response'] ?? array());
+        $fixtures = self::hydrate_fixtures($fixtures);
 
         if ($apply_team_watchlist) {
             $fixtures = self::filter_fixtures_by_team_watchlist($fixtures, $settings['team_watchlist']);
@@ -765,7 +799,7 @@ class Rifnote_Search_Football_API {
             'configured' => true,
             'updated_at' => gmdate(DATE_ATOM),
             'poll_after' => $settings['upcoming_cache_ttl'],
-            'fixtures' => self::filter_fixtures_by_team_watchlist(self::filter_upcoming_window(array_map(array(__CLASS__, 'normalize_fixture'), $response['response'] ?? array()), $window_hours), $settings['team_watchlist']),
+            'fixtures' => self::filter_fixtures_by_team_watchlist(self::hydrate_fixtures(self::filter_upcoming_window(array_map(array(__CLASS__, 'normalize_fixture'), $response['response'] ?? array()), $window_hours)), $settings['team_watchlist']),
             'errors' => $response['errors'] ?? array(),
         );
 
@@ -943,7 +977,7 @@ class Rifnote_Search_Football_API {
             );
         }
 
-        $fixture = self::decode_json($row['payload']);
+        $fixture = self::hydrate_fixture(self::decode_json($row['payload']), self::decode_json($row['details_payload']));
         $details = self::decode_json($row['details_payload']);
         $details_fresh_until = $row['details_synced_at'] ? strtotime($row['details_synced_at'] . ' UTC') + (int) $settings['details_cache_ttl'] : 0;
 
@@ -966,13 +1000,73 @@ class Rifnote_Search_Football_API {
             $details = self::empty_details();
         }
 
+        $details['markers'] = self::event_marker_rows($fixture, $details);
+
         return array(
             'provider' => 'api-football',
             'configured' => !empty($settings['api_key']),
-            'fixture' => $fixture,
+            'fixture' => self::hydrate_fixture($fixture, $details),
             'details' => $details,
             'updated_at' => $row['details_synced_at'] ? mysql_to_rfc3339($row['details_synced_at']) : mysql_to_rfc3339($row['updated_at']),
             'source' => 'database',
+        );
+    }
+
+    public static function standings_payload($league = 0, $season = 0, $force = false) {
+        self::maybe_install();
+
+        $settings = self::settings();
+        $league = absint($league);
+        $season = absint($season);
+
+        if (!$league || !$season) {
+            $first = $settings['competitions'][0] ?? array();
+            $league = absint($first['league_id'] ?? 0);
+            $season = absint($first['season'] ?? 0);
+        }
+
+        if (!$league || !$season) {
+            return array(
+                'provider' => empty($settings['api_key']) ? 'not-configured' : 'api-football',
+                'configured' => !empty($settings['api_key']),
+                'league' => null,
+                'groups' => array(),
+                'updated_at' => gmdate(DATE_ATOM),
+                'source' => 'database',
+                'message' => __('Choose a configured league or cup to load a table.', 'rifnote-search'),
+            );
+        }
+
+        if (!$force) {
+            $cached = self::stored_standings($league, $season);
+            if ($cached) {
+                return $cached;
+            }
+        }
+
+        if (!empty($settings['api_key'])) {
+            $response = self::request('/standings', array(
+                'league' => $league,
+                'season' => $season,
+            ));
+
+            if (!is_wp_error($response)) {
+                $normalized = self::normalize_standings_payload($response);
+                if (!empty($normalized['groups'])) {
+                    self::store_standings($normalized, $settings['fixture_cache_ttl']);
+                    return self::stored_standings($league, $season) ?: $normalized;
+                }
+            }
+        }
+
+        return array(
+            'provider' => empty($settings['api_key']) ? 'not-configured' : 'api-football',
+            'configured' => !empty($settings['api_key']),
+            'league' => array('id' => $league, 'season' => $season),
+            'groups' => array(),
+            'updated_at' => gmdate(DATE_ATOM),
+            'source' => 'database',
+            'message' => __('No table is stored for this competition yet. Some cup rounds do not expose league-style standings.', 'rifnote-search'),
         );
     }
 
@@ -1032,6 +1126,7 @@ class Rifnote_Search_Football_API {
             $details = self::decode_json($row['details_payload']);
 
             if ($fixture) {
+                $fixture = self::hydrate_fixture($fixture, $details);
                 $matches[] = $fixture;
             }
 
@@ -1769,7 +1864,7 @@ class Rifnote_Search_Football_API {
                     continue;
                 }
 
-                $fixtures = array_map(array(__CLASS__, 'normalize_fixture'), $response['response'] ?? array());
+                $fixtures = self::hydrate_fixtures(array_map(array(__CLASS__, 'normalize_fixture'), $response['response'] ?? array()));
                 $summary['fixtures'] += count($fixtures);
                 self::store_payload_fixtures(array('fixtures' => $fixtures), 'history', YEAR_IN_SECONDS);
 
@@ -2032,7 +2127,7 @@ class Rifnote_Search_Football_API {
             'team_watchlist' => $settings['team_watchlist']['labels'] ?? array(),
             'team_watchlist_active' => !empty($settings['team_watchlist']['enabled']),
             'window_hours' => !empty($args['future_hours']) ? (int) $args['future_hours'] : null,
-            'fixtures' => self::filter_fixtures_by_team_watchlist($fixtures, $settings['team_watchlist']),
+            'fixtures' => self::filter_fixtures_by_team_watchlist(self::hydrate_fixtures($fixtures), $settings['team_watchlist']),
             'errors' => array(),
             'source' => 'database',
         );
@@ -2244,6 +2339,8 @@ class Rifnote_Search_Football_API {
                 continue;
             }
 
+            $fixture = self::hydrate_fixture($fixture);
+
             $fixture_date = !empty($fixture['date']) ? gmdate('Y-m-d H:i:s', strtotime($fixture['date'])) : null;
             $data = array(
                 'fixture_id' => $fixture_id,
@@ -2302,7 +2399,7 @@ class Rifnote_Search_Football_API {
             'goalscorers' => $goalscorers,
             'statistics' => !is_wp_error($statistics) ? array_map(array(__CLASS__, 'normalize_statistics'), $statistics['response'] ?? array()) : array(),
             'timeline' => $timeline,
-            'h2h' => !is_wp_error($h2h) && is_array($h2h) ? array_map(array(__CLASS__, 'normalize_fixture'), $h2h['response'] ?? array()) : array(),
+            'h2h' => !is_wp_error($h2h) && is_array($h2h) ? self::hydrate_fixtures(array_map(array(__CLASS__, 'normalize_fixture'), $h2h['response'] ?? array())) : array(),
             'squads' => !is_wp_error($lineups) ? array_map(array(__CLASS__, 'normalize_lineup'), $lineups['response'] ?? array()) : array(),
             'errors' => array_filter(array(
                 'events' => is_wp_error($events) ? $events->get_error_message() : '',
@@ -2554,6 +2651,340 @@ class Rifnote_Search_Football_API {
         return $body;
     }
 
+    private static function hydrate_fixtures($fixtures) {
+        return array_values(array_map(array(__CLASS__, 'hydrate_fixture'), (array) $fixtures));
+    }
+
+    private static function hydrate_fixture($fixture, $details = null) {
+        if (!is_array($fixture)) {
+            return array();
+        }
+
+        $round = (string) ($fixture['league']['round'] ?? $fixture['round'] ?? '');
+        $fixture['league']['round_clean'] = self::clean_round_label($round);
+        $fixture['period_marker'] = self::status_marker($fixture);
+        $fixture['markers'] = self::event_marker_rows($fixture, is_array($details) ? $details : null);
+        $fixture['leg_label'] = self::leg_label($fixture);
+        $fixture['aggregate'] = self::aggregate_context($fixture);
+
+        return $fixture;
+    }
+
+    private static function clean_round_label($round) {
+        $round = trim(sanitize_text_field((string) $round));
+
+        if ('' === $round || preg_match('/^regular\s+season(?:\s*[-–—]\s*\d+)?$/i', $round)) {
+            return '';
+        }
+
+        $round = preg_replace('/\s*[-–—]\s*regular\s+season(?:\s*[-–—]\s*\d+)?/i', '', $round);
+
+        return trim((string) $round);
+    }
+
+    private static function status_marker($fixture) {
+        $status = strtoupper((string) ($fixture['status_short'] ?? ''));
+
+        if ('PEN' === $status || 'P' === $status) {
+            return 'PK';
+        }
+
+        if (in_array($status, array('HT', 'FT', 'AET'), true)) {
+            return $status;
+        }
+
+        if (in_array($status, array('ET', 'BT'), true)) {
+            return 'ET';
+        }
+
+        return '';
+    }
+
+    private static function event_marker_rows($fixture, $details = null) {
+        $markers = array();
+        $timeline = is_array($details) ? ($details['timeline'] ?? array()) : array();
+
+        foreach ((array) $timeline as $event) {
+            $type = strtolower((string) ($event['type'] ?? ''));
+            $detail = strtolower((string) ($event['detail'] ?? ''));
+            $comments = strtolower((string) ($event['comments'] ?? ''));
+            $minute = isset($event['elapsed']) ? (int) $event['elapsed'] : null;
+            $extra = isset($event['extra']) ? (int) $event['extra'] : null;
+
+            if ('goal' === $type && false === strpos($detail, 'missed')) {
+                $markers[] = array(
+                    'kind' => 'goal',
+                    'label' => 'Goal',
+                    'minute' => $minute,
+                    'extra' => $extra,
+                    'team' => $event['team'] ?? array(),
+                    'player' => $event['player'] ?? array(),
+                    'red' => true,
+                );
+                continue;
+            }
+
+            if ('var' === $type || false !== strpos($detail . ' ' . $comments, 'var') || false !== strpos($detail . ' ' . $comments, 'cancel')) {
+                $markers[] = array(
+                    'kind' => 'var',
+                    'label' => 'VAR',
+                    'minute' => $minute,
+                    'extra' => $extra,
+                    'team' => $event['team'] ?? array(),
+                    'player' => $event['player'] ?? array(),
+                    'red' => true,
+                );
+            }
+        }
+
+        $status = self::status_marker($fixture);
+        if ($status) {
+            $markers[] = array(
+                'kind' => 'status',
+                'label' => $status,
+                'minute' => isset($fixture['elapsed']) ? (int) $fixture['elapsed'] : null,
+                'extra' => isset($fixture['extra']) ? (int) $fixture['extra'] : null,
+                'red' => true,
+            );
+        }
+
+        return array_values($markers);
+    }
+
+    private static function leg_label($fixture) {
+        $round = strtolower((string) ($fixture['league']['round'] ?? $fixture['round'] ?? ''));
+
+        if (preg_match('/\b(1st|first)\s+leg\b/i', $round)) {
+            return '1st leg';
+        }
+
+        if (preg_match('/\b(2nd|second)\s+leg\b/i', $round)) {
+            return '2nd leg';
+        }
+
+        return '';
+    }
+
+    private static function aggregate_context($fixture) {
+        global $wpdb;
+
+        $home_id = (int) ($fixture['home']['id'] ?? 0);
+        $away_id = (int) ($fixture['away']['id'] ?? 0);
+        $league_id = (int) ($fixture['league']['id'] ?? 0);
+        $season = (int) ($fixture['league']['season'] ?? 0);
+        $fixture_id = (int) ($fixture['id'] ?? 0);
+        $date = !empty($fixture['date']) ? gmdate('Y-m-d H:i:s', strtotime($fixture['date'])) : '';
+
+        if (!$home_id || !$away_id || !$league_id || !$season || !$fixture_id || !$date) {
+            return null;
+        }
+
+        $round = strtolower((string) ($fixture['league']['round'] ?? ''));
+        $leg_hint = self::leg_label($fixture);
+        if (!$leg_hint && false === strpos($round, 'qualifying') && false === strpos($round, 'play') && false === strpos($round, 'semi') && false === strpos($round, 'final')) {
+            return null;
+        }
+
+        $table = self::fixtures_table();
+        $row = $wpdb->get_row($wpdb->prepare(
+            "SELECT payload FROM {$table}
+             WHERE fixture_id <> %d
+               AND league_id = %d
+               AND league_season = %d
+               AND ((home_team_id = %d AND away_team_id = %d) OR (home_team_id = %d AND away_team_id = %d))
+               AND fixture_date < %s
+               AND fixture_date >= %s
+             ORDER BY fixture_date DESC
+             LIMIT 1",
+            $fixture_id,
+            $league_id,
+            $season,
+            $home_id,
+            $away_id,
+            $away_id,
+            $home_id,
+            $date,
+            gmdate('Y-m-d H:i:s', strtotime($date . ' -90 days'))
+        ), ARRAY_A);
+
+        if (!$row) {
+            return null;
+        }
+
+        $previous = self::decode_json($row['payload']);
+        if (!$previous || !isset($fixture['goals']['home'], $fixture['goals']['away'], $previous['goals']['home'], $previous['goals']['away'])) {
+            return null;
+        }
+
+        $home_total = (int) $fixture['goals']['home'];
+        $away_total = (int) $fixture['goals']['away'];
+
+        if ((int) ($previous['home']['id'] ?? 0) === $home_id) {
+            $home_total += (int) $previous['goals']['home'];
+            $away_total += (int) $previous['goals']['away'];
+        } else {
+            $home_total += (int) $previous['goals']['away'];
+            $away_total += (int) $previous['goals']['home'];
+        }
+
+        return array(
+            'home' => $home_total,
+            'away' => $away_total,
+            'label' => sprintf('Agg %d-%d', $home_total, $away_total),
+            'previous_fixture_id' => (int) ($previous['id'] ?? 0),
+        );
+    }
+
+    private static function normalize_standings_payload($response) {
+        $league = $response['response'][0]['league'] ?? array();
+        $groups = array();
+
+        foreach (($league['standings'] ?? array()) as $group_index => $rows) {
+            $group_name = 'Table';
+
+            foreach ((array) $rows as $row) {
+                if (!empty($row['group'])) {
+                    $group_name = sanitize_text_field($row['group']);
+                    break;
+                }
+            }
+
+            $groups[] = array(
+                'name' => $group_name ?: sprintf('Group %d', $group_index + 1),
+                'rows' => array_map(array(__CLASS__, 'normalize_standing_row'), (array) $rows),
+            );
+        }
+
+        return array(
+            'provider' => 'api-football',
+            'configured' => true,
+            'league' => array(
+                'id' => (int) ($league['id'] ?? 0),
+                'name' => sanitize_text_field($league['name'] ?? ''),
+                'country' => sanitize_text_field($league['country'] ?? ''),
+                'logo' => esc_url_raw($league['logo'] ?? ''),
+                'season' => (int) ($league['season'] ?? 0),
+            ),
+            'groups' => $groups,
+            'updated_at' => gmdate(DATE_ATOM),
+            'source' => 'api-football',
+        );
+    }
+
+    private static function normalize_standing_row($row) {
+        $team = $row['team'] ?? array();
+        $all = $row['all'] ?? array();
+
+        return array(
+            'rank' => (int) ($row['rank'] ?? 0),
+            'team' => array(
+                'id' => (int) ($team['id'] ?? 0),
+                'name' => sanitize_text_field($team['name'] ?? ''),
+                'logo' => esc_url_raw($team['logo'] ?? ''),
+            ),
+            'points' => (int) ($row['points'] ?? 0),
+            'goals_diff' => (int) ($row['goalsDiff'] ?? 0),
+            'group' => sanitize_text_field($row['group'] ?? ''),
+            'form' => sanitize_text_field($row['form'] ?? ''),
+            'played' => (int) ($all['played'] ?? 0),
+            'win' => (int) ($all['win'] ?? 0),
+            'draw' => (int) ($all['draw'] ?? 0),
+            'lose' => (int) ($all['lose'] ?? 0),
+            'goals_for' => (int) ($all['goals']['for'] ?? 0),
+            'goals_against' => (int) ($all['goals']['against'] ?? 0),
+        );
+    }
+
+    private static function store_standings($payload, $ttl) {
+        global $wpdb;
+
+        $league = $payload['league'] ?? array();
+        $league_id = (int) ($league['id'] ?? 0);
+        $season = (int) ($league['season'] ?? 0);
+
+        if (!$league_id || !$season) {
+            return;
+        }
+
+        $table = self::standings_table();
+        $wpdb->delete($table, array('league_id' => $league_id, 'league_season' => $season));
+        $cache_expires_at = gmdate('Y-m-d H:i:s', time() + max(60, (int) $ttl));
+        $updated_at = current_time('mysql', true);
+
+        foreach ($payload['groups'] ?? array() as $group) {
+            $group_name = sanitize_text_field($group['name'] ?? 'Table');
+            foreach ($group['rows'] ?? array() as $row) {
+                $team = $row['team'] ?? array();
+                $wpdb->insert($table, array(
+                    'league_id' => $league_id,
+                    'league_name' => sanitize_text_field($league['name'] ?? ''),
+                    'league_country' => sanitize_text_field($league['country'] ?? ''),
+                    'league_logo' => esc_url_raw($league['logo'] ?? ''),
+                    'league_season' => $season,
+                    'group_name' => $group_name,
+                    'team_id' => (int) ($team['id'] ?? 0),
+                    'team_name' => sanitize_text_field($team['name'] ?? ''),
+                    'team_logo' => esc_url_raw($team['logo'] ?? ''),
+                    'rank_position' => (int) ($row['rank'] ?? 0),
+                    'points' => (int) ($row['points'] ?? 0),
+                    'goals_diff' => (int) ($row['goals_diff'] ?? 0),
+                    'form' => sanitize_text_field($row['form'] ?? ''),
+                    'payload' => wp_json_encode($row),
+                    'cache_expires_at' => $cache_expires_at,
+                    'updated_at' => $updated_at,
+                ));
+            }
+        }
+    }
+
+    private static function stored_standings($league, $season) {
+        global $wpdb;
+
+        $table = self::standings_table();
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM {$table}
+             WHERE league_id = %d AND league_season = %d AND cache_expires_at > %s
+             ORDER BY group_name ASC, rank_position ASC",
+            (int) $league,
+            (int) $season,
+            current_time('mysql', true)
+        ), ARRAY_A);
+
+        if (!$rows) {
+            return null;
+        }
+
+        $groups = array();
+        $league_meta = array(
+            'id' => (int) $rows[0]['league_id'],
+            'name' => $rows[0]['league_name'],
+            'country' => $rows[0]['league_country'],
+            'logo' => $rows[0]['league_logo'],
+            'season' => (int) $rows[0]['league_season'],
+        );
+
+        foreach ($rows as $row) {
+            $group_name = $row['group_name'] ?: 'Table';
+            if (!isset($groups[$group_name])) {
+                $groups[$group_name] = array('name' => $group_name, 'rows' => array());
+            }
+
+            $item = self::decode_json($row['payload']);
+            if ($item) {
+                $groups[$group_name]['rows'][] = $item;
+            }
+        }
+
+        return array(
+            'provider' => 'api-football',
+            'configured' => true,
+            'league' => $league_meta,
+            'groups' => array_values($groups),
+            'updated_at' => mysql_to_rfc3339($rows[0]['updated_at']),
+            'source' => 'database',
+        );
+    }
+
     private static function normalize_fixture($row) {
         $fixture = $row['fixture'] ?? array();
         $league = $row['league'] ?? array();
@@ -2589,6 +3020,7 @@ class Rifnote_Search_Football_API {
                 'country' => sanitize_text_field($league['country'] ?? ''),
                 'logo' => esc_url_raw($league['logo'] ?? ''),
                 'round' => sanitize_text_field($league['round'] ?? ''),
+                'round_clean' => self::clean_round_label($league['round'] ?? ''),
                 'season' => (int) ($league['season'] ?? 0),
             ),
             'home' => array(

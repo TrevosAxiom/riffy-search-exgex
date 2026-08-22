@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { ArrowLeft, ArrowRight, Bookmark, CalendarDays, Clock3, Cloud, CloudRain, CloudSun, DollarSign, ExternalLink, Flame, Globe2, Goal, Home, Landmark, Map as MapIcon, Menu, Newspaper, Pencil, Play, Radio, RotateCcw, Search, Shield, Sun, Trash2, TrendingUp, Trophy, UserRound, Volume2, VolumeX } from 'lucide-react';
-import { getAdInventory, getAdvertiserDashboard, getAnonKey, getDailyBriefing, getFeedDiagnostics, getFootballFinished, getFootballFixtureDetails, getFootballFixtures, getFootballLive, getFootballPlayerProfile, getFootballPlayers, getFootballTeamProfile, getFootballTeams, getFootballTransfers, getFootballUpcoming, getForYou, getHomeLeadStory, getHomeNotes, getLiveMarkets, getLiveWeather, getNotifications, getPublisherStats, getRifnoteAiAnswer, getSocialEmbed, getSourceProfile, getStoryCluster, getSuggestions, getTrendingTopics, getWidget, getWorldWeather, registerDevice, saveAlert, savePreference, searchRifnote, subscribeNewsletter, submitAdvertiserPaymentProof, submitAdvertiserSignup, submitBetaFeedback, submitLegalRequest, submitPublisherSignup, submitPublisherStory, submitSponsorRequest, subscribeNoResult, trackAnalyticsEvent, trackSponsoredClick, trashStory, updateAdvertiserProfile, updateNotification, uploadMedia } from './api.js';
+import { getAdInventory, getAdvertiserDashboard, getAnonKey, getDailyBriefing, getFeedDiagnostics, getFootballFinished, getFootballFixtureDetails, getFootballFixtures, getFootballLive, getFootballPlayerProfile, getFootballPlayers, getFootballStandings, getFootballTeamProfile, getFootballTeams, getFootballTransfers, getFootballUpcoming, getForYou, getHomeLeadStory, getHomeNotes, getLiveMarkets, getLiveWeather, getNotifications, getPublisherStats, getRifnoteAiAnswer, getSocialEmbed, getSourceProfile, getStoryCluster, getSuggestions, getTrendingTopics, getWidget, getWorldWeather, registerDevice, saveAlert, savePreference, searchRifnote, subscribeNewsletter, submitAdvertiserPaymentProof, submitAdvertiserSignup, submitBetaFeedback, submitLegalRequest, submitPublisherSignup, submitPublisherStory, submitSponsorRequest, subscribeNoResult, trackAnalyticsEvent, trackSponsoredClick, trashStory, updateAdvertiserProfile, updateNotification, uploadMedia } from './api.js';
 import { rifnoteCategories, searchTabs } from './data/rifnote.js';
 import './styles/index.css';
 
@@ -1157,6 +1157,8 @@ function FootballSearchMatch({ fixture }) {
         <span>{fixtureTime}</span>
         <span>{matchState}</span>
       </small>
+      <MatchMarkers fixture={fixture} compact />
+      <AggregateChip fixture={fixture} compact />
     </a>
   );
 }
@@ -3277,6 +3279,8 @@ function FootballHub() {
   const [modalFixture, setModalFixture] = useState(null);
   const [matchDetailOpen, setMatchDetailOpen] = useState(false);
   const [footballStories, setFootballStories] = useState([]);
+  const [standingsPayload, setStandingsPayload] = useState({ groups: [] });
+  const [standingsStatus, setStandingsStatus] = useState({ loading: false, error: '' });
   const footballRequestRef = useRef(0);
 
   const refreshFootball = useCallback(({ force = false } = {}) => {
@@ -3420,6 +3424,10 @@ function FootballHub() {
     || nearestFixture
     || allFixtures[0]
     || null;
+  const standingsCompetition = useMemo(() => ({
+    league: focusedFixture?.league?.id || '',
+    season: focusedFixture?.league?.season || '',
+  }), [focusedFixture?.league?.id, focusedFixture?.league?.season]);
   const footballConfigured = !!(datePayload.configured || livePayload.configured || upcomingPayload.configured || finishedPayload.configured);
   const footballStatusMessage = scoreStatus.error || datePayload.message || livePayload.message || upcomingPayload.message || (footballConfigured ? 'Saved fixtures' : 'Setup needed');
   const totalLive = liveFixtures.length;
@@ -3429,6 +3437,35 @@ function FootballHub() {
     setSelectedFixture(fixture);
     setMatchDetailOpen(true);
   }, []);
+
+  useEffect(() => {
+    if (!standingsCompetition.league || !standingsCompetition.season) {
+      setStandingsPayload({ groups: [] });
+      setStandingsStatus({ loading: false, error: '' });
+      return undefined;
+    }
+
+    let cancelled = false;
+    setStandingsStatus({ loading: true, error: '' });
+
+    getFootballStandings(standingsCompetition)
+      .then((payload) => {
+        if (!cancelled) {
+          setStandingsPayload(payload);
+          setStandingsStatus({ loading: false, error: '' });
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setStandingsPayload({ groups: [] });
+          setStandingsStatus({ loading: false, error: error.message });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [standingsCompetition.league, standingsCompetition.season]);
 
   return (
     <main className={`rs-shell compact-page rs-football-page rs-pitchside-page ${matchDetailOpen ? 'is-match-detail-open' : ''}`}>
@@ -3476,9 +3513,89 @@ function FootballHub() {
             message={scoreStatus.error || 'No matches in this view right now.'}
           />
         )}
+        <FootballStandingsPanel payload={standingsPayload} loading={standingsStatus.loading} error={standingsStatus.error} />
       </section>
       <MatchDetailsModal fixture={modalFixture} onClose={() => setModalFixture(null)} />
     </main>
+  );
+}
+
+function FootballStandingsPanel({ payload = {}, loading = false, error = '' }) {
+  const groups = Array.isArray(payload.groups) ? payload.groups : [];
+
+  if (loading && !groups.length) {
+    return (
+      <section className="rs-football-standings is-loading" aria-label="Competition table">
+        <header>
+          <h2>Table</h2>
+          <span>Loading</span>
+        </header>
+      </section>
+    );
+  }
+
+  if (!groups.length) {
+    if (!error && !payload.message) {
+      return null;
+    }
+
+    return (
+      <section className="rs-football-standings is-empty" aria-label="Competition table">
+        <header>
+          <h2>Table</h2>
+          <span>Not available</span>
+        </header>
+        <p>{error || payload.message || 'No league or cup table is stored for this competition yet.'}</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rs-football-standings" aria-label="Competition table">
+      <header>
+        <h2>{payload.league?.name || 'Competition table'}</h2>
+        <span>{payload.season || payload.league?.season || ''}</span>
+      </header>
+      <div className="rs-standings-groups">
+        {groups.slice(0, 4).map((group) => (
+          <div className="rs-standings-group" key={group.name || 'table'}>
+            {group.name && group.name !== 'default' ? <h3>{group.name}</h3> : null}
+            <table className="rs-standings-table">
+              <thead>
+                <tr>
+                  <th>#</th>
+                  <th>Team</th>
+                  <th>P</th>
+                  <th>W</th>
+                  <th>D</th>
+                  <th>L</th>
+                  <th>GD</th>
+                  <th>Pts</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(group.rows || []).slice(0, 18).map((row) => (
+                  <tr key={`${group.name}-${row.team?.id || row.team?.name}`}>
+                    <td>{row.rank}</td>
+                    <td>
+                      {row.team?.logo ? <img src={row.team.logo} alt="" loading="lazy" /> : null}
+                      <span>{shortTeamName(row.team?.name || 'Team', 24)}</span>
+                      {row.form ? <small>{row.form}</small> : null}
+                    </td>
+                    <td>{row.played ?? '-'}</td>
+                    <td>{row.win ?? '-'}</td>
+                    <td>{row.draw ?? '-'}</td>
+                    <td>{row.lose ?? '-'}</td>
+                    <td>{row.goals_diff ?? '-'}</td>
+                    <td><b>{row.points ?? '-'}</b></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -3569,7 +3686,18 @@ function getCompetitionKey(fixture = {}) {
 }
 
 function getFootballRoundLabel(fixture = {}) {
-  const round = String(fixture?.league?.round || fixture?.round || '').trim();
+  const clean = String(fixture?.league?.round_clean || fixture?.round_clean || '').trim();
+
+  if (clean) {
+    return clean;
+  }
+
+  let round = String(fixture?.league?.round || fixture?.round || '').trim();
+  const league = String(fixture?.league?.name || fixture?.watchlist_label || '').trim();
+
+  if (league) {
+    round = round.replace(new RegExp(`^${escapeRegExp(league)}\\s*[-–—]\\s*`, 'i'), '').trim();
+  }
 
   if (!round || /^regular\s+season(?:\s*[-–—]\s*\d+)?$/i.test(round)) {
     return '';
@@ -3578,12 +3706,110 @@ function getFootballRoundLabel(fixture = {}) {
   return round.replace(/\s*[-–—]\s*regular\s+season(?:\s*[-–—]\s*\d+)?/ig, '').trim();
 }
 
+function escapeRegExp(value = '') {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function getFootballCompetitionLabel(fixture = {}, options = {}) {
   const includeRound = options.includeRound !== false;
   const league = fixture?.league?.name || fixture?.watchlist_label || 'Football';
   const round = includeRound ? getFootballRoundLabel(fixture) : '';
 
   return [league, round].filter(Boolean).join(' · ');
+}
+
+function getFixtureStatusMarker(fixture = {}) {
+  const status = String(fixture.status_short || fixture.fixture?.status?.short || '').toUpperCase();
+
+  if (['PEN', 'P'].includes(status)) return 'PK';
+  if (status === 'AET') return 'AET';
+  if (['ET', 'BT'].includes(status)) return 'ET';
+  if (['HT', 'FT'].includes(status)) return status;
+
+  return '';
+}
+
+function getLiveSourceLabel(value = 'Live') {
+  const label = String(value || 'Live').trim();
+  return /api/i.test(label) ? 'Live' : label;
+}
+
+function getFixtureMarkers(fixture = {}, details = {}) {
+  const rows = [
+    ...(Array.isArray(details.markers) ? details.markers : []),
+    ...(Array.isArray(fixture.markers) ? fixture.markers : []),
+  ];
+  const statusMarker = getFixtureStatusMarker(fixture);
+
+  if (statusMarker && !rows.some((row) => String(row.kind || '').toLowerCase() === 'status' && String(row.label || '').toUpperCase() === statusMarker)) {
+    rows.push({ kind: 'status', label: statusMarker, red: true, minute: fixture.elapsed || '' });
+  }
+
+  const seen = new Set();
+
+  return rows
+    .map((row) => ({
+      kind: String(row.kind || row.type || 'marker').toLowerCase(),
+      label: String(row.label || row.detail || row.type || '').trim(),
+      minute: row.minute ?? row.elapsed ?? '',
+      extra: row.extra ?? '',
+      team: row.team?.name || row.team || '',
+      player: row.player?.name || row.player || '',
+      red: row.red !== false,
+    }))
+    .filter((row) => row.label || row.kind)
+    .filter((row) => {
+      const key = `${row.kind}:${row.label}:${row.minute}:${row.team}:${row.player}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((a, b) => Number(a.minute || 999) - Number(b.minute || 999))
+    .slice(0, 8);
+}
+
+function MatchMarkers({ fixture = {}, details = {}, compact = false }) {
+  const markers = getFixtureMarkers(fixture, details);
+
+  if (!markers.length) {
+    return null;
+  }
+
+  return (
+    <div className={`rs-match-markers ${compact ? 'compact' : ''}`} aria-label="Match markers">
+      {markers.map((marker, index) => {
+        const minute = marker.minute ? `${marker.minute}${marker.extra ? `+${marker.extra}` : ''}'` : '';
+        const kind = marker.kind === 'var' ? 'VAR' : marker.kind === 'goal' ? 'Goal' : marker.label.toUpperCase();
+        const title = [minute, kind, marker.team, marker.player].filter(Boolean).join(' · ');
+
+        return (
+          <span className={`rs-match-marker is-${marker.kind} ${marker.red ? 'is-red' : ''}`} key={`${marker.kind}-${marker.label}-${marker.minute}-${index}`} title={title}>
+            {marker.kind === 'goal' ? <Goal size={12} /> : marker.kind === 'var' ? <Radio size={12} /> : null}
+            {minute ? <b>{minute}</b> : null}
+            <em>{kind}</em>
+            {!compact && marker.player ? <small>{marker.player}</small> : null}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+function AggregateChip({ fixture = {}, compact = false }) {
+  const aggregate = fixture.aggregate || {};
+  const label = aggregate.label || (aggregate.home !== undefined && aggregate.away !== undefined ? `Agg ${aggregate.home}-${aggregate.away}` : '');
+  const leg = fixture.leg_label || '';
+
+  if (!label && !leg) {
+    return null;
+  }
+
+  return (
+    <div className={`rs-aggregate-row ${compact ? 'compact' : ''}`}>
+      {leg ? <span>{leg}</span> : null}
+      {label ? <strong>{label}</strong> : null}
+    </div>
+  );
 }
 
 function getCompetitionTabs(fixtures = []) {
@@ -3748,6 +3974,8 @@ function FootballPitchsideRow({ fixture, focused = false, onFocus }) {
         <span style={{ width: `${progress}%` }} />
         <i />
       </div>
+      <MatchMarkers fixture={fixture} compact />
+      <AggregateChip fixture={fixture} compact />
     </button>
   );
 }
@@ -3851,6 +4079,8 @@ function FootballPitchsideDetail({ fixture, loading = false, configured = false,
         <span style={{ width: `${progress}%` }} />
         <i />
       </div>
+      <MatchMarkers fixture={detailedFixture} details={details} />
+      <AggregateChip fixture={detailedFixture} />
       <div className="rs-pitchside-detail-meta">
         <span><CalendarDays size={15} />{formatDate(fixture.date)}</span>
         <span><Shield size={15} />{fixture.referee || 'Referee TBC'}</span>
@@ -3989,6 +4219,8 @@ function FootballMatchTicker({ fixtures = [], loading = false, onSelect }) {
               <b>{fixture.goals?.away ?? '-'}</b>
               <small>{shortTeamName(fixture.away?.name || 'Away')}</small>
             </strong>
+            <MatchMarkers fixture={fixture} compact />
+            <AggregateChip fixture={fixture} compact />
           </button>
         );
       })}
@@ -4053,6 +4285,8 @@ function LiveMatchCard({ fixture, onSelect }) {
         <Badge tone={isLive ? 'danger' : ''}>{matchClock}</Badge>
         <small>{status === 'NS' ? `Kickoff ${formatTime(fixture.date)}` : (fixture.status_long || formatDate(fixture.date))}</small>
       </div>
+      <MatchMarkers fixture={fixture} compact />
+      <AggregateChip fixture={fixture} compact />
       <div className="rs-live-match-details">
         <span>{venue || formatDate(fixture.date)}</span>
         {fixture.referee ? <span>Ref: {fixture.referee}</span> : null}
@@ -4152,6 +4386,9 @@ function MatchDetailsModal({ fixture, onClose }) {
           <strong>{homeGoals} - {awayGoals}</strong>
           <MatchModalTeam team={modalFixture.away} align="right" />
         </div>
+
+        <MatchMarkers fixture={modalFixture} details={details} />
+        <AggregateChip fixture={modalFixture} />
 
         <div className="rs-match-modal-meta">
           <span><b>Status</b>{status}</span>
@@ -5154,6 +5391,10 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
         </div>
         <HomeScoreboardTeam team={fixture.away} align="right" large />
       </a>
+      <div className="rs-home-scoreboard-meta-row">
+        <MatchMarkers fixture={fixture} compact />
+        <AggregateChip fixture={fixture} compact />
+      </div>
       {goalScorers.length ? <FeaturedGoalScorers goals={goalScorers} /> : null}
       {venue ? <div className="rs-home-football-venue">Venue: <b>{venue}</b></div> : null}
       {canTestGoalAnimation ? (
@@ -6890,7 +7131,7 @@ function SignalCard({ title, icon, items = [], live = false, type = 'signal' }) 
         const nextRows = normalizeSignalItems(payload?.items);
         setRows(nextRows);
 
-        setSourceLabel(payload?.source_label || payload?.provider || 'Live');
+        setSourceLabel(getLiveSourceLabel(payload?.source_label || payload?.provider || 'Live'));
         setUpdatedAt(payload?.updated_at ? new Date(payload.updated_at) : new Date());
         setPollMs(Math.max(300000, Math.min(1800000, Number(payload?.poll_after || 900) * 1000)));
       })
@@ -6928,7 +7169,7 @@ function SignalCard({ title, icon, items = [], live = false, type = 'signal' }) 
               return;
             }
             setRows(normalizeSignalItems(payload?.items));
-            setSourceLabel(payload?.source_label || payload?.provider || 'Live');
+            setSourceLabel(getLiveSourceLabel(payload?.source_label || payload?.provider || 'Live'));
             setUpdatedAt(payload?.updated_at ? new Date(payload.updated_at) : new Date());
             setPollMs(Math.max(300000, Math.min(1800000, Number(payload?.poll_after || 900) * 1000)));
           })

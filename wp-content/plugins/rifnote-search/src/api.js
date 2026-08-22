@@ -310,6 +310,23 @@ export async function getFootballFixtures({ date = '', league = '', season = '',
   return response.json();
 }
 
+export async function getFootballStandings({ league = '', season = '', force = false } = {}) {
+  const baseUrl = restBaseUrl();
+
+  if (!baseUrl) {
+    return { provider: 'not-configured', configured: false, updated_at: new Date().toISOString(), groups: [] };
+  }
+
+  const url = new URL('rifnote/v1/football/standings', baseUrl);
+  if (league) url.searchParams.set('league', league);
+  if (season) url.searchParams.set('season', season);
+  if (force) url.searchParams.set('force', '1');
+
+  const response = await fetch(url, { headers: headers() });
+  if (!response.ok) throw new Error(`Rifnote football standings failed: ${response.status}`);
+  return response.json();
+}
+
 export async function getFootballWatchlist({ date = '', force = false } = {}) {
   const baseUrl = restBaseUrl();
 
