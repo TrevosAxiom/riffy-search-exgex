@@ -359,6 +359,17 @@ class Rifnote_Search_REST_API {
             ),
         ));
 
+        register_rest_route('rifnote/v1', '/football/competition', array(
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => array(__CLASS__, 'football_competition'),
+            'permission_callback' => '__return_true',
+            'args' => array(
+                'league' => array('sanitize_callback' => 'absint'),
+                'season' => array('sanitize_callback' => 'absint'),
+                'force' => array('sanitize_callback' => 'rest_sanitize_boolean'),
+            ),
+        ));
+
         register_rest_route('rifnote/v1', '/football/upcoming', array(
             'methods' => WP_REST_Server::READABLE,
             'callback' => array(__CLASS__, 'football_upcoming'),
@@ -1599,6 +1610,20 @@ class Rifnote_Search_REST_API {
         }
 
         return rest_ensure_response(Rifnote_Search_Football_API::standings_payload(
+            (int) $request->get_param('league'),
+            (int) $request->get_param('season'),
+            (bool) $request->get_param('force')
+        ));
+    }
+
+    public static function football_competition(WP_REST_Request $request) {
+        $rate = Rifnote_Search_Hardening::rate_limit('football_competition', 120, MINUTE_IN_SECONDS);
+
+        if (is_wp_error($rate)) {
+            return $rate;
+        }
+
+        return rest_ensure_response(Rifnote_Search_Football_API::competition_payload(
             (int) $request->get_param('league'),
             (int) $request->get_param('season'),
             (bool) $request->get_param('force')

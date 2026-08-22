@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { ArrowLeft, ArrowRight, Bookmark, CalendarDays, Clock3, Cloud, CloudRain, CloudSun, DollarSign, ExternalLink, Flame, Globe2, Goal, Home, Landmark, Map as MapIcon, Menu, Newspaper, Pencil, Play, Radio, RotateCcw, Search, Shield, Sun, Trash2, TrendingUp, Trophy, UserRound, Volume2, VolumeX } from 'lucide-react';
-import { getAdInventory, getAdvertiserDashboard, getAnonKey, getDailyBriefing, getFeedDiagnostics, getFootballFinished, getFootballFixtureDetails, getFootballFixtures, getFootballLive, getFootballPlayerProfile, getFootballPlayers, getFootballStandings, getFootballTeamProfile, getFootballTeams, getFootballTransfers, getFootballUpcoming, getForYou, getHomeLeadStory, getHomeNotes, getLiveMarkets, getLiveWeather, getNotifications, getPublisherStats, getRifnoteAiAnswer, getSocialEmbed, getSourceProfile, getStoryCluster, getSuggestions, getTrendingTopics, getWidget, getWorldWeather, registerDevice, saveAlert, savePreference, searchRifnote, subscribeNewsletter, submitAdvertiserPaymentProof, submitAdvertiserSignup, submitBetaFeedback, submitLegalRequest, submitPublisherSignup, submitPublisherStory, submitSponsorRequest, subscribeNoResult, trackAnalyticsEvent, trackSponsoredClick, trashStory, updateAdvertiserProfile, updateNotification, uploadMedia } from './api.js';
+import { getAdInventory, getAdvertiserDashboard, getAnonKey, getDailyBriefing, getFeedDiagnostics, getFootballCompetition, getFootballFinished, getFootballFixtureDetails, getFootballFixtures, getFootballLive, getFootballPlayerProfile, getFootballPlayers, getFootballTeamProfile, getFootballTeams, getFootballTransfers, getFootballUpcoming, getForYou, getHomeLeadStory, getHomeNotes, getLiveMarkets, getLiveWeather, getNotifications, getPublisherStats, getRifnoteAiAnswer, getSocialEmbed, getSourceProfile, getStoryCluster, getSuggestions, getTrendingTopics, getWidget, getWorldWeather, registerDevice, saveAlert, savePreference, searchRifnote, subscribeNewsletter, submitAdvertiserPaymentProof, submitAdvertiserSignup, submitBetaFeedback, submitLegalRequest, submitPublisherSignup, submitPublisherStory, submitSponsorRequest, subscribeNoResult, trackAnalyticsEvent, trackSponsoredClick, trashStory, updateAdvertiserProfile, updateNotification, uploadMedia } from './api.js';
 import { rifnoteCategories, searchTabs } from './data/rifnote.js';
 import './styles/index.css';
 
@@ -467,6 +467,16 @@ function searchUrl(query = '', extra = {}) {
   return url.href;
 }
 
+function footballCompetitionUrl(league = '', season = '') {
+  const configured = window.RIFNOTE_SEARCH?.footballCompetitionsUrl || appPageUrl('football-competitions');
+  const url = new URL(configured, window.location.origin);
+
+  if (league) url.searchParams.set('league', league);
+  if (season) url.searchParams.set('season', season);
+
+  return url.href;
+}
+
 function useSearchState() {
   const params = new URLSearchParams(window.location.search);
   const categoryParam = params.get('category') ?? 'All News';
@@ -742,6 +752,10 @@ function App({ mode }) {
 
   if (mode === 'football-hub') {
     return <FootballHub />;
+  }
+
+  if (mode === 'football-competitions') {
+    return withLiveRail(<FootballCompetitionsPage />);
   }
 
   if (mode === 'team-search') {
@@ -3279,8 +3293,6 @@ function FootballHub() {
   const [modalFixture, setModalFixture] = useState(null);
   const [matchDetailOpen, setMatchDetailOpen] = useState(false);
   const [footballStories, setFootballStories] = useState([]);
-  const [standingsPayload, setStandingsPayload] = useState({ groups: [] });
-  const [standingsStatus, setStandingsStatus] = useState({ loading: false, error: '' });
   const footballRequestRef = useRef(0);
 
   const refreshFootball = useCallback(({ force = false } = {}) => {
@@ -3348,15 +3360,15 @@ function FootballHub() {
     [datePayload.fixtures, selectedDate],
   );
   const liveFixtures = useMemo(
-    () => mergeFixtures([...(livePayload.fixtures ?? []).filter((fixture) => isFixtureOnInputDate(fixture, selectedDate)), ...dateFixtures.filter(isFixtureLiveNow)]),
+    () => mergeFixtures([...(livePayload.fixtures ?? []).filter((fixture) => isFixtureOnInputDate(fixture, selectedDate) && isFixtureLiveNow(fixture)), ...dateFixtures.filter(isFixtureLiveNow)]),
     [dateFixtures, livePayload.fixtures, selectedDate],
   );
   const upcomingFixtures = useMemo(
-    () => mergeFixtures([...(upcomingPayload.fixtures ?? []).filter((fixture) => isFixtureOnInputDate(fixture, selectedDate)), ...dateFixtures.filter((fixture) => ['NS', 'TBD'].includes(fixture.status_short || ''))]),
+    () => mergeFixtures([...(upcomingPayload.fixtures ?? []).filter((fixture) => isFixtureOnInputDate(fixture, selectedDate) && isFixtureUpcoming(fixture)), ...dateFixtures.filter(isFixtureUpcoming)]),
     [dateFixtures, upcomingPayload.fixtures, selectedDate],
   );
   const finishedFixtures = useMemo(
-    () => mergeFixtures([...(finishedPayload.fixtures ?? []).filter((fixture) => isFixtureOnInputDate(fixture, selectedDate)), ...dateFixtures.filter((fixture) => ['FT', 'AET', 'PEN'].includes(fixture.status_short || ''))]),
+    () => mergeFixtures([...(finishedPayload.fixtures ?? []).filter((fixture) => isFixtureOnInputDate(fixture, selectedDate) && isFixtureFinishedResult(fixture)), ...dateFixtures.filter(isFixtureFinishedResult)]),
     [dateFixtures, finishedPayload.fixtures, selectedDate],
   );
   const allFixtures = useMemo(() => mergeFixtures([...liveFixtures, ...upcomingFixtures, ...finishedFixtures]), [liveFixtures, upcomingFixtures, finishedFixtures]);
@@ -3424,10 +3436,6 @@ function FootballHub() {
     || nearestFixture
     || allFixtures[0]
     || null;
-  const standingsCompetition = useMemo(() => ({
-    league: focusedFixture?.league?.id || '',
-    season: focusedFixture?.league?.season || '',
-  }), [focusedFixture?.league?.id, focusedFixture?.league?.season]);
   const footballConfigured = !!(datePayload.configured || livePayload.configured || upcomingPayload.configured || finishedPayload.configured);
   const footballStatusMessage = scoreStatus.error || datePayload.message || livePayload.message || upcomingPayload.message || (footballConfigured ? 'Saved fixtures' : 'Setup needed');
   const totalLive = liveFixtures.length;
@@ -3437,35 +3445,6 @@ function FootballHub() {
     setSelectedFixture(fixture);
     setMatchDetailOpen(true);
   }, []);
-
-  useEffect(() => {
-    if (!standingsCompetition.league || !standingsCompetition.season) {
-      setStandingsPayload({ groups: [] });
-      setStandingsStatus({ loading: false, error: '' });
-      return undefined;
-    }
-
-    let cancelled = false;
-    setStandingsStatus({ loading: true, error: '' });
-
-    getFootballStandings(standingsCompetition)
-      .then((payload) => {
-        if (!cancelled) {
-          setStandingsPayload(payload);
-          setStandingsStatus({ loading: false, error: '' });
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          setStandingsPayload({ groups: [] });
-          setStandingsStatus({ loading: false, error: error.message });
-        }
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [standingsCompetition.league, standingsCompetition.season]);
 
   return (
     <main className={`rs-shell compact-page rs-football-page rs-pitchside-page ${matchDetailOpen ? 'is-match-detail-open' : ''}`}>
@@ -3513,14 +3492,13 @@ function FootballHub() {
             message={scoreStatus.error || 'No matches in this view right now.'}
           />
         )}
-        <FootballStandingsPanel payload={standingsPayload} loading={standingsStatus.loading} error={standingsStatus.error} />
       </section>
       <MatchDetailsModal fixture={modalFixture} onClose={() => setModalFixture(null)} />
     </main>
   );
 }
 
-function FootballStandingsPanel({ payload = {}, loading = false, error = '' }) {
+function FootballStandingsPanel({ payload = {}, loading = false, error = '', maxGroups = 4, maxRows = 18 }) {
   const groups = Array.isArray(payload.groups) ? payload.groups : [];
 
   if (loading && !groups.length) {
@@ -3557,7 +3535,7 @@ function FootballStandingsPanel({ payload = {}, loading = false, error = '' }) {
         <span>{payload.season || payload.league?.season || ''}</span>
       </header>
       <div className="rs-standings-groups">
-        {groups.slice(0, 4).map((group) => (
+        {groups.slice(0, maxGroups).map((group) => (
           <div className="rs-standings-group" key={group.name || 'table'}>
             {group.name && group.name !== 'default' ? <h3>{group.name}</h3> : null}
             <table className="rs-standings-table">
@@ -3574,7 +3552,7 @@ function FootballStandingsPanel({ payload = {}, loading = false, error = '' }) {
                 </tr>
               </thead>
               <tbody>
-                {(group.rows || []).slice(0, 18).map((row) => (
+                {(group.rows || []).slice(0, maxRows).map((row) => (
                   <tr key={`${group.name}-${row.team?.id || row.team?.name}`}>
                     <td>{row.rank}</td>
                     <td>
@@ -3593,6 +3571,132 @@ function FootballStandingsPanel({ payload = {}, loading = false, error = '' }) {
               </tbody>
             </table>
           </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function FootballCompetitionsPage() {
+  const initialParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  const [selection, setSelection] = useState({
+    league: initialParams.get('league') || '',
+    season: initialParams.get('season') || '',
+  });
+  const [payload, setPayload] = useState({ competitions: [], standings: { groups: [] }, top_scorers: { players: [] } });
+  const [status, setStatus] = useState({ loading: true, error: '' });
+
+  useEffect(() => {
+    let cancelled = false;
+    setStatus({ loading: true, error: '' });
+
+    getFootballCompetition(selection)
+      .then((nextPayload) => {
+        if (cancelled) {
+          return;
+        }
+
+        setPayload(nextPayload || { competitions: [], standings: { groups: [] }, top_scorers: { players: [] } });
+        setStatus({ loading: false, error: '' });
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          setPayload({ competitions: [], standings: { groups: [] }, top_scorers: { players: [] } });
+          setStatus({ loading: false, error: error.message || 'Competition data unavailable.' });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selection.league, selection.season]);
+
+  const competitions = Array.isArray(payload.competitions) ? payload.competitions : [];
+  const league = payload.league || payload.standings?.league || payload.top_scorers?.league || {};
+  const selectedKey = `${selection.league || league.id || ''}:${selection.season || league.season || ''}`;
+
+  const handleCompetitionChange = (event) => {
+    const [leagueId, season] = String(event.target.value || '').split(':');
+    const nextSelection = { league: leagueId || '', season: season || '' };
+    const nextUrl = footballCompetitionUrl(nextSelection.league, nextSelection.season);
+    window.history.replaceState({}, '', nextUrl);
+    setSelection(nextSelection);
+  };
+
+  return (
+    <main className="rs-shell compact-page rs-competition-page">
+      <section className="rs-competition-hero">
+        <div>
+          <Badge>Competition room</Badge>
+          <h1>{league?.name || 'Tables and scorers'}</h1>
+          <p>League tables, cup group tables, and the players cooking in front of goal.</p>
+        </div>
+        <label>
+          <span>Competition</span>
+          <select value={selectedKey} onChange={handleCompetitionChange}>
+            {competitions.length ? competitions.map((competition) => (
+              <option key={`${competition.league_id}:${competition.season}`} value={`${competition.league_id}:${competition.season}`}>
+                {competition.label || `League ${competition.league_id}`} · {competition.season}
+              </option>
+            )) : (
+              <option value={selectedKey}>{league?.name || 'Configured competition'}</option>
+            )}
+          </select>
+        </label>
+      </section>
+      {status.error ? <p className="rs-competition-alert">{status.error}</p> : null}
+      <section className="rs-competition-grid">
+        <FootballStandingsPanel payload={payload.standings || payload} loading={status.loading} error={status.error} maxGroups={12} maxRows={30} />
+        <FootballTopScorersPanel payload={payload.top_scorers} loading={status.loading} />
+      </section>
+    </main>
+  );
+}
+
+function FootballTopScorersPanel({ payload = {}, loading = false }) {
+  const players = Array.isArray(payload?.players) ? payload.players : [];
+
+  if (loading && !players.length) {
+    return (
+      <section className="rs-football-scorers is-loading" aria-label="Top scorers">
+        <header>
+          <h2>Top scorers</h2>
+          <span>Loading</span>
+        </header>
+      </section>
+    );
+  }
+
+  if (!players.length) {
+    return (
+      <section className="rs-football-scorers is-empty" aria-label="Top scorers">
+        <header>
+          <h2>Top scorers</h2>
+          <span>Not available</span>
+        </header>
+        <p>{payload?.message || 'No scorers are stored for this competition yet.'}</p>
+      </section>
+    );
+  }
+
+  return (
+    <section className="rs-football-scorers" aria-label="Top scorers">
+      <header>
+        <h2>Top scorers</h2>
+        <span>{payload.league?.season || ''}</span>
+      </header>
+      <div className="rs-scorers-list">
+        {players.slice(0, 20).map((row, index) => (
+          <article key={`${row.player?.id || row.player?.name}-${row.team?.id || row.team?.name}`}>
+            <b>{index + 1}</b>
+            {row.player?.photo ? <img src={row.player.photo} alt="" loading="lazy" /> : <UserRound size={22} />}
+            <div>
+              <strong>{row.player?.name || 'Player'}</strong>
+              <span>{row.team?.logo ? <img src={row.team.logo} alt="" loading="lazy" /> : null}{row.team?.name || 'Team'}</span>
+            </div>
+            <em>{row.goals ?? 0}</em>
+            <small>{row.assists ?? 0} ast · {row.appearances ?? 0} app</small>
+          </article>
         ))}
       </div>
     </section>
@@ -3659,15 +3763,15 @@ function getFixtureDeepLinkId(fixture = {}) {
 function getFixtureBoardKey(fixture = {}) {
   const status = String(fixture.status_short || '').toUpperCase();
 
-  if (['FT', 'AET', 'PEN'].includes(status)) {
+  if (isFixtureFinishedResult(fixture)) {
     return 'finished';
   }
 
-  if (['NS', 'TBD'].includes(status)) {
+  if (isFixtureUpcoming(fixture)) {
     return 'upcoming';
   }
 
-  return 'live';
+  return isFixtureLiveNow(fixture) ? 'live' : 'all';
 }
 
 function isFixtureOnInputDate(fixture = {}, selectedDate = '') {
@@ -3881,7 +3985,7 @@ function getFixtureClock(fixture = {}) {
 }
 
 function getFixtureProgress(fixture = {}) {
-  if (fixture.status_short === 'FT') {
+  if (isFixtureFinishedResult(fixture)) {
     return 100;
   }
 
@@ -3893,8 +3997,23 @@ function getFixtureProgress(fixture = {}) {
 }
 
 function isFixtureLiveNow(fixture = {}) {
-  const status = fixture.status_short || '';
-  return Boolean(fixture.elapsed || (!['FT', 'AET', 'PEN', 'NS', 'PST', 'CANC'].includes(status) && status));
+  const status = String(fixture.status_short || fixture.fixture?.status?.short || '').toUpperCase();
+  return ['1H', 'HT', '2H', 'ET', 'BT', 'P', 'SUSP', 'INT', 'LIVE'].includes(status);
+}
+
+function isFixtureUpcoming(fixture = {}) {
+  const status = String(fixture.status_short || fixture.fixture?.status?.short || '').toUpperCase();
+  return ['NS', 'TBD'].includes(status);
+}
+
+function isFixtureFinishedResult(fixture = {}) {
+  const status = String(fixture.status_short || fixture.fixture?.status?.short || '').toUpperCase();
+  return ['FT', 'AET', 'PEN'].includes(status);
+}
+
+function isFixtureStaleOrCancelled(fixture = {}) {
+  const status = String(fixture.status_short || fixture.fixture?.status?.short || '').toUpperCase();
+  return ['PST', 'CANC', 'ABD', 'AWD', 'WO'].includes(status);
 }
 
 function FootballPitchsideList({ fixtures = [], loading = false, mode = 'live', nearestFixture = null, focusedFixture = null, onFocus }) {
@@ -4085,6 +4204,12 @@ function FootballPitchsideDetail({ fixture, loading = false, configured = false,
         <span><CalendarDays size={15} />{formatDate(fixture.date)}</span>
         <span><Shield size={15} />{fixture.referee || 'Referee TBC'}</span>
       </div>
+      {fixture.league?.id && fixture.league?.season ? (
+        <a className="rs-competition-room-link" href={footballCompetitionUrl(fixture.league.id, fixture.league.season)}>
+          View table and top scorers
+          <ArrowRight size={16} />
+        </a>
+      ) : null}
       <div className="rs-pitchside-inline-room">
         <MatchDetailsSections
           activeTab={activeTab}
@@ -7014,8 +7139,8 @@ function LiveScores({ live = false }) {
       .then(([liveResult, upcomingResult]) => {
         const livePayload = liveResult.status === 'fulfilled' ? liveResult.value : {};
         const upcomingPayload = upcomingResult.status === 'fulfilled' ? upcomingResult.value : {};
-        const liveFixtures = livePayload.fixtures ?? [];
-        const upcomingFixtures = upcomingPayload.fixtures ?? [];
+        const liveFixtures = (livePayload.fixtures ?? []).filter(isFixtureLiveNow);
+        const upcomingFixtures = (upcomingPayload.fixtures ?? []).filter(isFixtureUpcoming);
         const selectedPayload = liveFixtures.length ? livePayload : upcomingPayload;
         const selectedFixtures = liveFixtures.length ? liveFixtures : upcomingFixtures;
         setFixtures(selectedFixtures);

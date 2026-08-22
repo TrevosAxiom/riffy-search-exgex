@@ -41,6 +41,11 @@ class Rifnote_Search_Football_API {
         return $wpdb->prefix . 'rifnote_football_standings';
     }
 
+    public static function scorers_table() {
+        global $wpdb;
+        return $wpdb->prefix . 'rifnote_football_scorers';
+    }
+
     public static function install() {
         global $wpdb;
 
@@ -50,6 +55,7 @@ class Rifnote_Search_Football_API {
         $usage = self::usage_table();
         $fixtures = self::fixtures_table();
         $standings = self::standings_table();
+        $scorers = self::scorers_table();
 
         dbDelta("CREATE TABLE {$usage} (
             id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -131,6 +137,33 @@ class Rifnote_Search_Football_API {
             KEY cache_expires_at (cache_expires_at)
         ) {$charset_collate};");
 
+        dbDelta("CREATE TABLE {$scorers} (
+            id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+            league_id BIGINT UNSIGNED NOT NULL,
+            league_name VARCHAR(190) NULL,
+            league_country VARCHAR(100) NULL,
+            league_logo VARCHAR(255) NULL,
+            league_season INT DEFAULT 0,
+            player_id BIGINT UNSIGNED DEFAULT 0,
+            player_name VARCHAR(190) NULL,
+            player_photo VARCHAR(255) NULL,
+            team_id BIGINT UNSIGNED DEFAULT 0,
+            team_name VARCHAR(190) NULL,
+            team_logo VARCHAR(255) NULL,
+            goals INT DEFAULT 0,
+            assists INT DEFAULT 0,
+            appearances INT DEFAULT 0,
+            payload LONGTEXT NOT NULL,
+            cache_expires_at DATETIME NOT NULL,
+            updated_at DATETIME NOT NULL,
+            PRIMARY KEY  (id),
+            UNIQUE KEY league_player_team (league_id, league_season, player_id, team_id),
+            KEY league_id (league_id),
+            KEY league_season (league_season),
+            KEY goals (goals),
+            KEY cache_expires_at (cache_expires_at)
+        ) {$charset_collate};");
+
         update_option('rifnote_search_football_db_version', RIFNOTE_SEARCH_VERSION);
     }
 
@@ -140,8 +173,9 @@ class Rifnote_Search_Football_API {
         $usage = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', self::usage_table()));
         $fixtures = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', self::fixtures_table()));
         $standings = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', self::standings_table()));
+        $scorers = $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', self::scorers_table()));
 
-        if (get_option('rifnote_search_football_db_version') !== RIFNOTE_SEARCH_VERSION || !$usage || !$fixtures || !$standings) {
+        if (get_option('rifnote_search_football_db_version') !== RIFNOTE_SEARCH_VERSION || !$usage || !$fixtures || !$standings || !$scorers) {
             self::install();
         }
     }
@@ -241,6 +275,31 @@ class Rifnote_Search_Football_API {
         }
 
         return array_slice($competitions, 0, 50);
+    }
+
+    private static function resolve_competition($league = 0, $season = 0, $settings = null) {
+        $settings = is_array($settings) ? $settings : self::settings();
+        $league = absint($league);
+        $season = absint($season);
+
+        foreach (($settings['competitions'] ?? array()) as $competition) {
+            $competition_league = absint($competition['league_id'] ?? 0);
+            $competition_season = absint($competition['season'] ?? 0);
+
+            if ($league && $season && $competition_league === $league && $competition_season === $season) {
+                return $competition;
+            }
+        }
+
+        if ($league && $season) {
+            return array(
+                'league_id' => $league,
+                'season' => $season,
+                'label' => sprintf(__('League %1$d %2$d', 'rifnote-search'), $league, $season),
+            );
+        }
+
+        return $settings['competitions'][0] ?? array();
     }
 
     public static function team_watchlist() {
@@ -1067,6 +1126,84 @@ class Rifnote_Search_Football_API {
             'updated_at' => gmdate(DATE_ATOM),
             'source' => 'database',
             'message' => __('No table is stored for this competition yet. Some cup rounds do not expose league-style standings.', 'rifnote-search'),
+        );
+    }
+
+    public static function competition_payload($league = 0, $season = 0, $force = false) {
+        self::maybe_install();
+
+        $settings = self::settings();
+        $competition = self::resolve_competition($league, $season, $settings);
+        $league = (int) ($competition['league_id'] ?? $league);
+        $season = (int) ($competition['season'] ?? $season);
+
+        $standings = self::standings_payload($league, $season, $force);
+        $scorers = self::top_scorers_payload($league, $season, $force);
+        $league_meta = !empty($standings['league']) ? $standings['league'] : ($scorers['league'] ?? array());
+
+        return array(
+            'provider' => !empty($settings['api_key']) ? 'api-football' : 'not-configured',
+            'configured' => !empty($settings['api_key']),
+            'league' => $league_meta,
+            'season' => (int) ($league_meta['season'] ?? $season),
+            'standings' => $standings,
+            'top_scorers' => $scorers,
+            'competitions' => $settings['competitions'],
+            'updated_at' => gmdate(DATE_ATOM),
+            'source' => 'database',
+        );
+    }
+
+    public static function top_scorers_payload($league = 0, $season = 0, $force = false) {
+        self::maybe_install();
+
+        $settings = self::settings();
+        $competition = self::resolve_competition($league, $season, $settings);
+        $league = (int) ($competition['league_id'] ?? 0);
+        $season = (int) ($competition['season'] ?? 0);
+
+        if (!$league || !$season) {
+            return array(
+                'provider' => empty($settings['api_key']) ? 'not-configured' : 'api-football',
+                'configured' => !empty($settings['api_key']),
+                'league' => null,
+                'players' => array(),
+                'updated_at' => gmdate(DATE_ATOM),
+                'source' => 'database',
+                'message' => __('Choose a configured league or cup to load scorers.', 'rifnote-search'),
+            );
+        }
+
+        if (!$force) {
+            $cached = self::stored_top_scorers($league, $season);
+            if ($cached) {
+                return $cached;
+            }
+        }
+
+        if (!empty($settings['api_key'])) {
+            $response = self::request('/players/topscorers', array(
+                'league' => $league,
+                'season' => $season,
+            ));
+
+            if (!is_wp_error($response)) {
+                $normalized = self::normalize_top_scorers_payload($response);
+                if (!empty($normalized['players'])) {
+                    self::store_top_scorers($normalized, $settings['fixture_cache_ttl']);
+                    return self::stored_top_scorers($league, $season) ?: $normalized;
+                }
+            }
+        }
+
+        return array(
+            'provider' => empty($settings['api_key']) ? 'not-configured' : 'api-football',
+            'configured' => !empty($settings['api_key']),
+            'league' => array('id' => $league, 'season' => $season),
+            'players' => array(),
+            'updated_at' => gmdate(DATE_ATOM),
+            'source' => 'database',
+            'message' => __('No top scorers are stored for this competition yet.', 'rifnote-search'),
         );
     }
 
@@ -2139,7 +2276,7 @@ class Rifnote_Search_Football_API {
 
         return array_values(array_filter((array) $fixtures, function ($fixture) use ($now, $until) {
             $timestamp = (int) ($fixture['timestamp'] ?? 0);
-            $status = (string) ($fixture['status_short'] ?? '');
+            $status = strtoupper((string) ($fixture['status_short'] ?? ''));
 
             if (!$timestamp || !in_array($status, self::upcoming_statuses(), true)) {
                 return false;
@@ -2156,7 +2293,7 @@ class Rifnote_Search_Football_API {
 
         return array_values(array_filter((array) $fixtures, function ($fixture) use ($started_after, $starts_before) {
             $timestamp = (int) ($fixture['timestamp'] ?? 0);
-            $status = (string) ($fixture['status_short'] ?? '');
+            $status = strtoupper((string) ($fixture['status_short'] ?? ''));
 
             if (!$timestamp || !in_array($status, self::live_statuses(), true)) {
                 return false;
@@ -2980,6 +3117,156 @@ class Rifnote_Search_Football_API {
             'configured' => true,
             'league' => $league_meta,
             'groups' => array_values($groups),
+            'updated_at' => mysql_to_rfc3339($rows[0]['updated_at']),
+            'source' => 'database',
+        );
+    }
+
+    private static function normalize_top_scorers_payload($response) {
+        $players = array();
+        $league_meta = array();
+
+        foreach (($response['response'] ?? array()) as $row) {
+            $normalized = self::normalize_top_scorer_row($row);
+
+            if (!$normalized) {
+                continue;
+            }
+
+            if (empty($league_meta) && !empty($normalized['league'])) {
+                $league_meta = $normalized['league'];
+            }
+
+            $players[] = $normalized;
+        }
+
+        return array(
+            'provider' => 'api-football',
+            'configured' => true,
+            'league' => $league_meta ?: null,
+            'players' => $players,
+            'updated_at' => gmdate(DATE_ATOM),
+            'source' => 'api-football',
+        );
+    }
+
+    private static function normalize_top_scorer_row($row) {
+        $player = $row['player'] ?? array();
+        $statistics = $row['statistics'][0] ?? array();
+        $team = $statistics['team'] ?? array();
+        $league = $statistics['league'] ?? array();
+        $games = $statistics['games'] ?? array();
+        $goals = $statistics['goals'] ?? array();
+
+        $player_id = (int) ($player['id'] ?? 0);
+        $player_name = sanitize_text_field($player['name'] ?? '');
+
+        if (!$player_id && '' === $player_name) {
+            return null;
+        }
+
+        return array(
+            'player' => array(
+                'id' => $player_id,
+                'name' => $player_name,
+                'photo' => esc_url_raw($player['photo'] ?? ''),
+            ),
+            'team' => array(
+                'id' => (int) ($team['id'] ?? 0),
+                'name' => sanitize_text_field($team['name'] ?? ''),
+                'logo' => esc_url_raw($team['logo'] ?? ''),
+            ),
+            'league' => array(
+                'id' => (int) ($league['id'] ?? 0),
+                'name' => sanitize_text_field($league['name'] ?? ''),
+                'country' => sanitize_text_field($league['country'] ?? ''),
+                'logo' => esc_url_raw($league['logo'] ?? ''),
+                'season' => (int) ($league['season'] ?? 0),
+            ),
+            'goals' => (int) ($goals['total'] ?? 0),
+            'assists' => isset($goals['assists']) ? (int) $goals['assists'] : 0,
+            'appearances' => isset($games['appearences']) ? (int) $games['appearences'] : (int) ($games['appearances'] ?? 0),
+        );
+    }
+
+    private static function store_top_scorers($payload, $ttl) {
+        global $wpdb;
+
+        $league = $payload['league'] ?? array();
+        $league_id = (int) ($league['id'] ?? 0);
+        $season = (int) ($league['season'] ?? 0);
+
+        if (!$league_id || !$season) {
+            return;
+        }
+
+        $table = self::scorers_table();
+        $wpdb->delete($table, array('league_id' => $league_id, 'league_season' => $season));
+        $cache_expires_at = gmdate('Y-m-d H:i:s', time() + max(60, (int) $ttl));
+        $updated_at = current_time('mysql', true);
+
+        foreach ($payload['players'] ?? array() as $row) {
+            $player = $row['player'] ?? array();
+            $team = $row['team'] ?? array();
+
+            $wpdb->insert($table, array(
+                'league_id' => $league_id,
+                'league_name' => sanitize_text_field($league['name'] ?? ''),
+                'league_country' => sanitize_text_field($league['country'] ?? ''),
+                'league_logo' => esc_url_raw($league['logo'] ?? ''),
+                'league_season' => $season,
+                'player_id' => (int) ($player['id'] ?? 0),
+                'player_name' => sanitize_text_field($player['name'] ?? ''),
+                'player_photo' => esc_url_raw($player['photo'] ?? ''),
+                'team_id' => (int) ($team['id'] ?? 0),
+                'team_name' => sanitize_text_field($team['name'] ?? ''),
+                'team_logo' => esc_url_raw($team['logo'] ?? ''),
+                'goals' => (int) ($row['goals'] ?? 0),
+                'assists' => (int) ($row['assists'] ?? 0),
+                'appearances' => (int) ($row['appearances'] ?? 0),
+                'payload' => wp_json_encode($row),
+                'cache_expires_at' => $cache_expires_at,
+                'updated_at' => $updated_at,
+            ));
+        }
+    }
+
+    private static function stored_top_scorers($league, $season) {
+        global $wpdb;
+
+        $table = self::scorers_table();
+        $rows = $wpdb->get_results($wpdb->prepare(
+            "SELECT * FROM {$table}
+             WHERE league_id = %d AND league_season = %d AND cache_expires_at > %s
+             ORDER BY goals DESC, assists DESC, player_name ASC",
+            (int) $league,
+            (int) $season,
+            current_time('mysql', true)
+        ), ARRAY_A);
+
+        if (!$rows) {
+            return null;
+        }
+
+        $players = array();
+        foreach ($rows as $row) {
+            $item = self::decode_json($row['payload']);
+            if ($item) {
+                $players[] = $item;
+            }
+        }
+
+        return array(
+            'provider' => 'api-football',
+            'configured' => true,
+            'league' => array(
+                'id' => (int) $rows[0]['league_id'],
+                'name' => $rows[0]['league_name'],
+                'country' => $rows[0]['league_country'],
+                'logo' => $rows[0]['league_logo'],
+                'season' => (int) $rows[0]['league_season'],
+            ),
+            'players' => $players,
             'updated_at' => mysql_to_rfc3339($rows[0]['updated_at']),
             'source' => 'database',
         );

@@ -15,6 +15,7 @@ class Rifnote_Search_Pages {
             'submit-news' => array('title' => __('Submit News', 'rifnote-search'), 'mode' => 'publisher-submit', 'shortcode' => 'rifnote_publisher_submit'),
             'publisher-dashboard' => array('title' => __('Publisher Dashboard', 'rifnote-search'), 'mode' => 'publisher-dashboard', 'shortcode' => 'rifnote_publisher_dashboard'),
             'football' => array('title' => __('Football', 'rifnote-search'), 'mode' => 'football-hub', 'shortcode' => 'rifnote_football_hub'),
+            'football-competitions' => array('title' => __('Football Competitions', 'rifnote-search'), 'mode' => 'football-competitions', 'shortcode' => 'rifnote_football_competitions'),
             'teams' => array('title' => __('Teams', 'rifnote-search'), 'mode' => 'team-search', 'shortcode' => 'rifnote_team_search'),
             'players' => array('title' => __('Players', 'rifnote-search'), 'mode' => 'player-search', 'shortcode' => 'rifnote_player_search'),
             'transfers' => array('title' => __('Transfer Tracker', 'rifnote-search'), 'mode' => 'transfer-tracker', 'shortcode' => 'rifnote_transfer_tracker'),
@@ -220,6 +221,7 @@ class Rifnote_Search_Pages {
                 'label' => __('Football', 'rifnote-search'),
                 'items' => array(
                     array('label' => __('Live Scores', 'rifnote-search'), 'url' => home_url('/football/')),
+                    array('label' => __('Competitions', 'rifnote-search'), 'url' => home_url('/football-competitions/')),
                     array('label' => __('Teams', 'rifnote-search'), 'url' => home_url('/teams/')),
                     array('label' => __('Players', 'rifnote-search'), 'url' => home_url('/players/')),
                     array('label' => __('Transfers', 'rifnote-search'), 'url' => home_url('/transfers/')),

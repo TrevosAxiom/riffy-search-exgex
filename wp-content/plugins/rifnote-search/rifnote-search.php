@@ -3,7 +3,7 @@
  * Plugin Name: Rifnote Search
  * Plugin URI: https://rifnote.com/
  * Description: AI-powered news search and publisher discovery plugin for Rifnote.
- * Version: 0.2.27
+ * Version: 0.2.28
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Rifnote
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RIFNOTE_SEARCH_VERSION', '0.2.27');
+define('RIFNOTE_SEARCH_VERSION', '0.2.28');
 define('RIFNOTE_SEARCH_FILE', __FILE__);
 define('RIFNOTE_SEARCH_DIR', plugin_dir_path(__FILE__));
 define('RIFNOTE_SEARCH_URL', plugin_dir_url(__FILE__));
@@ -170,6 +170,7 @@ final class Rifnote_Search_Plugin {
         add_shortcode('rifnote_publisher_dashboard', array($this, 'render_publisher_dashboard_shortcode'));
         add_shortcode('rifnote_live_scores', array($this, 'render_live_scores_shortcode'));
         add_shortcode('rifnote_football_hub', array($this, 'render_football_hub_shortcode'));
+        add_shortcode('rifnote_football_competitions', array($this, 'render_football_competitions_shortcode'));
         add_shortcode('rifnote_team_search', array($this, 'render_team_search_shortcode'));
         add_shortcode('rifnote_player_search', array($this, 'render_player_search_shortcode'));
         add_shortcode('rifnote_transfer_tracker', array($this, 'render_transfer_tracker_shortcode'));
@@ -526,6 +527,7 @@ JS;
             'electionTakeover' => class_exists('Rifnote_Search_Election') ? Rifnote_Search_Election::public_payload() : array(),
             'featuredFootballMatches' => class_exists('Rifnote_Search_Football_API') ? Rifnote_Search_Football_API::featured_homepage_matches(8) : array(),
             'featuredFootballUrl' => home_url('/football/'),
+            'footballCompetitionsUrl' => home_url('/football-competitions/'),
             'homePills' => class_exists('Rifnote_Search_Admin') ? Rifnote_Search_Admin::home_pills() : array(),
             'sourceLogoMap' => $this->source_logo_context(),
             'siteCategories' => $this->site_categories_context(),
@@ -640,6 +642,10 @@ JS;
 
     public function render_football_hub_shortcode() {
         return $this->render_app('football-hub');
+    }
+
+    public function render_football_competitions_shortcode() {
+        return $this->render_app('football-competitions');
     }
 
     public function render_team_search_shortcode() {
