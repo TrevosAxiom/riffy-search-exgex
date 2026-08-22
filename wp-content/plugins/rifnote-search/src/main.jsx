@@ -5089,6 +5089,7 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
   const centerValue = isUpcoming ? (formatTime(fixture.date) || clock || 'TBD') : `${scoreHome} - ${scoreAway}`;
   const matchUrl = getFootballFixtureUrl(fixture);
   const canTestGoalAnimation = Boolean(window.RIFNOTE_SEARCH?.canManageOptions);
+  const goalScorers = getFeaturedGoalScorers(fixture);
 
   function move(direction) {
     setActive((current) => (current + direction + cleanFixtures.length) % cleanFixtures.length);
@@ -5153,6 +5154,7 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
         </div>
         <HomeScoreboardTeam team={fixture.away} align="right" large />
       </a>
+      {goalScorers.length ? <FeaturedGoalScorers goals={goalScorers} /> : null}
       {venue ? <div className="rs-home-football-venue">Venue: <b>{venue}</b></div> : null}
       {canTestGoalAnimation ? (
         <div className="rs-home-goal-test-row">
@@ -5286,6 +5288,99 @@ function extractGoalScorer(fixture, isHomeGoal, cancelled = false) {
   }
 
   return scorer || 'Goal update';
+}
+
+function getFeaturedGoalScorers(fixture = {}) {
+  const candidates = [
+    ...(Array.isArray(fixture.events) ? fixture.events : []),
+    ...(Array.isArray(fixture.timeline) ? fixture.timeline : []),
+    ...(Array.isArray(fixture.goalscorers) ? fixture.goalscorers : []),
+    ...(Array.isArray(fixture.goal_scorers) ? fixture.goal_scorers : []),
+  ];
+  const homeId = Number(fixture.home?.id || fixture.teams?.home?.id || 0);
+  const awayId = Number(fixture.away?.id || fixture.teams?.away?.id || 0);
+  const homeName = fixture.home?.name || fixture.teams?.home?.name || '';
+  const awayName = fixture.away?.name || fixture.teams?.away?.name || '';
+  const seen = new Set();
+
+  return candidates
+    .map((event, index) => {
+      const eventText = [
+        event.type,
+        event.detail,
+        event.event_type,
+        event.kind,
+        event.comments,
+        event.comment,
+        event.description,
+      ].filter(Boolean).join(' ').toLowerCase();
+
+      if (!eventText.includes('goal') && !eventText.includes('penalty')) {
+        return null;
+      }
+
+      if (eventText.includes('missed') || eventText.includes('disallowed') || eventText.includes('cancelled') || eventText.includes('canceled') || eventText.includes('var')) {
+        return null;
+      }
+
+      const scorer = event.player?.name || event.player_name || event.scorer || event.name || event.goal_scorer || '';
+      if (!scorer) {
+        return null;
+      }
+
+      const minute = Number(event.elapsed || event.time?.elapsed || event.minute || event.time || 0);
+      const extra = Number(event.extra || event.time?.extra || event.added_time || 0);
+      const eventTeamId = Number(event.team?.id || event.team_id || 0);
+      const eventTeamName = event.team?.name || event.team_name || event.club || '';
+      const isHome = (eventTeamId && homeId && eventTeamId === homeId) || (!eventTeamId && eventTeamName && homeName && eventTeamName === homeName);
+      const isAway = (eventTeamId && awayId && eventTeamId === awayId) || (!eventTeamId && eventTeamName && awayName && eventTeamName === awayName);
+      const team = isHome ? fixture.home : (isAway ? fixture.away : (event.team || {}));
+      const teamName = team?.name || eventTeamName || '';
+      const key = `${minute || index}-${scorer}-${teamName}`;
+
+      if (seen.has(key)) {
+        return null;
+      }
+
+      seen.add(key);
+
+      return {
+        key,
+        minute,
+        extra,
+        scorer,
+        teamName,
+        teamLogo: team?.logo || event.team?.logo || '',
+        isHome,
+      };
+    })
+    .filter(Boolean)
+    .sort((a, b) => (a.minute || 0) - (b.minute || 0))
+    .slice(0, 8);
+}
+
+function FeaturedGoalScorers({ goals = [] }) {
+  if (!goals.length) {
+    return null;
+  }
+
+  return (
+    <div className="rs-home-goal-scorers" aria-label="Goal scorers">
+      {goals.map((goal) => {
+        const minute = goal.minute ? `${goal.minute}${goal.extra ? `+${goal.extra}` : ''}'` : 'Goal';
+        const teamInitials = String(goal.teamName || 'Goal').split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part.charAt(0)).join('').toUpperCase() || 'G';
+
+        return (
+          <span className={`rs-home-goal-scorer ${goal.isHome ? 'is-home' : 'is-away'}`} key={goal.key}>
+            {goal.teamLogo ? <img src={goal.teamLogo} alt="" loading="lazy" /> : <i>{teamInitials}</i>}
+            <b>{minute}</b>
+            <strong>{goal.scorer}</strong>
+            {goal.teamName ? <small>{shortTeamName(goal.teamName, 16)}</small> : null}
+          </span>
+        );
+      })}
+    </div>
+  );
 }
 
 function playVarDecisionSound() {

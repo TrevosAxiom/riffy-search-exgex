@@ -377,6 +377,54 @@ class Rifnote_Search_Football_API {
         return $apply_team_watchlist ? self::filter_fixtures_by_team_watchlist($fixtures, self::team_watchlist()) : $fixtures;
     }
 
+    public static function sync_admin_curation_date($date = '') {
+        $settings = self::settings();
+        $date = sanitize_text_field($date ? $date : wp_date('Y-m-d'));
+
+        if (empty($settings['api_key']) || empty($settings['competitions'])) {
+            return array(
+                'synced' => 0,
+                'errors' => array(),
+            );
+        }
+
+        $lock_key = 'rifnote_api_football_admin_curation_' . md5($date . wp_json_encode($settings['competitions']));
+
+        if (get_transient($lock_key)) {
+            return array(
+                'synced' => null,
+                'errors' => array(),
+                'skipped' => true,
+            );
+        }
+
+        set_transient($lock_key, 1, max(60, (int) $settings['fixture_cache_ttl']));
+
+        $synced = 0;
+        $errors = array();
+
+        foreach ($settings['competitions'] as $competition) {
+            $league_id = (int) ($competition['league_id'] ?? 0);
+            $season = (int) ($competition['season'] ?? 0);
+
+            if (!$league_id || !$season) {
+                continue;
+            }
+
+            $payload = self::fixtures_payload($date, $league_id, $season, true, false);
+            $synced += count($payload['fixtures'] ?? array());
+
+            if (!empty($payload['errors'])) {
+                $errors[$competition['label'] ?? ($league_id . ':' . $season)] = $payload['errors'];
+            }
+        }
+
+        return array(
+            'synced' => $synced,
+            'errors' => $errors,
+        );
+    }
+
     public static function homepage_featured_fixture_ids() {
         $raw = (string) get_option('rifnote_home_featured_football_matches', '');
         $ids = array();
@@ -495,7 +543,7 @@ class Rifnote_Search_Football_API {
         return $payload;
     }
 
-    public static function fixtures_payload($date = '', $league = 0, $season = 0, $force = false) {
+    public static function fixtures_payload($date = '', $league = 0, $season = 0, $force = false, $apply_team_watchlist = true) {
         $settings = self::settings();
         $date = $date ? sanitize_text_field($date) : gmdate('Y-m-d');
 
@@ -512,12 +560,12 @@ class Rifnote_Search_Football_API {
                 'allow_stale' => true,
             ));
             if (is_array($cached)) {
-                return self::apply_team_visibility_to_payload($cached, $settings);
+                return $apply_team_watchlist ? self::apply_team_visibility_to_payload($cached, $settings) : $cached;
             }
 
             if (!empty($settings['api_key'])) {
-                $refreshed = self::throttled_refresh('fixtures_' . $date . '_' . (int) $league . '_' . (int) $season, $settings['fixture_cache_ttl'], function () use ($date, $league, $season) {
-                    return self::fixtures_payload($date, $league, $season, true);
+                $refreshed = self::throttled_refresh('fixtures_' . $date . '_' . (int) $league . '_' . (int) $season . '_' . ($apply_team_watchlist ? 'watchlist' : 'all'), $settings['fixture_cache_ttl'], function () use ($date, $league, $season, $apply_team_watchlist) {
+                    return self::fixtures_payload($date, $league, $season, true, $apply_team_watchlist);
                 });
 
                 if (is_array($refreshed)) {
@@ -551,6 +599,14 @@ class Rifnote_Search_Football_API {
             return self::empty_payload($response->get_error_message(), 'fixtures', !empty($settings['api_key']), $settings, array('date' => $date));
         }
 
+        $fixtures = (!$league && !$season)
+            ? self::filter_fixtures_by_competitions(array_map(array(__CLASS__, 'normalize_fixture'), $response['response'] ?? array()), $settings['competitions'])
+            : array_map(array(__CLASS__, 'normalize_fixture'), $response['response'] ?? array());
+
+        if ($apply_team_watchlist) {
+            $fixtures = self::filter_fixtures_by_team_watchlist($fixtures, $settings['team_watchlist']);
+        }
+
         $payload = array(
             'provider' => 'api-football',
             'mode' => 'fixtures',
@@ -559,7 +615,7 @@ class Rifnote_Search_Football_API {
             'updated_at' => gmdate(DATE_ATOM),
             'poll_after' => $settings['fixture_cache_ttl'],
             'competitions' => $settings['competitions'],
-            'fixtures' => self::filter_fixtures_by_team_watchlist((!$league && !$season) ? self::filter_fixtures_by_competitions(array_map(array(__CLASS__, 'normalize_fixture'), $response['response'] ?? array()), $settings['competitions']) : array_map(array(__CLASS__, 'normalize_fixture'), $response['response'] ?? array()), $settings['team_watchlist']),
+            'fixtures' => $fixtures,
             'errors' => $response['errors'] ?? array(),
         );
 
@@ -615,7 +671,7 @@ class Rifnote_Search_Football_API {
         $all_fixtures = array();
         $errors = array();
         $competitions = $settings['competitions'];
-        $per_competition = $competitions ? max(1, (int) ceil($next / count($competitions))) : $next;
+        $per_competition = $competitions ? max($next, 50) : $next;
 
         if (!$competitions) {
             $payload = self::upcoming_for_competition($next, 0, 0, $force, $window_hours);
@@ -944,6 +1000,7 @@ class Rifnote_Search_Football_API {
 
         $table = self::fixtures_table();
         $like = '%' . $wpdb->esc_like($query) . '%';
+        $candidate_limit = max(40, $limit * 12);
         $rows = $wpdb->get_results($wpdb->prepare(
             "SELECT * FROM {$table}
              WHERE home_team_name LIKE %s
@@ -952,7 +1009,8 @@ class Rifnote_Search_Football_API {
                 OR league_country LIKE %s
                 OR payload LIKE %s
                 OR details_payload LIKE %s
-             ORDER BY fixture_date DESC
+             ORDER BY CASE WHEN fixture_date IS NULL THEN 1 ELSE 0 END ASC,
+                      ABS(TIMESTAMPDIFF(SECOND, UTC_TIMESTAMP(), fixture_date)) ASC
              LIMIT %d",
             $like,
             $like,
@@ -960,7 +1018,7 @@ class Rifnote_Search_Football_API {
             $like,
             $like,
             $like,
-            $limit
+            $candidate_limit
         ), ARRAY_A);
 
         $matches = array();
@@ -1065,6 +1123,8 @@ class Rifnote_Search_Football_API {
             }
         }
 
+        $matches = self::rank_search_matches_by_proximity($matches);
+
         return array(
             'query' => $query,
             'source' => 'database',
@@ -1075,6 +1135,62 @@ class Rifnote_Search_Football_API {
             'players' => array_slice(array_values($players), 0, $limit),
             'stats' => array_slice($stats, 0, $limit),
         );
+    }
+
+    private static function rank_search_matches_by_proximity($matches) {
+        $now = current_time('timestamp', true);
+
+        usort($matches, function ($a, $b) use ($now) {
+            $a_rank = self::search_match_proximity_rank($a, $now);
+            $b_rank = self::search_match_proximity_rank($b, $now);
+
+            foreach (array_keys($a_rank) as $index) {
+                if ($a_rank[$index] === $b_rank[$index]) {
+                    continue;
+                }
+
+                return $a_rank[$index] <=> $b_rank[$index];
+            }
+
+            return 0;
+        });
+
+        return array_values($matches);
+    }
+
+    private static function search_match_proximity_rank($fixture, $now) {
+        $timestamp = (int) ($fixture['timestamp'] ?? 0);
+
+        if (!$timestamp && !empty($fixture['date'])) {
+            $timestamp = strtotime((string) $fixture['date']);
+        }
+
+        if (!$timestamp) {
+            return array(9, PHP_INT_MAX, 0, PHP_INT_MAX);
+        }
+
+        $status = strtoupper((string) ($fixture['status_short'] ?? ($fixture['status']['short'] ?? '')));
+        $elapsed = (int) ($fixture['elapsed'] ?? ($fixture['status']['elapsed'] ?? 0));
+        $finished_statuses = array('FT', 'AET', 'PEN', 'PST', 'CANC', 'ABD', 'AWD', 'WO');
+        $not_started_statuses = array('NS', 'TBD');
+        $is_finished = in_array($status, $finished_statuses, true);
+        $is_not_started = in_array($status, $not_started_statuses, true);
+        $is_live = !$is_finished && !$is_not_started && ($elapsed > 0 || abs($timestamp - $now) <= 4 * HOUR_IN_SECONDS);
+        $delta = abs($timestamp - $now);
+
+        if ($is_live) {
+            return array(0, $delta, 0, $timestamp);
+        }
+
+        if ($delta <= 14 * DAY_IN_SECONDS) {
+            return array(1, $delta, $timestamp >= $now ? 0 : 1, $timestamp);
+        }
+
+        if ($timestamp >= $now) {
+            return array(2, $timestamp - $now, 0, $timestamp);
+        }
+
+        return array(3, $now - $timestamp, 0, -$timestamp);
     }
 
     public static function teams_payload($league = 0, $season = 0, $limit = 100) {

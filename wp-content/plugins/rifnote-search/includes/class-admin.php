@@ -3324,6 +3324,7 @@ class Rifnote_Search_Admin {
         $football_curation_league_key = isset($_GET['football_league']) ? sanitize_text_field(wp_unslash($_GET['football_league'])) : '';
         $football_curation_date = isset($_GET['football_date']) ? sanitize_text_field(wp_unslash($_GET['football_date'])) : wp_date('Y-m-d');
         $football_curation_competition = self::football_competition_from_key($football_curation_league_key, $football_competitions);
+        $football_curation_sync = self::is_section('football-curation') ? Rifnote_Search_Football_API::sync_admin_curation_date($football_curation_date) : array();
         $football_stored_teams = self::is_section('football-curation') ? Rifnote_Search_Football_API::stored_teams_by_competition((int) ($football_curation_competition['league_id'] ?? 0), (int) ($football_curation_competition['season'] ?? 0), 700) : array();
         $football_featured_ids = self::is_section('football-curation') ? Rifnote_Search_Football_API::homepage_featured_fixture_ids() : array();
         $football_today_matches = self::is_section('football-curation') ? Rifnote_Search_Football_API::stored_matches_for_date($football_curation_date, 260, false) : array();
@@ -4302,6 +4303,14 @@ class Rifnote_Search_Admin {
             ?>
             <h2><?php esc_html_e('Football Curation', 'rifnote-search'); ?></h2>
             <p><?php esc_html_e('Pick the teams Rifnote should surface, then choose the saved match or matches that can become homepage scoreboards.', 'rifnote-search'); ?></p>
+            <?php if (!empty($football_curation_sync['skipped'])) : ?>
+                <div class="notice notice-info inline"><p><?php esc_html_e('The selected date was checked recently, so Rifnote is showing the saved fixture cache.', 'rifnote-search'); ?></p></div>
+            <?php elseif (isset($football_curation_sync['synced']) && null !== $football_curation_sync['synced']) : ?>
+                <div class="notice notice-success inline"><p><?php echo esc_html(sprintf(_n('Synced %d fixture for this date across configured leagues.', 'Synced %d fixtures for this date across configured leagues.', (int) $football_curation_sync['synced'], 'rifnote-search'), (int) $football_curation_sync['synced'])); ?></p></div>
+            <?php endif; ?>
+            <?php if (!empty($football_curation_sync['errors'])) : ?>
+                <div class="notice notice-warning inline"><p><?php esc_html_e('Some leagues returned API errors. Check Football usage logs for the exact provider response.', 'rifnote-search'); ?></p></div>
+            <?php endif; ?>
 
             <div class="card" style="max-width:1280px;margin:16px 0;">
                 <h2><?php esc_html_e('Filter the room', 'rifnote-search'); ?></h2>
