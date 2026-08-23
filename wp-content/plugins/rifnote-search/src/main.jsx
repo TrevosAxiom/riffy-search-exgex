@@ -5341,8 +5341,89 @@ function HomeSearchMedia({ primary = false, featuredFootballMatches = [] }) {
   );
 }
 
+function mergeFeaturedFixtureDetails(fixture = {}, payload = {}) {
+  const updatedFixture = payload?.fixture || payload?.data?.fixture || null;
+  const details = payload?.details || updatedFixture?.details || {};
+  const timeline = Array.isArray(details.timeline) ? details.timeline : (Array.isArray(updatedFixture?.timeline) ? updatedFixture.timeline : fixture.timeline);
+  const goalscorers = Array.isArray(details.goalscorers) ? details.goalscorers : (Array.isArray(updatedFixture?.goalscorers) ? updatedFixture.goalscorers : fixture.goalscorers);
+
+  return {
+    ...fixture,
+    ...(updatedFixture || {}),
+    details: {
+      ...(fixture.details || {}),
+      ...details,
+    },
+    timeline: Array.isArray(timeline) ? timeline : [],
+    events: Array.isArray(timeline) ? timeline : (Array.isArray(fixture.events) ? fixture.events : []),
+    goalscorers: Array.isArray(goalscorers) ? goalscorers : [],
+  };
+}
+
+function useFeaturedFootballFixtures(fixtures = []) {
+  const initialFixtures = useMemo(() => (
+    Array.isArray(fixtures) ? fixtures.filter((fixture) => fixture && !isFootballFixtureFinished(fixture)) : []
+  ), [fixtures]);
+  const [liveFixtures, setLiveFixtures] = useState(initialFixtures);
+  const liveFixturesRef = useRef(initialFixtures);
+  const initialFixturesRef = useRef(initialFixtures);
+  const signature = initialFixtures.map((fixture) => getFixtureDeepLinkId(fixture) || `${fixture.home?.name || ''}-${fixture.away?.name || ''}-${fixture.date || ''}`).join('|');
+
+  useEffect(() => {
+    initialFixturesRef.current = initialFixtures;
+    liveFixturesRef.current = initialFixtures;
+    setLiveFixtures(initialFixtures);
+  }, [signature, initialFixtures]);
+
+  useEffect(() => {
+    liveFixturesRef.current = liveFixtures;
+  }, [liveFixtures]);
+
+  const refreshFeaturedFixtures = useCallback(() => {
+    const currentFixtures = liveFixturesRef.current?.length ? liveFixturesRef.current : initialFixturesRef.current;
+    const targets = (currentFixtures || []).filter((fixture) => fixture && getFixtureDeepLinkId(fixture));
+
+    if (!targets.length) {
+      return;
+    }
+
+    Promise.allSettled(targets.map((fixture) => (
+      getFootballFixtureDetails(getFixtureDeepLinkId(fixture), { force: !isFootballFixtureFinished(fixture) })
+        .then((payload) => mergeFeaturedFixtureDetails(fixture, payload))
+    )))
+      .then((results) => {
+        const nextById = new Map();
+
+        results.forEach((result, index) => {
+          const fallback = targets[index];
+          const fixture = result.status === 'fulfilled' ? result.value : fallback;
+          const id = getFixtureDeepLinkId(fixture) || getFixtureDeepLinkId(fallback);
+
+          if (id) {
+            nextById.set(String(id), fixture);
+          }
+        });
+
+        setLiveFixtures((current) => {
+          const base = current.length ? current : initialFixturesRef.current;
+          return base
+            .map((fixture) => {
+              const id = getFixtureDeepLinkId(fixture);
+              return id && nextById.has(String(id)) ? nextById.get(String(id)) : fixture;
+            })
+            .filter((fixture) => fixture && !isFootballFixtureFinished(fixture));
+        });
+      })
+      .catch(() => {});
+  }, []);
+
+  useLiveInterval(refreshFeaturedFixtures, 30000, initialFixtures.length > 0);
+
+  return liveFixtures.filter((fixture) => fixture && !isFootballFixtureFinished(fixture));
+}
+
 function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
-  const cleanFixtures = Array.isArray(fixtures) ? fixtures.filter((fixture) => fixture && !isFootballFixtureFinished(fixture)) : [];
+  const cleanFixtures = useFeaturedFootballFixtures(fixtures);
   const [active, setActive] = useState(0);
   const [scoreMemory, setScoreMemory] = useState({});
   const [goalFlash, setGoalFlash] = useState(null);

@@ -1040,6 +1040,16 @@ class Rifnote_Search_Football_API {
         $details = self::decode_json($row['details_payload']);
         $details_fresh_until = $row['details_synced_at'] ? strtotime($row['details_synced_at'] . ' UTC') + (int) $settings['details_cache_ttl'] : 0;
 
+        if ($force && !empty($settings['api_key'])) {
+            self::sync_single_fixture($fixture_id, $settings);
+            $row = $wpdb->get_row($wpdb->prepare("SELECT * FROM {$table} WHERE fixture_id = %d LIMIT 1", $fixture_id), ARRAY_A);
+            if ($row) {
+                $fixture = self::hydrate_fixture(self::decode_json($row['payload']), self::decode_json($row['details_payload']));
+                $details = self::decode_json($row['details_payload']);
+                $details_fresh_until = $row['details_synced_at'] ? strtotime($row['details_synced_at'] . ' UTC') + (int) $settings['details_cache_ttl'] : 0;
+            }
+        }
+
         if (($force || !$details || time() > $details_fresh_until) && !empty($settings['api_key'])) {
             $synced = self::sync_fixture_details($fixture);
 
@@ -1052,6 +1062,8 @@ class Rifnote_Search_Football_API {
                 ), array('fixture_id' => $fixture_id));
                 $stored_details = $wpdb->get_var($wpdb->prepare("SELECT details_payload FROM {$table} WHERE fixture_id = %d LIMIT 1", $fixture_id));
                 $details = self::decode_json($stored_details);
+                $stored_payload = $wpdb->get_var($wpdb->prepare("SELECT payload FROM {$table} WHERE fixture_id = %d LIMIT 1", $fixture_id));
+                $fixture = self::hydrate_fixture(self::decode_json($stored_payload), $details);
             }
         }
 
@@ -1069,6 +1081,34 @@ class Rifnote_Search_Football_API {
             'updated_at' => $row['details_synced_at'] ? mysql_to_rfc3339($row['details_synced_at']) : mysql_to_rfc3339($row['updated_at']),
             'source' => 'database',
         );
+    }
+
+    private static function sync_single_fixture($fixture_id, $settings = null) {
+        $fixture_id = absint($fixture_id);
+
+        if (!$fixture_id) {
+            return false;
+        }
+
+        $settings = is_array($settings) ? $settings : self::settings();
+        $response = self::request('/fixtures', array(
+            'id' => $fixture_id,
+            'timezone' => $settings['timezone'] ?? 'UTC',
+        ));
+
+        if (is_wp_error($response)) {
+            return false;
+        }
+
+        $fixtures = array_map(array(__CLASS__, 'normalize_fixture'), $response['response'] ?? array());
+
+        if (!$fixtures) {
+            return false;
+        }
+
+        self::store_payload_fixtures(array('fixtures' => self::hydrate_fixtures($fixtures)), 'fixture', $settings['fixture_cache_ttl'] ?? MINUTE_IN_SECONDS);
+
+        return true;
     }
 
     public static function standings_payload($league = 0, $season = 0, $force = false) {
