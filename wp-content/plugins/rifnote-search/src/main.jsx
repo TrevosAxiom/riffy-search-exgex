@@ -5878,7 +5878,7 @@ function formatFeaturedGoalMinute(goal = {}) {
 }
 
 function formatFeaturedPlayerName(name = '') {
-  const clean = H(name).replace(/\s+/g, ' ').trim();
+  const clean = String(name || '').replace(/\s+/g, ' ').trim();
   const parts = clean.split(' ').filter(Boolean);
 
   if (parts.length < 2) {
