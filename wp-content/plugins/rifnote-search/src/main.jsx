@@ -5373,7 +5373,7 @@ function useFeaturedFootballFixtures(fixtures = []) {
     initialFixturesRef.current = initialFixtures;
     liveFixturesRef.current = initialFixtures;
     setLiveFixtures(initialFixtures);
-  }, [signature, initialFixtures]);
+  }, [signature]);
 
   useEffect(() => {
     liveFixturesRef.current = liveFixtures;
@@ -5428,6 +5428,7 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
   const [scoreMemory, setScoreMemory] = useState({});
   const [goalFlash, setGoalFlash] = useState(null);
   const [clockTick, setClockTick] = useState(() => Date.now());
+  const seenGoalFlashRef = useRef(new Set());
   const scoreSignature = cleanFixtures.map((fixture) => {
     const id = fixture.fixture_id || fixture.id || fixture.fixture?.id || `${fixture.home?.name || 'home'}-${fixture.away?.name || 'away'}-${fixture.date || ''}`;
     return `${id}:${fixture.goals?.home ?? 0}-${fixture.goals?.away ?? 0}`;
@@ -5480,12 +5481,22 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
 
           const isHomeGoal = isGoal ? homeScore > previous.home : homeScore < previous.home;
           const team = isHomeGoal ? fixture.home : fixture.away;
+          const scorer = isGoal ? extractGoalScorer(fixture, isHomeGoal) : extractGoalScorer(fixture, isHomeGoal, true);
+          const flashSignature = `${id}:${isGoal ? 'goal' : 'var'}:${homeScore}-${awayScore}:${scorer}`;
+
+          if (seenGoalFlashRef.current.has(flashSignature)) {
+            next[id] = { home: homeScore, away: awayScore };
+            return;
+          }
+
+          seenGoalFlashRef.current.add(flashSignature);
+
           flash = {
             id,
             type: isGoal ? 'goal' : 'var',
             team: team?.name || (isHomeGoal ? 'Home team' : 'Away team'),
             logo: team?.logo || '',
-            scorer: isGoal ? extractGoalScorer(fixture, isHomeGoal) : extractGoalScorer(fixture, isHomeGoal, true),
+            scorer,
             score: `${fixture.goals?.home ?? '-'} - ${fixture.goals?.away ?? '-'}`,
           };
         }
