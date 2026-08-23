@@ -5608,10 +5608,6 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
         </div>
         <HomeScoreboardTeam team={fixture.away} align="right" large />
       </a>
-      <div className="rs-home-scoreboard-meta-row">
-        <MatchMarkers fixture={fixture} compact />
-        <AggregateChip fixture={fixture} compact />
-      </div>
       {goalScorers.length ? <FeaturedGoalScorers goals={goalScorers} /> : null}
       {venue ? <div className="rs-home-football-venue">Venue: <b>{venue}</b></div> : null}
       {canTestGoalAnimation ? (
