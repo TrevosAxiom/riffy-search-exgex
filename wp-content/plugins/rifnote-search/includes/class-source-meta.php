@@ -52,7 +52,7 @@ class Rifnote_Search_Source_Meta {
             'source_logo_url' => array('label' => __('Source logo URL', 'rifnote-search'), 'description' => __('Optional override. Rifnote will auto-discover and cache the source logo when this is empty.', 'rifnote-search'), 'type' => 'url', 'sanitize' => 'esc_url_raw', 'primary' => true, 'media' => true),
             'original_url' => array('label' => __('Original story URL', 'rifnote-search'), 'description' => __('Canonical publisher story link. This should point away from Rifnote for external stories.', 'rifnote-search'), 'type' => 'url', 'sanitize' => 'esc_url_raw', 'primary' => true),
             'read_full_story_url' => array('label' => __('Read full story URL', 'rifnote-search'), 'description' => __('Prominent outbound CTA. Falls back to Original story URL when blank.', 'rifnote-search'), 'type' => 'url', 'sanitize' => 'esc_url_raw', 'primary' => true),
-            'rifnote_source_image_url' => array('label' => __('Story image', 'rifnote-search'), 'description' => __('Image used by Rifnote cards when the post has no featured image.', 'rifnote-search'), 'type' => 'url', 'sanitize' => 'esc_url_raw', 'primary' => true, 'media' => true),
+            'rifnote_source_image_url' => array('label' => __('Story image', 'rifnote-search'), 'description' => __('Upload or choose from the Media Library to set the WordPress featured image. External URLs are used by Rifnote before category/global defaults.', 'rifnote-search'), 'type' => 'url', 'sanitize' => 'esc_url_raw', 'primary' => true, 'media' => true),
             'publisher_id' => array('label' => __('Publisher ID', 'rifnote-search'), 'description' => __('Future publisher portal account ID. Leave empty for Rifnote-owned posts.', 'rifnote-search'), 'type' => 'integer', 'sanitize' => 'absint', 'primary' => true),
             'canonical_url' => array('label' => __('Canonical URL', 'rifnote-search'), 'description' => __('SEO canonical URL. Falls back to Original story URL or the post permalink.', 'rifnote-search'), 'type' => 'url', 'sanitize' => 'esc_url_raw'),
             'story_cluster_id' => array('label' => __('Story cluster ID', 'rifnote-search'), 'type' => 'string', 'sanitize' => array(__CLASS__, 'sanitize_text')),
@@ -103,6 +103,16 @@ class Rifnote_Search_Source_Meta {
                 },
             ));
         }
+
+        register_post_meta('post', '_rifnote_source_image_attachment_id', array(
+            'type' => 'integer',
+            'single' => true,
+            'show_in_rest' => false,
+            'sanitize_callback' => 'absint',
+            'auth_callback' => function () {
+                return current_user_can('edit_posts');
+            },
+        ));
     }
 
     public static function sanitize_score($value) {
@@ -545,6 +555,38 @@ class Rifnote_Search_Source_Meta {
         );
     }
 
+    public static function post_image_url($post_id, $size = 'large', $include_default = true) {
+        $post_id = absint($post_id);
+
+        if (!$post_id) {
+            return '';
+        }
+
+        $thumbnail = get_the_post_thumbnail_url($post_id, $size);
+
+        if ($thumbnail) {
+            return esc_url_raw($thumbnail);
+        }
+
+        $story_image = esc_url_raw((string) get_post_meta($post_id, 'rifnote_source_image_url', true));
+
+        if ($story_image) {
+            return $story_image;
+        }
+
+        $legacy_image = esc_url_raw((string) get_post_meta($post_id, 'image_url', true));
+
+        if ($legacy_image) {
+            return $legacy_image;
+        }
+
+        if ($include_default && class_exists('Rifnote_Search_Admin')) {
+            return Rifnote_Search_Admin::story_default_image_url($post_id);
+        }
+
+        return '';
+    }
+
     public static function add_meta_box() {
         add_meta_box(
             'rifnote-source-meta',
@@ -595,11 +637,18 @@ class Rifnote_Search_Source_Meta {
                     <?php elseif (in_array($key, array('ai_summary', 'ai_key_points', 'entities'), true)) : ?>
                         <textarea id="rifnote_<?php echo esc_attr($key); ?>" name="rifnote_meta[<?php echo esc_attr($key); ?>]" rows="3" class="large-text"><?php echo esc_textarea(get_post_meta($post->ID, $key, true)); ?></textarea>
                     <?php elseif (!empty($field['media'])) : ?>
+                        <?php
+                        $attachment_id_field = 'rifnote_source_image_url' === $key ? 'rifnote_source_image_attachment_id' : '';
+                        $attachment_id_selector = $attachment_id_field ? '#rifnote_' . $attachment_id_field : '';
+                        ?>
                         <div class="rs-media-field">
                             <input id="rifnote_<?php echo esc_attr($key); ?>" name="rifnote_meta[<?php echo esc_attr($key); ?>]" type="url" class="large-text rs-media-url" value="<?php echo esc_attr(get_post_meta($post->ID, $key, true)); ?>" />
+                            <?php if ($attachment_id_field) : ?>
+                                <input id="rifnote_<?php echo esc_attr($attachment_id_field); ?>" name="<?php echo esc_attr($attachment_id_field); ?>" type="hidden" value="<?php echo esc_attr((int) get_post_meta($post->ID, '_rifnote_source_image_attachment_id', true)); ?>" />
+                            <?php endif; ?>
                             <p>
-                                <button type="button" class="button rs-media-picker" data-target="#rifnote_<?php echo esc_attr($key); ?>" data-library="image" data-title="<?php esc_attr_e('Choose story image', 'rifnote-search'); ?>" data-button="<?php esc_attr_e('Use image', 'rifnote-search'); ?>"><?php esc_html_e('Choose from Media Library', 'rifnote-search'); ?></button>
-                                <button type="button" class="button rs-media-clear" data-target="#rifnote_<?php echo esc_attr($key); ?>"><?php esc_html_e('Clear', 'rifnote-search'); ?></button>
+                                <button type="button" class="button rs-media-picker" data-target="#rifnote_<?php echo esc_attr($key); ?>" <?php echo $attachment_id_selector ? 'data-id-target="' . esc_attr($attachment_id_selector) . '"' : ''; ?> data-library="image" data-title="<?php esc_attr_e('Choose story image', 'rifnote-search'); ?>" data-button="<?php esc_attr_e('Use image', 'rifnote-search'); ?>"><?php esc_html_e('Choose from Media Library', 'rifnote-search'); ?></button>
+                                <button type="button" class="button rs-media-clear" data-target="#rifnote_<?php echo esc_attr($key); ?>" <?php echo $attachment_id_selector ? 'data-id-target="' . esc_attr($attachment_id_selector) . '"' : ''; ?>><?php esc_html_e('Clear', 'rifnote-search'); ?></button>
                             </p>
                         </div>
                     <?php else : ?>
@@ -647,6 +696,8 @@ class Rifnote_Search_Source_Meta {
             }
         }
 
+        self::sync_featured_image($post_id, $posted);
+
         $original_url = get_post_meta($post_id, 'original_url', true);
         $read_full_story_url = get_post_meta($post_id, 'read_full_story_url', true);
         $source_url = get_post_meta($post_id, 'source_url', true);
@@ -674,6 +725,46 @@ class Rifnote_Search_Source_Meta {
         if (!get_post_meta($post_id, 'content_hash', true)) {
             $post = get_post($post_id);
             update_post_meta($post_id, 'content_hash', hash('sha256', wp_strip_all_tags($post ? $post->post_content : get_the_title($post_id))));
+        }
+    }
+
+    private static function sync_featured_image($post_id, $posted) {
+        $post_id = absint($post_id);
+
+        if (!$post_id) {
+            return;
+        }
+
+        $story_image = array_key_exists('rifnote_source_image_url', $posted)
+            ? esc_url_raw((string) $posted['rifnote_source_image_url'])
+            : esc_url_raw((string) get_post_meta($post_id, 'rifnote_source_image_url', true));
+        $attachment_id = isset($_POST['rifnote_source_image_attachment_id']) ? absint(wp_unslash($_POST['rifnote_source_image_attachment_id'])) : 0;
+
+        if (!$attachment_id && $story_image) {
+            $attachment_id = absint(attachment_url_to_postid($story_image));
+        }
+
+        $previous_attachment_id = absint(get_post_meta($post_id, '_rifnote_source_image_attachment_id', true));
+
+        if ($attachment_id) {
+            update_post_meta($post_id, '_rifnote_source_image_attachment_id', $attachment_id);
+            set_post_thumbnail($post_id, $attachment_id);
+
+            if (!$story_image) {
+                $attachment_url = wp_get_attachment_url($attachment_id);
+
+                if ($attachment_url) {
+                    update_post_meta($post_id, 'rifnote_source_image_url', esc_url_raw($attachment_url));
+                }
+            }
+
+            return;
+        }
+
+        delete_post_meta($post_id, '_rifnote_source_image_attachment_id');
+
+        if ($previous_attachment_id && absint(get_post_thumbnail_id($post_id)) === $previous_attachment_id) {
+            delete_post_thumbnail($post_id);
         }
     }
 

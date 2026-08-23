@@ -5807,6 +5807,9 @@ function getFeaturedGoalScorers(fixture = {}) {
         minute,
         extra,
         scorer,
+        assist: typeof event.assist === 'string'
+          ? event.assist
+          : (event.assist?.name || event.assist_name || event.assisted_by || event.assist_player || ''),
         teamName,
         teamLogo: team?.logo || event.team?.logo || '',
         isHome,
@@ -5822,23 +5825,67 @@ function FeaturedGoalScorers({ goals = [] }) {
     return null;
   }
 
-  return (
-    <div className="rs-home-goal-scorers" aria-label="Goal scorers">
-      {goals.map((goal) => {
-        const minute = goal.minute ? `${goal.minute}${goal.extra ? `+${goal.extra}` : ''}'` : 'Goal';
-        const teamInitials = String(goal.teamName || 'Goal').split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part.charAt(0)).join('').toUpperCase() || 'G';
+  const homeGoals = goals.filter((goal) => goal.isHome);
+  const awayGoals = goals.filter((goal) => !goal.isHome);
+  const hasAssists = goals.some((goal) => goal.assist);
 
-        return (
-          <span className={`rs-home-goal-scorer ${goal.isHome ? 'is-home' : 'is-away'}`} key={goal.key}>
-            {goal.teamLogo ? <img src={goal.teamLogo} alt="" loading="lazy" /> : <i>{teamInitials}</i>}
-            <b>{minute}</b>
-            <strong>{goal.scorer}</strong>
-            {goal.teamName ? <small>{shortTeamName(goal.teamName, 16)}</small> : null}
-          </span>
-        );
-      })}
+  function renderGoal(goal) {
+    const minute = formatFeaturedGoalMinute(goal);
+
+    return (
+      <span className="rs-home-goal-line-item" key={goal.key}>
+        <b>{minute}</b>
+        <strong>{formatFeaturedPlayerName(goal.scorer)}</strong>
+      </span>
+    );
+  }
+
+  function renderAssist(goal) {
+    const minute = formatFeaturedGoalMinute(goal);
+
+    if (!goal.assist) {
+      return null;
+    }
+
+    return (
+      <span className="rs-home-goal-line-item" key={`assist-${goal.key}`}>
+        <b>{minute}</b>
+        <strong>{formatFeaturedPlayerName(goal.assist)}</strong>
+      </span>
+    );
+  }
+
+  return (
+    <div className="rs-home-goal-scorers" aria-label="Goal scorers and assists">
+      <div className="rs-home-goal-row is-scorers">
+        <div className="rs-home-goal-side is-home">{homeGoals.length ? homeGoals.map(renderGoal) : <span className="rs-home-goal-empty">-</span>}</div>
+        <span className="rs-home-goal-label">Goals</span>
+        <div className="rs-home-goal-side is-away">{awayGoals.length ? awayGoals.map(renderGoal) : <span className="rs-home-goal-empty">-</span>}</div>
+      </div>
+      {hasAssists ? (
+        <div className="rs-home-goal-row is-assists">
+          <div className="rs-home-goal-side is-home">{homeGoals.map(renderAssist).filter(Boolean)}</div>
+          <span className="rs-home-goal-label">Assists</span>
+          <div className="rs-home-goal-side is-away">{awayGoals.map(renderAssist).filter(Boolean)}</div>
+        </div>
+      ) : null}
     </div>
   );
+}
+
+function formatFeaturedGoalMinute(goal = {}) {
+  return goal.minute ? `${goal.minute}${goal.extra ? `+${goal.extra}` : ''}'` : 'Goal';
+}
+
+function formatFeaturedPlayerName(name = '') {
+  const clean = H(name).replace(/\s+/g, ' ').trim();
+  const parts = clean.split(' ').filter(Boolean);
+
+  if (parts.length < 2) {
+    return clean;
+  }
+
+  return `${parts[0].charAt(0).toUpperCase()}. ${parts.slice(1).join(' ')}`;
 }
 
 function playVarDecisionSound() {

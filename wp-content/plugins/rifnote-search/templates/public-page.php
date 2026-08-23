@@ -123,11 +123,9 @@ $render_admin_actions = static function ($post_id) {
 };
 $story_image_for_post = static function ($post_id) {
     $post_id = absint($post_id);
-    $image_url = $post_id ? get_the_post_thumbnail_url($post_id, 'large') : '';
-
-    if (!$image_url && class_exists('Rifnote_Search_Admin')) {
-        $image_url = Rifnote_Search_Admin::story_default_image_url($post_id);
-    }
+    $image_url = $post_id && class_exists('Rifnote_Search_Source_Meta')
+        ? Rifnote_Search_Source_Meta::post_image_url($post_id, 'large')
+        : ($post_id ? get_the_post_thumbnail_url($post_id, 'large') : '');
 
     return esc_url($image_url);
 };

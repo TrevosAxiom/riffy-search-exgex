@@ -175,12 +175,13 @@ class Rifnote_Search_Engine {
         $source = Rifnote_Search_Source_Meta::source_payload($post_id);
         $cluster_id = get_post_meta($post_id, 'story_cluster_id', true) ? get_post_meta($post_id, 'story_cluster_id', true) : 'post_' . $post_id;
         $has_story_hub = class_exists('Rifnote_Search_Aggregation') ? Rifnote_Search_Aggregation::post_has_story_hub($post_id) : false;
+        $image = Rifnote_Search_Source_Meta::post_image_url($post_id, 'medium_large', false);
 
         $payload = array_merge(array(
             'id' => $post_id,
             'headline' => Rifnote_Search_Source_Meta::normalize_text(get_the_title($post)),
             'excerpt' => Rifnote_Search_Source_Meta::normalize_text(self::plain_excerpt($post), true),
-            'image' => get_the_post_thumbnail_url($post, 'medium_large') ? get_the_post_thumbnail_url($post, 'medium_large') : esc_url_raw(get_post_meta($post_id, 'image_url', true)),
+            'image' => $image,
             'published_at' => get_post_time(DATE_ATOM, true, $post),
             'published_at_human' => sprintf(__('%s ago', 'rifnote-search'), human_time_diff(get_post_time('U', true, $post), current_time('timestamp', true))),
             'category' => $categories ? Rifnote_Search_Source_Meta::normalize_text($categories[0]->name) : __('News', 'rifnote-search'),

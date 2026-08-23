@@ -3,7 +3,7 @@
  * Plugin Name: Rifnote Search
  * Plugin URI: https://rifnote.com/
  * Description: AI-powered news search and publisher discovery plugin for Rifnote.
- * Version: 0.2.30
+ * Version: 0.2.31
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Rifnote
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RIFNOTE_SEARCH_VERSION', '0.2.30');
+define('RIFNOTE_SEARCH_VERSION', '0.2.31');
 define('RIFNOTE_SEARCH_FILE', __FILE__);
 define('RIFNOTE_SEARCH_DIR', plugin_dir_path(__FILE__));
 define('RIFNOTE_SEARCH_URL', plugin_dir_url(__FILE__));
@@ -361,11 +361,7 @@ final class Rifnote_Search_Plugin {
             $url = home_url('/?p=' . $post_id);
         }
 
-        $image = get_the_post_thumbnail_url($post_id, 'large');
-
-        if (!$image && class_exists('Rifnote_Search_Admin')) {
-            $image = Rifnote_Search_Admin::story_default_image_url($post_id);
-        }
+        $image = class_exists('Rifnote_Search_Source_Meta') ? Rifnote_Search_Source_Meta::post_image_url($post_id, 'large') : get_the_post_thumbnail_url($post_id, 'large');
 
         if (!$image) {
             $image = Rifnote_Search_PWA::app_icon_url(512);
@@ -501,7 +497,7 @@ body.login.rifnote-login-page .privacy-policy-page-link{margin:18px 0 0}
 
     private function admin_media_js() {
         return <<<'JS'
-(function($){$(document).on('click','.rs-media-picker',function(e){e.preventDefault();var button=$(this);var target=$(button.data('target'));if(!target.length){target=button.closest('.rs-media-field').find('.rs-media-url').first();}var frame=wp.media({title:button.data('title')||'Select media',button:{text:button.data('button')||'Use this media'},multiple:false,library:{type:button.data('library')||''}});frame.on('select',function(){var attachment=frame.state().get('selection').first().toJSON();target.val(attachment.url).trigger('change');});frame.open();});$(document).on('click','.rs-media-clear',function(e){e.preventDefault();var button=$(this);var target=$(button.data('target'));if(!target.length){target=button.closest('.rs-media-field').find('.rs-media-url').first();}target.val('').trigger('change');});})(jQuery);
+(function($){$(document).on('click','.rs-media-picker',function(e){e.preventDefault();var button=$(this);var target=$(button.data('target'));var idTarget=$(button.data('idTarget')||button.data('id-target'));if(!target.length){target=button.closest('.rs-media-field').find('.rs-media-url').first();}if(idTarget&&!idTarget.jquery){idTarget=$(idTarget);}var frame=wp.media({title:button.data('title')||'Select media',button:{text:button.data('button')||'Use this media'},multiple:false,library:{type:button.data('library')||''}});frame.on('select',function(){var attachment=frame.state().get('selection').first().toJSON();target.val(attachment.url).trigger('change');if(idTarget&&idTarget.length){idTarget.val(attachment.id||'').trigger('change');}});frame.open();});$(document).on('click','.rs-media-clear',function(e){e.preventDefault();var button=$(this);var target=$(button.data('target'));var idTarget=$(button.data('idTarget')||button.data('id-target'));if(!target.length){target=button.closest('.rs-media-field').find('.rs-media-url').first();}if(idTarget&&!idTarget.jquery){idTarget=$(idTarget);}target.val('').trigger('change');if(idTarget&&idTarget.length){idTarget.val('').trigger('change');}});})(jQuery);
 JS;
     }
 
