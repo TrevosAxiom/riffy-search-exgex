@@ -6132,6 +6132,32 @@ article.is-admin-trashed {
   max-width: 100%;
 }
 
+.rs-home-story-embed.is-detected-media {
+  width: min(100%, 640px);
+  border-radius: 18px;
+  background: #0f172a;
+  box-shadow: 0 14px 34px rgb(15 23 42 / 14%);
+}
+
+.rs-home-story-embed.is-detected-media.is-image {
+  display: block;
+}
+
+.rs-home-story-embed.is-detected-media img,
+.rs-home-story-embed.is-detected-media video {
+  display: block;
+  width: 100%;
+  max-height: min(62vh, 560px);
+  border: 0;
+  object-fit: contain;
+}
+
+.rs-home-story-embed.is-detected-media.is-video .rs-home-embed-source {
+  margin: 0;
+  padding: 10px 14px;
+  color: #fff;
+}
+
 .rs-home-social-embed-html iframe,
 .rs-home-social-embed-html video,
 .rs-home-social-embed-html img,

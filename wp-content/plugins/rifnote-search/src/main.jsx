@@ -378,6 +378,70 @@ function externalVideoEmbedUrl(url = '', options = {}) {
   return '';
 }
 
+function normalizeDetectedUrl(value = '') {
+  const cleaned = String(value || '')
+    .replace(/&amp;/gi, '&')
+    .replace(/[),.;!?\]}]+$/g, '')
+    .trim();
+  const withProtocol = /^www\./i.test(cleaned) ? `https://${cleaned}` : cleaned;
+
+  try {
+    const parsed = new URL(withProtocol);
+    return ['http:', 'https:'].includes(parsed.protocol) ? parsed.href : '';
+  } catch (_) {
+    return '';
+  }
+}
+
+function storyDetailUrls(story = {}) {
+  const detailText = [
+    story.full_content,
+    story.content,
+    story.body,
+    story.raw_content,
+    story.text,
+    story.excerpt,
+    story.summary,
+    story.description,
+  ].filter(Boolean).join(' ');
+  const matches = detailText.match(/(?:https?:\/\/|www\.)[^\s<>"']+/gi) || [];
+  return [...new Set(matches.map(normalizeDetectedUrl).filter(Boolean))];
+}
+
+function detectedMediaKind(url = '') {
+  const value = String(url || '').toLowerCase();
+  if (youtubeVideoId(value)) return 'youtube';
+  if (/(?:twitter\.com|x\.com)\/[^/]+\/status\//i.test(value)) return 'social';
+  if (/(?:instagram\.com)\/(?:p|reel|reels|tv)\//i.test(value)) return 'social';
+  if (/(?:facebook\.com|fb\.watch)\//i.test(value)) return 'social';
+  if (/(?:^|\.)threads\.net\//i.test(value)) return 'social';
+  if (/(?:^|\.)tiktok\.com\//i.test(value)) return 'social';
+
+  try {
+    const pathname = new URL(value).pathname.toLowerCase();
+    if (/\.(?:avif|gif|jpe?g|png|webp)(?:$)/i.test(pathname)) return 'image';
+    if (/\.(?:m3u8|mov|m4v|mp4|ogv|webm)(?:$)/i.test(pathname)) return 'video';
+  } catch (_) {
+    return '';
+  }
+
+  return '';
+}
+
+function resolveStoryDetailMedia(story = {}) {
+  const structured = [story.video_url, story.video, story.media_url, story.embed_url, story.original_url, story.read_full_story_url, story.source_url]
+    .map(normalizeDetectedUrl)
+    .filter(Boolean);
+  const candidates = [...structured, ...storyDetailUrls(story)];
+
+  for (const url of candidates) {
+    const kind = detectedMediaKind(url);
+    if (kind) return { url, kind, detected: !structured.includes(url) };
+  }
+
+  return null;
+}
+
 function loadExternalScript(src, id, onLoad = () => {}) {
   if (!src || typeof document === 'undefined') return;
   const existing = id ? document.getElementById(id) : null;
@@ -6614,17 +6678,44 @@ function HomeHighlights({ activePill = 'Notes', activeCategory = 'Notes', archiv
 }
 
 function HomeStoryEmbed({ story, activePill = 'Notes' }) {
-  const videoUrl = getStoryVideoUrl(story) || story.original_url || story.read_full_story_url || '';
-  const previewSrc = youtubePreviewSrc(story, true);
-  const thumbnail = story.image || story.image_url || youtubeThumbnail(story);
-  const embedHtml = useResolvedStoryEmbed(story);
-  const platform = getStorySocialPlatform(story);
-  const sourceUrl = story.original_url || story.read_full_story_url || story.source_url || '';
+  const detectedMedia = resolveStoryDetailMedia(story);
+  const resolvedStory = detectedMedia ? {
+    ...story,
+    embed_url: detectedMedia.kind === 'social' || detectedMedia.kind === 'youtube' ? detectedMedia.url : story.embed_url,
+    media_url: detectedMedia.kind === 'video' || detectedMedia.kind === 'youtube' ? detectedMedia.url : story.media_url,
+    original_url: detectedMedia.url,
+    source_type: detectedMedia.kind === 'social' ? 'social' : story.source_type,
+  } : story;
+  const videoUrl = getStoryVideoUrl(resolvedStory) || resolvedStory.original_url || resolvedStory.read_full_story_url || '';
+  const previewSrc = youtubePreviewSrc(resolvedStory, true);
+  const thumbnail = resolvedStory.image || resolvedStory.image_url || youtubeThumbnail(resolvedStory);
+  const embedHtml = useResolvedStoryEmbed(resolvedStory);
+  const platform = getStorySocialPlatform(resolvedStory);
+  const sourceUrl = detectedMedia?.url || resolvedStory.original_url || resolvedStory.read_full_story_url || resolvedStory.source_url || '';
+
+  if (detectedMedia?.kind === 'image') {
+    return (
+      <a className="rs-home-story-embed is-detected-media is-image" href={sourceUrl} target="_blank" rel="noreferrer" onClick={() => trackStoryClick(story, 'home_detected_image_click', activePill)}>
+        <img src={sourceUrl} alt={decodeText(story.headline || '')} loading="lazy" />
+      </a>
+    );
+  }
+
+  if (detectedMedia?.kind === 'video') {
+    return (
+      <div className="rs-home-story-embed is-detected-media is-video">
+        <video src={sourceUrl} controls playsInline preload="metadata" aria-label={decodeText(story.headline || 'Story video')} />
+        <a className="rs-home-embed-source" href={sourceUrl} target="_blank" rel="noreferrer" onClick={() => trackStoryClick(story, 'home_detected_video_click', activePill)}>
+          Open video <ExternalLink size={13} />
+        </a>
+      </div>
+    );
+  }
 
   if (previewSrc) {
     return (
       <div className="rs-home-story-embed is-youtube">
-        <YouTubePreview story={story} videoUrl={videoUrl} previewSrc={previewSrc} thumbnail={thumbnail} query={`home_${activePill}`} />
+        <YouTubePreview story={resolvedStory} videoUrl={videoUrl} previewSrc={previewSrc} thumbnail={thumbnail} query={`home_${activePill}`} />
       </div>
     );
   }
