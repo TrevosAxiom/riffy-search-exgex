@@ -5487,6 +5487,24 @@ function useFeaturedFootballFixtures(fixtures = []) {
   return liveFixtures.filter((fixture) => fixture && !isFootballFixtureFinished(fixture));
 }
 
+function getFixtureRedCards(fixture = {}) {
+  const events = [
+    ...(Array.isArray(fixture.events) ? fixture.events : []),
+    ...(Array.isArray(fixture.timeline) ? fixture.timeline : []),
+  ];
+  const seen = new Set();
+
+  return events.reduce((cards, event) => {
+    const text = [event.type, event.detail, event.comments, event.description].filter(Boolean).join(' ').toLowerCase();
+    if (!text.includes('red card') && !text.includes('second yellow')) return cards;
+    const key = `${event.elapsed || event.time?.elapsed || event.minute || 0}:${event.extra || event.time?.extra || 0}:${event.player?.id || event.player?.name || event.player_name || ''}:${event.team?.id || event.team_id || ''}`;
+    if (seen.has(key)) return cards;
+    seen.add(key);
+    cards.push({ ...event, __rifnoteEventKey: key });
+    return cards;
+  }, []);
+}
+
 function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
   const cleanFixtures = useFeaturedFootballFixtures(fixtures);
   const [active, setActive] = useState(0);
@@ -5494,9 +5512,14 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
   const [goalFlash, setGoalFlash] = useState(null);
   const [clockTick, setClockTick] = useState(() => Date.now());
   const seenGoalFlashRef = useRef(new Set());
+  const redCardMemoryRef = useRef(new Map());
   const scoreSignature = cleanFixtures.map((fixture) => {
     const id = fixture.fixture_id || fixture.id || fixture.fixture?.id || `${fixture.home?.name || 'home'}-${fixture.away?.name || 'away'}-${fixture.date || ''}`;
     return `${id}:${fixture.goals?.home ?? 0}-${fixture.goals?.away ?? 0}`;
+  }).join('|');
+  const redCardSignature = cleanFixtures.map((fixture) => {
+    const id = getFixtureDeepLinkId(fixture) || `${fixture.home?.name || ''}-${fixture.away?.name || ''}`;
+    return `${id}:${getFixtureRedCards(fixture).map((event) => event.__rifnoteEventKey).join(',')}`;
   }).join('|');
 
   useEffect(() => {
@@ -5580,12 +5603,46 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
   }, [scoreSignature]);
 
   useEffect(() => {
+    cleanFixtures.forEach((fixture) => {
+      const id = String(getFixtureDeepLinkId(fixture) || `${fixture.home?.name || ''}-${fixture.away?.name || ''}`);
+      const cards = getFixtureRedCards(fixture);
+      const currentKeys = new Set(cards.map((event) => event.__rifnoteEventKey));
+      const previousKeys = redCardMemoryRef.current.get(id);
+
+      if (previousKeys) {
+        const newest = [...cards].reverse().find((event) => !previousKeys.has(event.__rifnoteEventKey));
+        if (newest) {
+          const teamId = newest.team?.id || newest.team_id;
+          const teamName = newest.team?.name || newest.team_name || '';
+          const isHome = (teamId && Number(teamId) === Number(fixture.home?.id)) || (!teamId && teamName === fixture.home?.name);
+          const team = isHome ? fixture.home : fixture.away;
+          const minute = newest.elapsed || newest.time?.elapsed || newest.minute || '';
+          const player = newest.player?.name || newest.player_name || 'Player sent off';
+
+          setGoalFlash({
+            id: `${id}:red-card:${newest.__rifnoteEventKey}`,
+            type: 'red-card',
+            team: team?.name || teamName || 'Match update',
+            logo: team?.logo || newest.team?.logo || '',
+            scorer: `${player}${minute ? ` · ${minute}'` : ''}`,
+            score: `${fixture.goals?.home ?? '-'} - ${fixture.goals?.away ?? '-'}`,
+          });
+        }
+      }
+
+      redCardMemoryRef.current.set(id, currentKeys);
+    });
+  }, [redCardSignature]);
+
+  useEffect(() => {
     if (!goalFlash) {
       return undefined;
     }
 
     if (goalFlash.type === 'var') {
       playVarDecisionSound();
+    } else if (goalFlash.type === 'red-card') {
+      playRedCardSound();
     } else {
       playGoalCelebrationSound();
     }
@@ -5644,10 +5701,20 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
     });
   }
 
+  function testPenaltyAnimation() {
+    const team = fixture.home;
+    setGoalFlash({ id: `admin-penalty-test-${Date.now()}`, type: 'goal', goalType: 'penalty', team: team?.name || 'Home team', logo: team?.logo || '', scorer: 'Penalty scored', score: isUpcoming ? '1 - 0' : `${scoreHome} - ${scoreAway}` });
+  }
+
+  function testRedCardAnimation() {
+    const team = fixture.away;
+    setGoalFlash({ id: `admin-red-test-${Date.now()}`, type: 'red-card', team: team?.name || 'Away team', logo: team?.logo || '', scorer: 'Player sent off', score: isUpcoming ? '0 - 0' : `${scoreHome} - ${scoreAway}` });
+  }
+
   return (
     <section className={`rs-home-featured-football ${primary ? 'is-primary' : ''} ${isLive ? 'is-live' : ''}`} aria-label="Featured football match">
-      {goalFlash ? (
-        <a className={`rs-home-goal-flash is-${goalFlash.type || 'goal'} is-${goalFlash.goalType || 'normal'}`} href={matchUrl} role="status" aria-live="polite" aria-label={`${goalFlash.type === 'var' ? 'VAR update' : goalTypeLabel(goalFlash.goalType)} for ${goalFlash.team}. Open match details`}>
+      {goalFlash ? createPortal((
+        <a className={`rs-home-goal-flash is-${goalFlash.type || 'goal'} is-${goalFlash.goalType || 'normal'}`} href={matchUrl} role="status" aria-live="polite" aria-label={`${goalFlash.type === 'var' ? 'VAR update' : goalFlash.type === 'red-card' ? 'Red card' : goalTypeLabel(goalFlash.goalType)} for ${goalFlash.team}. Open match details`}>
           <span className="rs-home-goal-post-scene" aria-hidden="true">
             {goalFlash.type === 'var' ? (
               <span className="rs-home-var-review">
@@ -5656,6 +5723,12 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
                 <span className="rs-home-var-review-label"><Radio size={15} /> Reviewing incident</span>
                 <strong className="rs-home-var-screen">VAR</strong>
                 <b className="rs-home-var-decision">No goal</b>
+              </span>
+            ) : goalFlash.type === 'red-card' ? (
+              <span className="rs-home-red-card-scene">
+                <i className="rs-home-red-card-whistle" />
+                <i className="rs-home-red-card-card">RED</i>
+                <span className="rs-home-red-card-label">Sent off</span>
               </span>
             ) : (
               <>
@@ -5670,13 +5743,13 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
           <span className="rs-home-goal-team-mark">
             {goalFlash.logo ? <img src={goalFlash.logo} alt="" loading="eager" /> : <i>{String(goalFlash.team || 'GO').slice(0, 2).toUpperCase()}</i>}
           </span>
-          <span className="rs-home-goal-kicker">{goalFlash.type === 'var' ? 'VAR check' : goalTypeLabel(goalFlash.goalType)}</span>
+          <span className="rs-home-goal-kicker">{goalFlash.type === 'var' ? 'VAR check' : goalFlash.type === 'red-card' ? 'Red card' : goalTypeLabel(goalFlash.goalType)}</span>
           <b>{goalFlash.team}</b>
           <small>{goalFlash.scorer}</small>
           <strong>{goalFlash.score}</strong>
           <u>Tap for match details</u>
         </a>
-      ) : null}
+      ), document.body) : null}
       <div className="rs-home-featured-football-top">
         <span className="rs-home-football-league">{headline}</span>
       </div>
@@ -5697,6 +5770,12 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
           </button>
           <button className="rs-home-goal-test" type="button" onClick={testVarAnimation}>
             Test VAR animation
+          </button>
+          <button className="rs-home-goal-test" type="button" onClick={testPenaltyAnimation}>
+            Test penalty animation
+          </button>
+          <button className="rs-home-goal-test" type="button" onClick={testRedCardAnimation}>
+            Test red card animation
           </button>
         </div>
       ) : null}
@@ -5983,6 +6062,41 @@ function formatFeaturedPlayerName(name = '') {
   }
 
   return `${parts[0].charAt(0).toUpperCase()}. ${parts.slice(1).join(' ')}`;
+}
+
+function playRedCardSound() {
+  if (typeof window === 'undefined') return;
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return;
+
+  try {
+    const context = new AudioContext();
+    const start = context.currentTime;
+    const master = context.createGain();
+    master.gain.setValueAtTime(0.0001, start);
+    master.gain.exponentialRampToValueAtTime(0.18, start + 0.025);
+    master.gain.exponentialRampToValueAtTime(0.0001, start + 1.35);
+    master.connect(context.destination);
+
+    [0, 0.42].forEach((offset, index) => {
+      const whistle = context.createOscillator();
+      const gain = context.createGain();
+      whistle.type = 'sine';
+      whistle.frequency.setValueAtTime(index ? 2850 : 2550, start + offset);
+      whistle.frequency.linearRampToValueAtTime(index ? 2450 : 2950, start + offset + 0.28);
+      gain.gain.setValueAtTime(0.0001, start + offset);
+      gain.gain.exponentialRampToValueAtTime(0.12, start + offset + 0.015);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + offset + 0.34);
+      whistle.connect(gain);
+      gain.connect(master);
+      whistle.start(start + offset);
+      whistle.stop(start + offset + 0.36);
+    });
+
+    window.setTimeout(() => context.close().catch(() => {}), 1600);
+  } catch (error) {
+    // Browsers can block audio until interaction; the red-card visual still runs.
+  }
 }
 
 function playVarDecisionSound() {

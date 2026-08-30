@@ -2064,7 +2064,8 @@
   right: 0;
   bottom: 24px;
   left: 0;
-  z-index: 100400;
+  z-index: 2147482500;
+  isolation: isolate;
   display: grid;
   width: min(460px, calc(100vw - 40px));
   height: auto;
@@ -2098,6 +2099,13 @@
     radial-gradient(circle at 50% 48%, rgb(255 184 0 / 26%), transparent 36%),
     radial-gradient(circle at 18% 22%, rgb(255 255 255 / 24%), transparent 25%),
     linear-gradient(135deg, #121826 0%, #33270a 100%);
+}
+
+.rs-home-goal-flash.is-red-card {
+  background:
+    radial-gradient(circle at 50% 42%, rgb(239 68 68 / 42%), transparent 34%),
+    radial-gradient(circle at 16% 18%, rgb(255 255 255 / 16%), transparent 24%),
+    linear-gradient(145deg, #220607 0%, #101828 72%);
 }
 
 .rs-home-goal-flash::before,
@@ -2134,6 +2142,68 @@
   height: clamp(104px, 15vw, 178px);
   margin-bottom: 2px;
   perspective: 560px;
+}
+
+.rs-home-red-card-scene {
+  position: relative;
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+}
+
+.rs-home-red-card-card {
+  display: grid;
+  width: clamp(82px, 11vw, 116px);
+  aspect-ratio: 2 / 3;
+  place-items: center;
+  border: 4px solid rgb(255 255 255 / 80%);
+  border-radius: 10px;
+  background: linear-gradient(145deg, #ff3842, #b70812);
+  color: #fff;
+  font-size: clamp(1.05rem, 2vw, 1.45rem);
+  font-style: normal;
+  font-weight: 950;
+  letter-spacing: .12em;
+  box-shadow: 0 20px 44px rgb(0 0 0 / 42%), inset 0 0 24px rgb(255 255 255 / 15%);
+  transform-origin: 50% 110%;
+  animation: rsRedCardRaise 900ms cubic-bezier(.16, .86, .3, 1.15) both;
+}
+
+.rs-home-red-card-label {
+  position: absolute;
+  right: 0;
+  bottom: 2px;
+  left: 0;
+  color: #fecaca;
+  font-size: .78rem;
+  font-weight: 950;
+  letter-spacing: .13em;
+  text-transform: uppercase;
+  animation: rsGoalScoreReveal 650ms 650ms both;
+}
+
+.rs-home-red-card-whistle {
+  position: absolute;
+  top: 18%;
+  left: 18%;
+  width: 34px;
+  height: 18px;
+  border: 3px solid #fff;
+  border-radius: 12px 5px 5px 12px;
+  transform: rotate(-24deg);
+  opacity: .86;
+}
+
+.rs-home-red-card-whistle::after {
+  position: absolute;
+  top: 3px;
+  right: -12px;
+  width: 12px;
+  height: 6px;
+  content: "";
+  border-radius: 0 6px 6px 0;
+  background: #fff;
 }
 
 .rs-home-goal-ground {
@@ -2445,6 +2515,17 @@
   background: #fff;
   color: #991b1b;
   box-shadow: 0 0 0 5px rgb(255 255 255 / 15%);
+}
+
+.rs-home-goal-flash.is-red-card .rs-home-goal-kicker {
+  background: #dc101b;
+  box-shadow: 0 0 0 5px rgb(220 16 27 / 22%);
+}
+
+@keyframes rsRedCardRaise {
+  0% { opacity: 0; transform: translateY(70px) rotate(-18deg) scale(.7); }
+  60% { opacity: 1; transform: translateY(-8px) rotate(5deg) scale(1.08); }
+  100% { opacity: 1; transform: translateY(0) rotate(0) scale(1); }
 }
 
 .rs-home-goal-flash b {
