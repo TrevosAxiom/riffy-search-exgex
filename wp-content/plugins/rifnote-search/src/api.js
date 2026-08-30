@@ -400,9 +400,12 @@ export async function getFootballFixtureDetails(fixtureId, { force = false } = {
   }
 
   const url = new URL(`rifnote/v1/football/fixture/${encodeURIComponent(fixtureId)}`, baseUrl);
-  if (force) url.searchParams.set('force', '1');
+  if (force) {
+    url.searchParams.set('force', '1');
+    url.searchParams.set('_live', Date.now().toString());
+  }
 
-  const response = await fetch(url, { headers: headers() });
+  const response = await fetch(url, { headers: headers(), cache: force ? 'no-store' : 'default' });
   if (!response.ok) throw new Error(`Rifnote football fixture details failed: ${response.status}`);
   return response.json();
 }

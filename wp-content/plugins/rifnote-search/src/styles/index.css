@@ -2736,7 +2736,10 @@
   .rs-home-var-review,
   .rs-home-var-scan,
   .rs-home-var-review-label,
-  .rs-home-var-decision {
+  .rs-home-var-decision,
+  .rs-halftime-motion-track,
+  .rs-halftime-motion-label i,
+  .rs-halftime-stats-loading {
     animation: none !important;
   }
 
@@ -2865,6 +2868,97 @@
   color: #667085;
   font-size: clamp(0.85rem, 1.1vw, 1.05rem);
   font-weight: 850;
+}
+
+.rs-halftime-motion {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  width: min(880px, 100%);
+  margin: 0 auto;
+  padding: 9px 12px;
+  border: 1px solid rgb(16 24 40 / 10%);
+  border-radius: 16px;
+  background: rgb(255 255 255 / 82%);
+  box-shadow: 0 10px 28px rgb(15 23 42 / 7%);
+  overflow: hidden;
+}
+
+.rs-halftime-motion-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  color: #101828;
+  font-size: .72rem;
+  font-weight: 950;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.rs-halftime-motion-label i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #f59e0b;
+  box-shadow: 0 0 0 5px rgb(245 158 11 / 16%);
+  animation: rsHalftimePulse 1.25s ease-in-out infinite;
+}
+
+.rs-halftime-motion-window {
+  min-width: 0;
+  overflow: hidden;
+  mask-image: linear-gradient(90deg, transparent, #000 5%, #000 95%, transparent);
+}
+
+.rs-halftime-motion-track {
+  display: flex;
+  width: max-content;
+  gap: 9px;
+  animation: rsHalftimeStatsMove 18s linear infinite;
+}
+
+.rs-halftime-stat {
+  display: grid;
+  grid-template-columns: minmax(28px, auto) auto minmax(28px, auto);
+  align-items: center;
+  gap: 7px;
+  padding: 7px 10px;
+  border-radius: 999px;
+  background: #f3f5f8;
+  color: #101828;
+  white-space: nowrap;
+}
+
+.rs-halftime-stat b {
+  color: var(--rs-brand);
+  font-size: .78rem;
+  font-weight: 950;
+  text-align: center;
+}
+
+.rs-halftime-stat small,
+.rs-halftime-stats-loading {
+  color: #667085;
+  font-size: .7rem;
+  font-weight: 780;
+}
+
+.rs-halftime-stats-loading {
+  animation: rsHalftimePulse 1.25s ease-in-out infinite;
+}
+
+@keyframes rsHalftimeStatsMove {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(-50% - 4.5px)); }
+}
+
+@keyframes rsHalftimePulse {
+  0%, 100% { opacity: .5; }
+  50% { opacity: 1; }
 }
 
 .rs-home-goal-scorers {
@@ -3109,6 +3203,21 @@
     padding: 10px 9px;
     border-radius: 18px;
     font-size: 1.35rem;
+  }
+
+  .rs-halftime-motion {
+    grid-template-columns: 1fr;
+    gap: 8px;
+    width: calc(100% - 8px);
+    padding: 9px;
+  }
+
+  .rs-halftime-motion-label {
+    justify-content: center;
+  }
+
+  .rs-halftime-motion-track {
+    animation-duration: 14s;
   }
 
   .rs-home-goal-scorers {

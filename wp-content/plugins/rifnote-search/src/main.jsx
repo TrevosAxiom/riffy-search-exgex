@@ -5586,6 +5586,49 @@ function getFixtureRedCards(fixture = {}) {
   }, []);
 }
 
+function getHalftimeStats(fixture = {}) {
+  const teams = Array.isArray(fixture.statistics)
+    ? fixture.statistics
+    : (Array.isArray(fixture.details?.statistics) ? fixture.details.statistics : []);
+  if (teams.length < 2) return [];
+
+  const wanted = [
+    ['Ball Possession', 'Possession'],
+    ['Shots on Goal', 'Shots on target'],
+    ['Total Shots', 'Total shots'],
+    ['Corner Kicks', 'Corners'],
+    ['Fouls', 'Fouls'],
+  ];
+  const findValue = (team, type) => team?.statistics?.find((stat) => String(stat.type || '').toLowerCase() === type.toLowerCase())?.value;
+
+  return wanted.map(([type, label]) => ({
+    label,
+    home: findValue(teams[0], type),
+    away: findValue(teams[1], type),
+  })).filter((stat) => stat.home !== null && stat.home !== undefined && stat.away !== null && stat.away !== undefined).slice(0, 4);
+}
+
+function HalftimeStatsMotion({ fixture = {} }) {
+  const stats = getHalftimeStats(fixture);
+
+  return (
+    <div className="rs-halftime-motion" aria-label="Half-time match statistics">
+      <span className="rs-halftime-motion-label"><i /> Half-time stats</span>
+      {stats.length ? (
+        <div className="rs-halftime-motion-window">
+          <div className="rs-halftime-motion-track">
+            {[...stats, ...stats].map((stat, index) => (
+              <span className="rs-halftime-stat" key={`${stat.label}-${index}`} aria-hidden={index >= stats.length}>
+                <b>{stat.home}</b><small>{stat.label}</small><b>{stat.away}</b>
+              </span>
+            ))}
+          </div>
+        </div>
+      ) : <span className="rs-halftime-stats-loading">Match stats are syncing…</span>}
+    </div>
+  );
+}
+
 function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
   const cleanFixtures = useFeaturedFootballFixtures(fixtures);
   const [active, setActive] = useState(0);
@@ -5737,8 +5780,9 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
   }
 
   const fixture = cleanFixtures[Math.min(active, cleanFixtures.length - 1)] || cleanFixtures[0];
-  const status = fixture.status_short || '';
+  const status = String(fixture.status_short || fixture.fixture?.status?.short || '').toUpperCase();
   const isLive = !['FT', 'AET', 'PEN', 'NS', 'PST', 'CANC'].includes(status);
+  const isHalfTime = status === 'HT';
   const scoreHome = fixture.goals?.home ?? '-';
   const scoreAway = fixture.goals?.away ?? '-';
   const isUpcoming = ['NS', 'TBD'].includes(status);
@@ -5842,6 +5886,7 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
         </div>
         <HomeScoreboardTeam team={fixture.away} align="right" large />
       </a>
+      {isHalfTime ? <HalftimeStatsMotion fixture={fixture} /> : null}
       {goalScorers.length ? <FeaturedGoalScorers goals={goalScorers} /> : null}
       {venue ? <div className="rs-home-football-venue">Venue: <b>{venue}</b></div> : null}
       {canTestGoalAnimation ? (
