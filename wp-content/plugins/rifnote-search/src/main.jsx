@@ -516,10 +516,15 @@ function App({ mode }) {
   const activeHomePill = useMemo(() => homepagePills.find((pill) => pill.category === homePill) || homepagePills[0] || defaultHomePills[0], [homePill, homepagePills]);
   const topStories = useMemo(() => homeStories.filter((story) => !homeLeadStory?.id || story.id !== homeLeadStory.id).slice(0, 10), [homeLeadStory?.id, homeStories]);
   const footballTabAvailable = hasFootballSearchResults(footballResults);
-  const visibleSearchTabs = useMemo(() => searchTabs.filter((tab) => tab !== 'Football' || footballTabAvailable), [footballTabAvailable]);
   const latestResults = useMemo(() => [...results].sort((first, second) => storyTimeValue(second) - storyTimeValue(first)), [results]);
   const videoResults = useMemo(() => results.filter((story) => getStoryVideoUrl(story)), [results]);
   const socialResults = useMemo(() => results.filter((story) => isSocialStory(story)), [results]);
+  const visibleSearchTabs = useMemo(() => searchTabs.filter((tab) => {
+    if (tab === 'Football') return footballTabAvailable;
+    if (tab === 'Videos') return videoResults.length > 0;
+    if (tab === 'Social') return socialResults.length > 0;
+    return true;
+  }), [footballTabAvailable, socialResults.length, videoResults.length]);
   const sourceCount = useMemo(() => new Set(results.map((story) => story.source_domain || story.source_name).filter(Boolean)).size, [results]);
   const searchTabCount = activeTab === 'Football' ? footballSearchResultCount(footballResults) : activeTab === 'Videos' ? videoResults.length : activeTab === 'Social' ? socialResults.length : activeTab === 'Sources' ? sourceCount : pagination.total;
   const searchTabLabel = activeTab === 'Football' ? 'football hit' : activeTab === 'Videos' ? 'video' : activeTab === 'Social' ? 'social post' : activeTab === 'Sources' ? 'source' : 'result';
@@ -600,14 +605,14 @@ function App({ mode }) {
   }, [state.category, state.dateRange, state.page, state.query, state.sort]);
 
   useEffect(() => {
-    if (activeTab === 'Football' && !footballTabAvailable) {
+    if (!visibleSearchTabs.includes(activeTab)) {
       setActiveTab('All');
     }
 
     if (activeTab === 'Top') {
       setActiveTab('All');
     }
-  }, [activeTab, footballTabAvailable]);
+  }, [activeTab, visibleSearchTabs]);
 
   useEffect(() => {
     let cancelled = false;
@@ -1342,7 +1347,7 @@ function SmartEmbedHtml({ html = '', className = '' }) {
     if (!node || !html) return;
 
     if (node.querySelector('.twitter-tweet, blockquote.twitter-tweet')) {
-      const hydrateTweets = () => window.twttr?.widgets?.load?.(node);
+      const hydrateTweets = () => window.requestAnimationFrame(() => window.twttr?.widgets?.load?.(node));
       if (window.twttr?.widgets?.load) {
         hydrateTweets();
       } else {
@@ -2126,6 +2131,8 @@ function SearchPanel({ state, onSubmit, compact = false }) {
   const [draftQuery, setDraftQuery] = useState(state.query);
   const [suggestions, setSuggestions] = useState([]);
   const variant = compact === 'google' ? 'google' : compact === 'home' ? 'home' : compact ? 'compact' : 'full';
+  const homepagePlaceholder = String(window.RIFNOTE_SEARCH?.homeSearchPlaceholder || '').trim() || 'Search news and trends';
+  const searchPlaceholder = variant === 'home' ? homepagePlaceholder : 'Search news and trends';
 
   useEffect(() => {
     setDraftQuery(state.query);
@@ -2194,7 +2201,7 @@ function SearchPanel({ state, onSubmit, compact = false }) {
     <form className={`rs-search-panel ${variant}`} onSubmit={submitDraft}>
       <div className="rs-search-input">
         {variant === 'home' ? <Search className="rs-home-mobile-search-glyph" aria-hidden="true" /> : null}
-        <input value={draftQuery} onChange={(event) => setDraftQuery(event.target.value)} onKeyDown={handleSearchKeyDown} placeholder="Search news and trends" />
+        <input value={draftQuery} onChange={(event) => setDraftQuery(event.target.value)} onKeyDown={handleSearchKeyDown} placeholder={searchPlaceholder} />
         <button className="rs-button primary icon-only" type="submit" aria-label="Search Rifnote">
           <Search size={22} aria-hidden="true" />
         </button>
@@ -6138,36 +6145,19 @@ function HomeQuickLinks({ activePill = 'Notes', items = defaultHomePills, onSele
 }
 
 function HomeCategoryBrowser({ categories = [] }) {
-  const [query, setQuery] = useState('');
-  const filtered = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) {
-      return categories;
-    }
-
-    return categories.filter((category) => `${category.name} ${category.slug}`.toLowerCase().includes(needle));
-  }, [categories, query]);
-
   return (
     <Card className="rs-home-category-browser">
       <div className="rs-home-category-head">
-        <div>
-          <h2>Categories</h2>
-          <p>Jump into any desk on Rifnote.</p>
-        </div>
-        <label className="rs-home-category-search">
-          <Search size={18} />
-          <input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Find a category" />
-        </label>
+        <h2>Categories</h2>
       </div>
       <div className="rs-home-category-pills">
-        {filtered.length ? filtered.map((category) => (
+        {categories.length ? categories.map((category) => (
           <a href={category.url} key={category.id || category.slug}>
             <span>{category.name}</span>
             {category.count ? <small>{category.count.toLocaleString()}</small> : null}
           </a>
         )) : (
-          <p>No category matched that search.</p>
+          <p>No categories are available.</p>
         )}
       </div>
     </Card>
@@ -6293,20 +6283,24 @@ function HomeHighlights({ activePill = 'Notes', activeCategory = 'Notes', archiv
               </button>
               <AdminStoryActions story={story} compact />
               <div className="rs-live-note-panel" id={`${noteId}-panel`} hidden={!isOpen}>
-                <HomeStoryEmbed story={story} activePill={activePill} />
-                {fullContent ? (
-                  <div className="rs-home-pill-full-content" dangerouslySetInnerHTML={{ __html: fullContent }} />
-                ) : plainContent ? (
-                  <p>{plainContent}</p>
-                ) : (
-                  <p>{excerpt}</p>
-                )}
-                {hasStoryHub ? (
-                  <footer>
-                    <a className="rs-note-breakdown-link" href={storyUrl} onClick={() => trackStoryClick(story, 'full_coverage_click', '')}>Breakdown <ArrowRight size={13} /></a>
-                  </footer>
+                {isOpen ? (
+                  <>
+                    <HomeStoryEmbed story={story} activePill={activePill} />
+                    {fullContent ? (
+                      <div className="rs-home-pill-full-content" dangerouslySetInnerHTML={{ __html: fullContent }} />
+                    ) : plainContent ? (
+                      <p>{plainContent}</p>
+                    ) : (
+                      <p>{excerpt}</p>
+                    )}
+                    {hasStoryHub ? (
+                      <footer>
+                        <a className="rs-note-breakdown-link" href={storyUrl} onClick={() => trackStoryClick(story, 'full_coverage_click', '')}>Breakdown <ArrowRight size={13} /></a>
+                      </footer>
+                    ) : null}
+                    <HomeStoryShare story={story} noteId={noteId} />
+                  </>
                 ) : null}
-                <HomeStoryShare story={story} noteId={noteId} />
               </div>
             </div>
           </article>
@@ -7332,12 +7326,33 @@ function LiveScores({ live = false }) {
 }
 
 function LiveTeamMini({ team = {}, align = 'left' }) {
+  const fullName = decodeText(team.name || 'Team');
+  const displayName = liveSidebarTeamName(fullName);
+
   return (
     <span className={`rs-live-team-mini ${align === 'right' ? 'is-right' : ''}`}>
-      {team.logo ? <img src={team.logo} alt="" loading="lazy" /> : <i>{shortTeamName(team.name || 'Team').slice(0, 2).toUpperCase()}</i>}
-      <b title={team.name || 'Team'}>{shortTeamName(team.name || 'Team')}</b>
+      {team.logo ? <img src={team.logo} alt="" loading="lazy" /> : <i>{displayName.slice(0, 2).toUpperCase()}</i>}
+      <b title={fullName} aria-label={fullName}>{displayName}</b>
     </span>
   );
+}
+
+function liveSidebarTeamName(name = '') {
+  const compact = shortTeamName(name, 40)
+    .replace(/\bUnited\b/gi, 'Utd')
+    .replace(/\bWanderers\b/gi, 'Wdrs')
+    .replace(/\bAthletic\b/gi, 'Ath')
+    .replace(/\bSporting\b/gi, 'Sport')
+    .replace(/\bInternational\b/gi, 'Intl')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (compact.length <= 12) {
+    return compact;
+  }
+
+  const initials = compact.match(/[\p{L}\p{N}]+/gu)?.map((word) => word[0]).join('').slice(0, 4).toUpperCase();
+  return initials?.length > 1 ? initials : compact.slice(0, 12);
 }
 
 function shortTeamName(name = '', limit = 12) {
@@ -7822,6 +7837,7 @@ function LoadingGrid() {
     <div className="rs-results rs-loading-stack" aria-live="polite" aria-busy="true">
       <GlassLoader />
       <GlassLoader compact />
+      <GlassLoader compact />
     </div>
   );
 }
@@ -7829,9 +7845,12 @@ function LoadingGrid() {
 function GlassLoader({ compact = false, label = '' }) {
   return (
     <div className={`rs-glass-loader ${compact ? 'is-compact' : ''}`} role="status" aria-label={label || 'Loading'}>
-      <span className="rs-glass-orb" aria-hidden="true"></span>
-      <span className="rs-glass-line is-wide" aria-hidden="true"></span>
-      <span className="rs-glass-line" aria-hidden="true"></span>
+      <span className="rs-glass-thumb" aria-hidden="true"></span>
+      <span className="rs-glass-copy" aria-hidden="true">
+        <span className="rs-glass-line is-wide"></span>
+        <span className="rs-glass-line"></span>
+        <span className="rs-glass-line is-short"></span>
+      </span>
       <span className="rs-sr-only">{label || 'Loading'}</span>
     </div>
   );

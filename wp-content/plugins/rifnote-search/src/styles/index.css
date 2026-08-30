@@ -12,7 +12,7 @@
   --rs-border: #dfe4ec;
   --rs-text: #111827;
   --rs-text-muted: #667085;
-  --rs-page: #f7f8fb;
+  --rs-page: #ffffff;
   --rs-radius: 18px;
   --rs-shadow: 0 12px 34px rgb(17 24 39 / 10%);
   --rs-font-ui: Roboto, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -3435,7 +3435,7 @@
   --rs-border: #dfe4ec;
   --rs-text: #111827;
   --rs-text-muted: #667085;
-  --rs-page: #f7f8fb;
+  --rs-page: #ffffff;
   --rs-radius: 18px;
   --rs-shadow: 0 12px 34px rgb(17 24 39 / 10%);
   --rs-font-ui: Roboto, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -5553,7 +5553,7 @@ article.is-admin-trashed {
 }
 
 .rs-live-note-panel {
-  padding: 0 30px 24px 56px;
+  padding: 0 0 24px 56px;
   min-width: 0;
   max-width: 100%;
   overflow: hidden;
@@ -5572,9 +5572,15 @@ article.is-admin-trashed {
 }
 
 .rs-home-social-embed-html {
+  display: block;
   width: 100%;
   max-width: 560px;
   overflow: hidden;
+}
+
+.rs-home-story-embed.is-social {
+  width: min(100%, 560px);
+  max-width: 100%;
 }
 
 .rs-home-social-embed-html iframe,
@@ -6325,45 +6331,43 @@ article.is-admin-trashed {
 .rs-glass-loader {
   position: relative;
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr);
-  gap: 14px;
+  grid-template-columns: 104px minmax(0, 1fr);
+  gap: 18px;
   align-items: center;
-  min-height: 108px;
+  min-height: 126px;
   overflow: hidden;
-  padding: 22px;
-  border: 1px solid rgb(255 255 255 / 64%);
-  border-radius: 24px;
-  background:
-    linear-gradient(135deg, rgb(255 255 255 / 70%), rgb(255 255 255 / 34%)),
-    radial-gradient(circle at 12% 0%, rgb(237 28 36 / 14%), transparent 36%),
-    radial-gradient(circle at 100% 0%, rgb(22 163 74 / 12%), transparent 34%);
-  box-shadow: 0 18px 48px rgb(15 23 42 / 9%);
-  backdrop-filter: blur(18px);
+  padding: 18px;
+  border: 1px solid #e6e9ef;
+  border-radius: 18px;
+  background: #fff;
 }
 
 .rs-glass-loader.is-compact {
-  min-height: 82px;
+  min-height: 112px;
 }
 
 .rs-glass-loader::after {
   content: "";
   position: absolute;
   inset: -45%;
-  background: linear-gradient(100deg, transparent 28%, rgb(255 255 255 / 46%) 47%, transparent 68%);
+  background: linear-gradient(100deg, transparent 28%, rgb(255 255 255 / 72%) 47%, transparent 68%);
   animation: rs-glass-sweep 1.7s ease-in-out infinite;
 }
 
-.rs-glass-orb {
+.rs-glass-thumb {
   position: relative;
   z-index: 1;
-  width: 44px;
-  height: 44px;
-  border-radius: 999px;
-  background:
-    radial-gradient(circle at 34% 32%, #fff 0 8px, transparent 9px),
-    conic-gradient(from 120deg, var(--rs-brand), #ff9a3d, #17a34a, var(--rs-brand));
-  box-shadow: 0 0 0 8px rgb(237 28 36 / 8%);
-  animation: rs-glass-pulse 1.35s ease-in-out infinite;
+  width: 104px;
+  height: 78px;
+  border-radius: 12px;
+  background: #eef1f5;
+}
+
+.rs-glass-copy {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 11px;
 }
 
 .rs-glass-line {
@@ -6377,9 +6381,13 @@ article.is-admin-trashed {
 }
 
 .rs-glass-line.is-wide {
-  align-self: end;
   width: min(82%, 540px);
   height: 17px;
+}
+
+.rs-glass-line.is-short {
+  width: min(38%, 220px);
+  height: 11px;
 }
 
 @keyframes rs-glass-sweep {
@@ -6392,14 +6400,23 @@ article.is-admin-trashed {
   }
 }
 
-@keyframes rs-glass-pulse {
-  0%,
-  100% {
-    transform: scale(1);
+@media (prefers-reduced-motion: reduce) {
+  .rs-glass-loader::after {
+    animation: none;
+  }
+}
+
+@media (max-width: 520px) {
+  .rs-glass-loader {
+    grid-template-columns: 82px minmax(0, 1fr);
+    gap: 14px;
+    min-height: 108px;
+    padding: 14px;
   }
 
-  50% {
-    transform: scale(.88);
+  .rs-glass-thumb {
+    width: 82px;
+    height: 66px;
   }
 }
 
@@ -7766,7 +7783,7 @@ body.rifnote-search-plugin-page,
   --rs-brand-strong: #ed1c24;
   --rs-ink: #101828;
   --rs-soft-ink: #475467;
-  --rs-page: #f6f8fb;
+  --rs-page: #ffffff;
   --rs-card: #ffffff;
   --rs-border: #e3e8ef;
   --rs-radius: 16px;

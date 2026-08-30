@@ -3,7 +3,7 @@
  * Plugin Name: Rifnote Search
  * Plugin URI: https://rifnote.com/
  * Description: AI-powered news search and publisher discovery plugin for Rifnote.
- * Version: 0.2.33
+ * Version: 0.2.34
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Rifnote
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RIFNOTE_SEARCH_VERSION', '0.2.33');
+define('RIFNOTE_SEARCH_VERSION', '0.2.34');
 define('RIFNOTE_SEARCH_FILE', __FILE__);
 define('RIFNOTE_SEARCH_DIR', plugin_dir_path(__FILE__));
 define('RIFNOTE_SEARCH_URL', plugin_dir_url(__FILE__));
@@ -520,6 +520,7 @@ JS;
             'homeSearchMediaUrl' => esc_url_raw(get_option('rifnote_home_search_media_url', '')),
             'homeSearchMediaLinkUrl' => esc_url_raw(get_option('rifnote_home_search_media_link_url', '')),
             'homeSearchMediaType' => sanitize_key(get_option('rifnote_home_search_media_type', 'image')),
+            'homeSearchPlaceholder' => sanitize_text_field((string) get_option('rifnote_home_search_placeholder', __('Search news and trends', 'rifnote-search'))),
             'electionTakeover' => class_exists('Rifnote_Search_Election') ? Rifnote_Search_Election::public_payload() : array(),
             'featuredFootballMatches' => class_exists('Rifnote_Search_Football_API') ? Rifnote_Search_Football_API::featured_homepage_matches(8) : array(),
             'featuredFootballUrl' => home_url('/football/'),

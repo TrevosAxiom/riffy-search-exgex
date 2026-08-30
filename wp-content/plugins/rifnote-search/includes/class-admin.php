@@ -609,6 +609,7 @@ class Rifnote_Search_Admin {
                 'description' => __('Search behavior, excerpts, AI answer cards and ranking vocabulary.', 'rifnote-search'),
                 'section' => 'settings-search-ai',
                 'fields' => array(
+                    'rifnote_home_search_placeholder' => array('label' => __('Homepage search placeholder', 'rifnote-search'), 'type' => 'text', 'description' => __('Text shown inside the homepage search box before a visitor starts typing.', 'rifnote-search')),
                     'rifnote_ai_enabled' => array('label' => __('Enable AI answers', 'rifnote-search'), 'type' => 'checkbox'),
                     'rifnote_show_ai_cards' => array('label' => __('Show AI cards', 'rifnote-search'), 'type' => 'checkbox'),
                     'rifnote_show_story_excerpts' => array('label' => __('Show excerpts', 'rifnote-search'), 'type' => 'checkbox'),
@@ -891,6 +892,7 @@ class Rifnote_Search_Admin {
 
     private static function settings_option_default($option) {
         $defaults = array(
+            'rifnote_home_search_placeholder' => __('Search news and trends', 'rifnote-search'),
             'rifnote_github_updater_enabled' => true,
             'rifnote_github_repo' => Rifnote_Search_GitHub_Updater::DEFAULT_REPO,
             'rifnote_github_asset_name' => Rifnote_Search_GitHub_Updater::DEFAULT_ASSET,
@@ -2998,6 +3000,7 @@ class Rifnote_Search_Admin {
             'rifnote_home_featured_football_matches' => array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_home_featured_football_matches'), 'default' => ''),
         );
 
+        register_setting('rifnote_search_settings', 'rifnote_home_search_placeholder', array('type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => __('Search news and trends', 'rifnote-search')));
         register_setting('rifnote_search_settings', 'rifnote_ai_enabled', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true));
         register_setting('rifnote_search_settings', 'rifnote_show_ai_cards', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true));
         register_setting('rifnote_search_settings', 'rifnote_show_story_excerpts', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true));
