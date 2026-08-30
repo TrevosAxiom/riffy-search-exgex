@@ -473,25 +473,32 @@ function getStoryEmbedUrl(story = {}) {
   return story?.embed_url || story?.original_url || story?.read_full_story_url || story?.source_url || '';
 }
 
+function twitterStatusId(url = '') {
+  return String(url || '').match(/(?:twitter\.com|x\.com)\/[^/]+\/status\/(\d+)/i)?.[1] || '';
+}
+
 function instantSocialEmbedHtml(url = '') {
-  const value = String(url || '');
-  const tweetId = value.match(/(?:twitter\.com|x\.com)\/[^/]+\/status\/(\d+)/i)?.[1] || '';
+  const tweetId = twitterStatusId(url);
   if (!tweetId) return '';
 
-  return `<figure class="rs-smart-embed is-x is-instant"><iframe src="https://platform.twitter.com/embed/Tweet.html?id=${tweetId}&amp;dnt=true&amp;theme=light" title="X post" width="550" height="420" loading="eager" frameborder="0" scrolling="no" allowfullscreen></iframe></figure>`;
+  return `<figure class="rs-smart-embed is-x is-instant"><iframe src="https://platform.twitter.com/embed/Tweet.html?id=${tweetId}&amp;dnt=true&amp;theme=light" title="X post" width="550" height="720" loading="eager" frameborder="0" scrolling="auto" allowfullscreen></iframe></figure>`;
 }
 
 function shouldResolveRemoteEmbed(story = {}) {
   const platform = getStorySocialPlatform(story).toLowerCase();
   const sourceType = String(story.source_type || story.media_type || '').toLowerCase();
-  if (!getStoryEmbedUrl(story) || getStoryEmbedHtml(story)) return false;
+  const embedUrl = getStoryEmbedUrl(story);
+  if (!embedUrl || getStoryEmbedHtml(story)) return false;
+  if (platform === 'x' || platform === 'twitter') return Boolean(twitterStatusId(embedUrl));
   if (['instagram', 'facebook', 'x', 'twitter', 'tiktok', 'threads', 'reddit', 'vimeo'].includes(platform)) return true;
   return sourceType === 'social' || sourceType === 'video';
 }
 
 function useResolvedStoryEmbed(story = {}) {
   const embedUrl = getStoryEmbedUrl(story);
-  const storedHtml = getStoryEmbedHtml(story);
+  const platform = getStorySocialPlatform(story).toLowerCase();
+  const ignoreTwitterProfile = ['x', 'twitter'].includes(platform) && !twitterStatusId(embedUrl);
+  const storedHtml = ignoreTwitterProfile ? '' : getStoryEmbedHtml(story);
   const instantHtml = storedHtml ? '' : instantSocialEmbedHtml(embedUrl);
   const initialHtml = storedHtml || instantHtml;
   const [html, setHtml] = useState(initialHtml);

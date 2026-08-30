@@ -431,7 +431,8 @@ class Rifnote_Search_Social {
         // X/Twitter embeds are deterministic. Return immediately instead of
         // waiting for WordPress oEmbed and a full remote-page metadata scrape.
         if ('x' === $platform || 'twitter' === $platform) {
-            $preview['embed_html'] = self::render_embed_for_url($url);
+            $post_id = self::platform_post_id($url, 'x');
+            $preview['embed_html'] = $post_id ? self::render_embed_for_url($url) : '';
             return $preview;
         }
 
@@ -529,7 +530,7 @@ class Rifnote_Search_Social {
         } elseif ('x' === $platform || 'twitter' === $platform) {
             $post_id = self::platform_post_id($url, 'x');
             if ($post_id) {
-                $embed = '<iframe src="https://platform.twitter.com/embed/Tweet.html?id=' . rawurlencode($post_id) . '&amp;dnt=true&amp;theme=light" title="' . esc_attr($label ? $label : __('X post', 'rifnote-search')) . '" width="550" height="420" loading="eager" scrolling="no" frameborder="0" allowfullscreen></iframe>';
+                $embed = '<iframe src="https://platform.twitter.com/embed/Tweet.html?id=' . rawurlencode($post_id) . '&amp;dnt=true&amp;theme=light" title="' . esc_attr($label ? $label : __('X post', 'rifnote-search')) . '" width="550" height="720" loading="eager" scrolling="auto" frameborder="0" allowfullscreen></iframe>';
             }
         } elseif ('instagram' === $platform) {
             $embed = '<blockquote class="instagram-media" data-instgrm-permalink="' . esc_url($url) . '" data-instgrm-version="14"><a href="' . esc_url($url) . '"></a></blockquote>';

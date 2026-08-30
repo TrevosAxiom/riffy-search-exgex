@@ -953,6 +953,13 @@
   height: auto;
 }
 
+.rs-smart-embed.is-x.is-instant iframe,
+.rs-smart-embed.is-x iframe {
+  height: min(720px, 78vh);
+  min-height: 560px;
+  background: #fff;
+}
+
 .rs-smart-embed blockquote,
 .rs-smart-embed-html blockquote,
 .rs-smart-embed-html .twitter-tweet,
