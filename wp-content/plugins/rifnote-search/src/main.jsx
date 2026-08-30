@@ -720,6 +720,7 @@ function App({ mode }) {
   const hasFeaturedFootballTakeover = activeFeaturedFootballMatches.length > 0;
   const hasAdminHomepageMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl) && !isElectionTakeoverActive && !hasFeaturedFootballTakeover;
   const hasHomeSearchMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl || isElectionTakeoverActive || hasFeaturedFootballTakeover);
+  const homeLive = window.RIFNOTE_SEARCH?.homeLive || null;
   const showMobileTakeoverLogo = hasHomeSearchMedia && !hasAdminHomepageMedia;
 
   useEffect(() => {
@@ -887,6 +888,7 @@ function App({ mode }) {
               ))}
             </div>
           )}
+          {homeLive?.enabled ? <HomeLiveFeature live={homeLive} /> : null}
           <SearchPanel state={state} onSubmit={submitSearch} compact="home" />
           <HomeQuickLinks activePill={homePill} items={homepagePills} onSelect={updateHomePill} showCategories={Boolean(siteCategories.length)} categoriesActive={showHomeCategories} onCategoriesToggle={toggleHomeCategories} />
         </section>
@@ -3845,6 +3847,19 @@ function getLiveSourceLabel(value = 'Live') {
   return /api/i.test(label) ? 'Live' : label;
 }
 
+function normalizeGoalType(value = '') {
+  const text = String(value || '').toLowerCase();
+  if (text.includes('own')) return 'own-goal';
+  if (text.includes('penalty')) return 'penalty';
+  return 'normal';
+}
+
+function goalTypeLabel(value = 'normal') {
+  if (value === 'own-goal') return 'Own goal';
+  if (value === 'penalty') return 'Penalty';
+  return 'Goal';
+}
+
 function getFixtureMarkers(fixture = {}, details = {}) {
   const rows = [
     ...(Array.isArray(details.markers) ? details.markers : []),
@@ -3866,6 +3881,9 @@ function getFixtureMarkers(fixture = {}, details = {}) {
       extra: row.extra ?? '',
       team: row.team?.name || row.team || '',
       player: row.player?.name || row.player || '',
+      goalType: String(row.kind || row.type || '').toLowerCase() === 'goal'
+        ? normalizeGoalType(row.goal_type || row.goalType || row.detail || row.label)
+        : 'normal',
       red: row.red !== false,
     }))
     .filter((row) => row.label || row.kind)
@@ -3891,13 +3909,13 @@ function MatchMarkers({ fixture = {}, details = {}, compact = false }) {
     <div className={`rs-match-markers ${compact ? 'compact' : 'is-detailed'}`} aria-label={compact ? 'Match markers' : 'Goal and VAR timeline'}>
       {visibleMarkers.map((marker, index) => {
         const minute = marker.minute ? `${marker.minute}${marker.extra ? `+${marker.extra}` : ''}'` : '';
-        const kind = marker.kind === 'var' ? 'VAR' : marker.kind === 'goal' ? 'Goal' : marker.label.toUpperCase();
+        const kind = marker.kind === 'var' ? 'VAR' : marker.kind === 'goal' ? goalTypeLabel(marker.goalType) : marker.label.toUpperCase();
         const title = [minute, kind, marker.team, marker.player].filter(Boolean).join(' · ');
 
         if (!compact) {
           const teamCode = marker.team ? apiFootballTeamCode({ name: marker.team }) : '';
           return (
-            <article className={`rs-match-marker is-${marker.kind} ${marker.red ? 'is-red' : ''}`} key={`${marker.kind}-${marker.label}-${marker.minute}-${index}`} title={title}>
+            <article className={`rs-match-marker is-${marker.kind} is-${marker.goalType} ${marker.red ? 'is-red' : ''}`} key={`${marker.kind}-${marker.label}-${marker.minute}-${index}`} title={title}>
               <span className="rs-match-marker-icon" aria-hidden="true">{marker.kind === 'var' ? <Radio size={17} /> : <Goal size={17} />}</span>
               <span className="rs-match-marker-copy">
                 <span><b>{minute || '—'}</b>{teamCode ? <small>{teamCode}</small> : null}</span>
@@ -3909,7 +3927,7 @@ function MatchMarkers({ fixture = {}, details = {}, compact = false }) {
         }
 
         return (
-          <span className={`rs-match-marker is-${marker.kind} ${marker.red ? 'is-red' : ''}`} key={`${marker.kind}-${marker.label}-${marker.minute}-${index}`} title={title}>
+          <span className={`rs-match-marker is-${marker.kind} is-${marker.goalType} ${marker.red ? 'is-red' : ''}`} key={`${marker.kind}-${marker.label}-${marker.minute}-${index}`} title={title}>
             {marker.kind === 'goal' ? <Goal size={12} /> : marker.kind === 'var' ? <Radio size={12} /> : null}
             {minute ? <b>{minute}</b> : null}
             <em>{kind}</em>
@@ -4693,14 +4711,16 @@ function MatchNewsPanel({ stories = [], fixture = {} }) {
 
 function EventRow({ event }) {
   const minute = event.elapsed ? `${event.elapsed}${event.extra ? `+${event.extra}` : ''}'` : '—';
+  const isGoal = String(event.type || '').toLowerCase() === 'goal';
+  const goalType = isGoal ? normalizeGoalType(event.detail) : 'normal';
 
   return (
-    <article className="rs-event-row">
+    <article className={`rs-event-row ${isGoal ? `is-${goalType}` : ''}`}>
       <Badge tone={event.type === 'Goal' ? 'danger' : ''}>{minute}</Badge>
       {event.team?.logo ? <img src={event.team.logo} alt="" loading="lazy" /> : <span className="rs-team-dot" />}
       <div>
         <strong>{event.player?.name || event.type || 'Match event'}</strong>
-        <span>{event.type}{event.detail ? ` · ${event.detail}` : ''}{event.assist?.name ? ` · Assist: ${event.assist.name}` : ''}</span>
+        <span>{event.type}{event.detail ? ` · ${event.detail}` : ''}{isGoal && goalType !== 'normal' ? <em className={`rs-goal-type-badge is-${goalType}`}>{goalTypeLabel(goalType)}</em> : null}{event.assist?.name ? ` · Assist: ${event.assist.name}` : ''}</span>
       </div>
     </article>
   );
@@ -5264,6 +5284,26 @@ function MobileHomeTakeoverLogo() {
   );
 }
 
+function HomeLiveFeature({ live = {} }) {
+  const title = decodeText(live.title || '');
+  const source = decodeText(live.source || 'Live');
+
+  if (!live.enabled || !title || !live.url) {
+    return null;
+  }
+
+  return (
+    <a className="rs-home-live-feature" href={live.url} aria-label={`Live: ${title}`}>
+      <span className="rs-home-live-badge"><i /> Live</span>
+      <span className="rs-home-live-copy">
+        <b>{title}</b>
+        {source && source.toLowerCase() !== 'live' ? <small>{source}</small> : null}
+      </span>
+      <ArrowRight size={17} aria-hidden="true" />
+    </a>
+  );
+}
+
 function HomeSearchMedia({ primary = false, featuredFootballMatches = [] }) {
   const [takeover, setTakeover] = useState(window.RIFNOTE_SEARCH?.electionTakeover || null);
   const [soundOn, setSoundOn] = useState(false);
@@ -5507,6 +5547,7 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
           const isHomeGoal = isGoal ? homeScore > previous.home : homeScore < previous.home;
           const team = isHomeGoal ? fixture.home : fixture.away;
           const scorer = isGoal ? extractGoalScorer(fixture, isHomeGoal) : extractGoalScorer(fixture, isHomeGoal, true);
+          const goalType = isGoal ? extractGoalType(fixture, isHomeGoal) : 'normal';
           const flashSignature = `${id}:${isGoal ? 'goal' : 'var'}:${homeScore}-${awayScore}:${scorer}`;
 
           if (seenGoalFlashRef.current.has(flashSignature)) {
@@ -5522,6 +5563,7 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
             team: team?.name || (isHomeGoal ? 'Home team' : 'Away team'),
             logo: team?.logo || '',
             scorer,
+            goalType,
             score: `${fixture.goals?.home ?? '-'} - ${fixture.goals?.away ?? '-'}`,
           };
         }
@@ -5605,7 +5647,7 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
   return (
     <section className={`rs-home-featured-football ${primary ? 'is-primary' : ''} ${isLive ? 'is-live' : ''}`} aria-label="Featured football match">
       {goalFlash ? (
-        <a className={`rs-home-goal-flash is-${goalFlash.type || 'goal'}`} href={matchUrl} role="status" aria-live="polite" aria-label={`${goalFlash.type === 'var' ? 'VAR update' : 'Goal'} for ${goalFlash.team}. Open match details`}>
+        <a className={`rs-home-goal-flash is-${goalFlash.type || 'goal'} is-${goalFlash.goalType || 'normal'}`} href={matchUrl} role="status" aria-live="polite" aria-label={`${goalFlash.type === 'var' ? 'VAR update' : goalTypeLabel(goalFlash.goalType)} for ${goalFlash.team}. Open match details`}>
           <span className="rs-home-goal-post-scene" aria-hidden="true">
             {goalFlash.type === 'var' ? (
               <span className="rs-home-var-review">
@@ -5628,7 +5670,7 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
           <span className="rs-home-goal-team-mark">
             {goalFlash.logo ? <img src={goalFlash.logo} alt="" loading="eager" /> : <i>{String(goalFlash.team || 'GO').slice(0, 2).toUpperCase()}</i>}
           </span>
-          <span className="rs-home-goal-kicker">{goalFlash.type === 'var' ? 'VAR check' : 'Goal'}</span>
+          <span className="rs-home-goal-kicker">{goalFlash.type === 'var' ? 'VAR check' : goalTypeLabel(goalFlash.goalType)}</span>
           <b>{goalFlash.team}</b>
           <small>{goalFlash.scorer}</small>
           <strong>{goalFlash.score}</strong>
@@ -5782,6 +5824,25 @@ function extractGoalScorer(fixture, isHomeGoal, cancelled = false) {
   return scorer || 'Goal update';
 }
 
+function extractGoalType(fixture, isHomeGoal) {
+  const candidates = [
+    ...(Array.isArray(fixture.events) ? fixture.events : []),
+    ...(Array.isArray(fixture.timeline) ? fixture.timeline : []),
+    ...(Array.isArray(fixture.goalscorers) ? fixture.goalscorers : []),
+    ...(Array.isArray(fixture.goal_scorers) ? fixture.goal_scorers : []),
+  ];
+  const teamId = isHomeGoal ? (fixture.home?.id || fixture.teams?.home?.id) : (fixture.away?.id || fixture.teams?.away?.id);
+  const latest = candidates
+    .filter((event) => {
+      const eventText = [event.type, event.detail, event.event_type, event.kind].filter(Boolean).join(' ').toLowerCase();
+      const eventTeamId = event.team?.id || event.team_id;
+      return (eventText.includes('goal') || eventText.includes('penalty')) && (!teamId || !eventTeamId || Number(eventTeamId) === Number(teamId));
+    })
+    .sort((a, b) => Number(b.elapsed || b.time?.elapsed || b.minute || 0) - Number(a.elapsed || a.time?.elapsed || a.minute || 0))[0];
+
+  return normalizeGoalType(latest?.detail || latest?.event_type || latest?.kind || latest?.type || '');
+}
+
 function getFeaturedGoalScorers(fixture = {}) {
   const candidates = [
     ...(Array.isArray(fixture.events) ? fixture.events : []),
@@ -5847,6 +5908,7 @@ function getFeaturedGoalScorers(fixture = {}) {
         teamName,
         teamLogo: team?.logo || event.team?.logo || '',
         isHome,
+        goalType: normalizeGoalType(event.detail || event.event_type || event.kind || event.type),
       };
     })
     .filter(Boolean)
@@ -5870,6 +5932,7 @@ function FeaturedGoalScorers({ goals = [] }) {
       <span className="rs-home-goal-line-item" key={goal.key}>
         <b>{minute}</b>
         <strong>{formatFeaturedPlayerName(goal.scorer)}</strong>
+        {goal.goalType !== 'normal' ? <em className={`rs-goal-type-badge is-${goal.goalType}`}>{goalTypeLabel(goal.goalType)}</em> : null}
       </span>
     );
   }

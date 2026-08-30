@@ -574,6 +574,41 @@ class Rifnote_Search_Admin {
         echo '</nav>';
     }
 
+    private static function homepage_live_wp_choices($post_type) {
+        $choices = array('0' => __('Select content', 'rifnote-search'));
+        $posts = get_posts(array(
+            'post_type' => $post_type,
+            'post_status' => 'publish',
+            'posts_per_page' => 100,
+            'orderby' => 'date',
+            'order' => 'DESC',
+        ));
+
+        foreach ($posts as $post) {
+            $choices[(string) $post->ID] = sprintf('%s (#%d)', wp_strip_all_tags(get_the_title($post)), $post->ID);
+        }
+
+        return $choices;
+    }
+
+    private static function homepage_live_warehouse_choices() {
+        $choices = array('0' => __('Select a PostgreSQL RSS story', 'rifnote-search'));
+        if (!class_exists('Rifnote_Search_Data_API') || !Rifnote_Search_Data_API::enabled()) {
+            return $choices;
+        }
+
+        $response = Rifnote_Search_Data_API::warehouse_items(array('type' => 'article', 'status' => 'published', 'limit' => 50), false);
+        foreach ((array) ($response['items'] ?? array()) as $item) {
+            $id = absint($item['id'] ?? 0);
+            $title = sanitize_text_field((string) ($item['title'] ?? ''));
+            if ($id && $title) {
+                $choices[(string) $id] = sprintf('%s (#%d)', $title, $id);
+            }
+        }
+
+        return $choices;
+    }
+
     private static function settings_families() {
         return array(
             'branding' => array(
@@ -581,6 +616,13 @@ class Rifnote_Search_Admin {
                 'description' => __('Logo, homepage media, default story art and the visual identity pieces that show up across the public app.', 'rifnote-search'),
                 'section' => 'settings-branding',
                 'fields' => array(
+                    'rifnote_home_live_enabled' => array('label' => __('Show homepage Live feature', 'rifnote-search'), 'type' => 'checkbox', 'description' => __('Places a Live link directly above the homepage search box.', 'rifnote-search')),
+                    'rifnote_home_live_source_type' => array('label' => __('Live source', 'rifnote-search'), 'type' => 'select', 'options' => array('custom' => __('Custom title and URL', 'rifnote-search'), 'page' => __('WordPress page', 'rifnote-search'), 'story' => __('WordPress story', 'rifnote-search'), 'rss' => __('PostgreSQL RSS story', 'rifnote-search'))),
+                    'rifnote_home_live_title' => array('label' => __('Live title override', 'rifnote-search'), 'type' => 'text', 'description' => __('Required for a custom URL. Optional for selected pages and stories.', 'rifnote-search')),
+                    'rifnote_home_live_url' => array('label' => __('Live custom URL', 'rifnote-search'), 'type' => 'url'),
+                    'rifnote_home_live_page_id' => array('label' => __('Live WordPress page', 'rifnote-search'), 'type' => 'select', 'options' => self::homepage_live_wp_choices('page')),
+                    'rifnote_home_live_story_id' => array('label' => __('Live WordPress story', 'rifnote-search'), 'type' => 'select', 'options' => self::homepage_live_wp_choices('post')),
+                    'rifnote_home_live_warehouse_id' => array('label' => __('Live PostgreSQL RSS story', 'rifnote-search'), 'type' => 'select', 'options' => self::homepage_live_warehouse_choices(), 'description' => __('Shows the latest 50 published article records from the configured Data API.', 'rifnote-search')),
                     'rifnote_site_logo_url' => array('label' => __('Site logo', 'rifnote-search'), 'type' => 'media', 'library' => 'image', 'description' => __('Main desktop logo. Mobile uses the compact favicon-style mark.', 'rifnote-search')),
                     'rifnote_site_logo_width_desktop' => array('label' => __('Desktop logo width', 'rifnote-search'), 'type' => 'number', 'min' => 80, 'max' => 420, 'suffix' => 'px'),
                     'rifnote_home_takeover_logo_size_mobile' => array('label' => __('Mobile homepage takeover logo size', 'rifnote-search'), 'type' => 'number', 'min' => 28, 'suffix' => 'px'),
@@ -2456,6 +2498,12 @@ class Rifnote_Search_Admin {
         return in_array($value, array('image', 'video', 'embed'), true) ? $value : 'image';
     }
 
+    public static function sanitize_home_live_source_type($value) {
+        $value = sanitize_key($value);
+
+        return in_array($value, array('custom', 'page', 'story', 'rss'), true) ? $value : 'custom';
+    }
+
     public static function google_font_choices() {
         return array(
             'Google Sans' => __('Google Sans / Product Sans stack', 'rifnote-search'),
@@ -3000,6 +3048,13 @@ class Rifnote_Search_Admin {
             'rifnote_home_featured_football_matches' => array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_home_featured_football_matches'), 'default' => ''),
         );
 
+        register_setting('rifnote_search_settings', 'rifnote_home_live_enabled', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => false));
+        register_setting('rifnote_search_settings', 'rifnote_home_live_source_type', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_home_live_source_type'), 'default' => 'custom'));
+        register_setting('rifnote_search_settings', 'rifnote_home_live_title', array('type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => ''));
+        register_setting('rifnote_search_settings', 'rifnote_home_live_url', array('type' => 'string', 'sanitize_callback' => 'esc_url_raw', 'default' => ''));
+        register_setting('rifnote_search_settings', 'rifnote_home_live_page_id', array('type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 0));
+        register_setting('rifnote_search_settings', 'rifnote_home_live_story_id', array('type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 0));
+        register_setting('rifnote_search_settings', 'rifnote_home_live_warehouse_id', array('type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 0));
         register_setting('rifnote_search_settings', 'rifnote_home_search_placeholder', array('type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => __('Search news and trends', 'rifnote-search')));
         register_setting('rifnote_search_settings', 'rifnote_ai_enabled', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true));
         register_setting('rifnote_search_settings', 'rifnote_show_ai_cards', array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true));

@@ -3,7 +3,7 @@
  * Plugin Name: Rifnote Search
  * Plugin URI: https://rifnote.com/
  * Description: AI-powered news search and publisher discovery plugin for Rifnote.
- * Version: 0.2.35
+ * Version: 0.2.36
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Rifnote
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RIFNOTE_SEARCH_VERSION', '0.2.35');
+define('RIFNOTE_SEARCH_VERSION', '0.2.36');
 define('RIFNOTE_SEARCH_FILE', __FILE__);
 define('RIFNOTE_SEARCH_DIR', plugin_dir_path(__FILE__));
 define('RIFNOTE_SEARCH_URL', plugin_dir_url(__FILE__));
@@ -521,6 +521,7 @@ JS;
             'homeSearchMediaLinkUrl' => esc_url_raw(get_option('rifnote_home_search_media_link_url', '')),
             'homeSearchMediaType' => sanitize_key(get_option('rifnote_home_search_media_type', 'image')),
             'homeSearchPlaceholder' => sanitize_text_field((string) get_option('rifnote_home_search_placeholder', __('Search news and trends', 'rifnote-search'))),
+            'homeLive' => $this->homepage_live_context(),
             'electionTakeover' => class_exists('Rifnote_Search_Election') ? Rifnote_Search_Election::public_payload() : array(),
             'featuredFootballMatches' => class_exists('Rifnote_Search_Football_API') ? Rifnote_Search_Football_API::featured_homepage_matches(8) : array(),
             'featuredFootballUrl' => home_url('/football/'),
@@ -532,6 +533,57 @@ JS;
             'showAiCards' => (bool) get_option('rifnote_show_ai_cards', true),
             'canManageOptions' => current_user_can('manage_options'),
             'canManagePosts' => current_user_can('edit_posts'),
+        );
+    }
+
+    private function homepage_live_context() {
+        if (!(bool) get_option('rifnote_home_live_enabled', false)) {
+            return array('enabled' => false);
+        }
+
+        $type = class_exists('Rifnote_Search_Admin')
+            ? Rifnote_Search_Admin::sanitize_home_live_source_type(get_option('rifnote_home_live_source_type', 'custom'))
+            : 'custom';
+        $title_override = sanitize_text_field((string) get_option('rifnote_home_live_title', ''));
+        $title = '';
+        $url = '';
+        $source = '';
+
+        if ('page' === $type || 'story' === $type) {
+            $option = 'page' === $type ? 'rifnote_home_live_page_id' : 'rifnote_home_live_story_id';
+            $post_type = 'page' === $type ? 'page' : 'post';
+            $post = get_post(absint(get_option($option, 0)));
+            if ($post && 'publish' === $post->post_status && $post_type === $post->post_type) {
+                $title = wp_strip_all_tags(get_the_title($post));
+                $url = get_permalink($post);
+                $source = 'page' === $type ? __('Page', 'rifnote-search') : __('Story', 'rifnote-search');
+            }
+        } elseif ('rss' === $type && class_exists('Rifnote_Search_Data_API')) {
+            $response = Rifnote_Search_Data_API::warehouse_item(absint(get_option('rifnote_home_live_warehouse_id', 0)), false);
+            $item = is_array($response['item'] ?? null) ? $response['item'] : (is_array($response['data'] ?? null) ? $response['data'] : array());
+            if (!$item && !empty($response['id'])) {
+                $item = $response;
+            }
+            $title = sanitize_text_field((string) ($item['title'] ?? ''));
+            $url = esc_url_raw((string) ($item['url'] ?? $item['original_url'] ?? ''));
+            $source_data = is_array($item['source'] ?? null) ? $item['source'] : array();
+            $source = sanitize_text_field((string) ($source_data['name'] ?? __('RSS story', 'rifnote-search')));
+        } else {
+            $title = $title_override;
+            $url = esc_url_raw((string) get_option('rifnote_home_live_url', ''));
+            $source = __('Live', 'rifnote-search');
+        }
+
+        if ($title_override && 'custom' !== $type) {
+            $title = $title_override;
+        }
+
+        return array(
+            'enabled' => (bool) ($title && $url),
+            'type' => $type,
+            'title' => $title,
+            'url' => $url,
+            'source' => $source,
         );
     }
 

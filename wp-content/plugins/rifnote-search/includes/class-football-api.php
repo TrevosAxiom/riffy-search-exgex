@@ -2889,9 +2889,11 @@ class Rifnote_Search_Football_API {
             $extra = isset($event['extra']) ? (int) $event['extra'] : null;
 
             if ('goal' === $type && false === strpos($detail, 'missed')) {
+                $goal_type = false !== strpos($detail, 'own') ? 'own-goal' : (false !== strpos($detail, 'penalty') ? 'penalty' : 'normal');
                 $markers[] = array(
                     'kind' => 'goal',
-                    'label' => 'Goal',
+                    'label' => 'own-goal' === $goal_type ? 'Own Goal' : ('penalty' === $goal_type ? 'Penalty' : 'Goal'),
+                    'goal_type' => $goal_type,
                     'minute' => $minute,
                     'extra' => $extra,
                     'team' => $event['team'] ?? array(),
