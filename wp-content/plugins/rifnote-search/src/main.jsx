@@ -3881,17 +3881,32 @@ function getFixtureMarkers(fixture = {}, details = {}) {
 
 function MatchMarkers({ fixture = {}, details = {}, compact = false }) {
   const markers = getFixtureMarkers(fixture, details);
+  const visibleMarkers = compact ? markers : markers.filter((marker) => marker.kind !== 'status');
 
-  if (!markers.length) {
+  if (!visibleMarkers.length) {
     return null;
   }
 
   return (
-    <div className={`rs-match-markers ${compact ? 'compact' : ''}`} aria-label="Match markers">
-      {markers.map((marker, index) => {
+    <div className={`rs-match-markers ${compact ? 'compact' : 'is-detailed'}`} aria-label={compact ? 'Match markers' : 'Goal and VAR timeline'}>
+      {visibleMarkers.map((marker, index) => {
         const minute = marker.minute ? `${marker.minute}${marker.extra ? `+${marker.extra}` : ''}'` : '';
         const kind = marker.kind === 'var' ? 'VAR' : marker.kind === 'goal' ? 'Goal' : marker.label.toUpperCase();
         const title = [minute, kind, marker.team, marker.player].filter(Boolean).join(' · ');
+
+        if (!compact) {
+          const teamCode = marker.team ? apiFootballTeamCode({ name: marker.team }) : '';
+          return (
+            <article className={`rs-match-marker is-${marker.kind} ${marker.red ? 'is-red' : ''}`} key={`${marker.kind}-${marker.label}-${marker.minute}-${index}`} title={title}>
+              <span className="rs-match-marker-icon" aria-hidden="true">{marker.kind === 'var' ? <Radio size={17} /> : <Goal size={17} />}</span>
+              <span className="rs-match-marker-copy">
+                <span><b>{minute || '—'}</b>{teamCode ? <small>{teamCode}</small> : null}</span>
+                <strong>{marker.player || kind}</strong>
+                <em>{marker.player ? kind : (marker.team || 'Match event')}</em>
+              </span>
+            </article>
+          );
+        }
 
         return (
           <span className={`rs-match-marker is-${marker.kind} ${marker.red ? 'is-red' : ''}`} key={`${marker.kind}-${marker.label}-${marker.minute}-${index}`} title={title}>
@@ -4430,10 +4445,13 @@ function LiveMatchCard({ fixture, onSelect }) {
 }
 
 function TeamLine({ team = {}, goals = '-' }) {
+  const fullName = decodeText(team.name || 'Team');
+  const teamCode = apiFootballTeamCode(team);
+
   return (
     <div>
       {team.logo ? <img src={team.logo} alt="" loading="lazy" /> : <span className="rs-team-dot" />}
-      <strong>{team.name || 'Team'}</strong>
+      <strong title={fullName} aria-label={fullName}>{teamCode}</strong>
       <b>{goals}</b>
     </div>
   );
@@ -5589,10 +5607,23 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
       {goalFlash ? (
         <a className={`rs-home-goal-flash is-${goalFlash.type || 'goal'}`} href={matchUrl} role="status" aria-live="polite" aria-label={`${goalFlash.type === 'var' ? 'VAR update' : 'Goal'} for ${goalFlash.team}. Open match details`}>
           <span className="rs-home-goal-post-scene" aria-hidden="true">
-            <i className="rs-home-goal-post-frame" />
-            <i className="rs-home-goal-net" />
-            <em className="rs-home-goal-ball" />
-            {goalFlash.type === 'var' ? <strong className="rs-home-var-screen">VAR</strong> : null}
+            {goalFlash.type === 'var' ? (
+              <span className="rs-home-var-review">
+                <i className="rs-home-var-pitch" />
+                <i className="rs-home-var-scan" />
+                <span className="rs-home-var-review-label"><Radio size={15} /> Reviewing incident</span>
+                <strong className="rs-home-var-screen">VAR</strong>
+                <b className="rs-home-var-decision">No goal</b>
+              </span>
+            ) : (
+              <>
+                <i className="rs-home-goal-ground" />
+                <i className="rs-home-goal-depth" />
+                <i className="rs-home-goal-post-frame" />
+                <i className="rs-home-goal-net" />
+                <em className="rs-home-goal-ball"><span>⚽</span></em>
+              </>
+            )}
           </span>
           <span className="rs-home-goal-team-mark">
             {goalFlash.logo ? <img src={goalFlash.logo} alt="" loading="eager" /> : <i>{String(goalFlash.team || 'GO').slice(0, 2).toUpperCase()}</i>}
@@ -5904,27 +5935,71 @@ function playVarDecisionSound() {
 
   try {
     const context = new AudioContext();
+    const start = context.currentTime;
+    const duration = 1.9;
+    const compressor = context.createDynamicsCompressor();
     const master = context.createGain();
-    master.gain.setValueAtTime(0.0001, context.currentTime);
-    master.gain.exponentialRampToValueAtTime(0.14, context.currentTime + 0.04);
-    master.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 1.25);
-    master.connect(context.destination);
+    compressor.threshold.setValueAtTime(-22, start);
+    compressor.ratio.setValueAtTime(6, start);
+    master.gain.setValueAtTime(0.0001, start);
+    master.gain.exponentialRampToValueAtTime(0.18, start + 0.04);
+    master.gain.setValueAtTime(0.15, start + 1.25);
+    master.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    master.connect(compressor);
+    compressor.connect(context.destination);
 
-    [220, 185, 146].forEach((frequency, index) => {
+    // A subdued crowd bed keeps the cue rooted in the stadium without implying a goal.
+    const bufferSize = Math.ceil(context.sampleRate * duration);
+    const buffer = context.createBuffer(1, bufferSize, context.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let index = 0; index < bufferSize; index += 1) {
+      const progress = index / bufferSize;
+      data[index] = ((Math.random() * 2) - 1) * Math.sin(progress * Math.PI) * 0.34;
+    }
+    const crowd = context.createBufferSource();
+    const crowdFilter = context.createBiquadFilter();
+    const crowdGain = context.createGain();
+    crowd.buffer = buffer;
+    crowdFilter.type = 'bandpass';
+    crowdFilter.frequency.setValueAtTime(680, start);
+    crowdFilter.Q.setValueAtTime(0.7, start);
+    crowdGain.gain.setValueAtTime(0.11, start);
+    crowd.connect(crowdFilter);
+    crowdFilter.connect(crowdGain);
+    crowdGain.connect(master);
+    crowd.start(start);
+    crowd.stop(start + duration);
+
+    // Three review pulses are neutral and recognisable, unlike the old descending error tones.
+    [0.38, 0.78, 1.18].forEach((offset, index) => {
       const oscillator = context.createOscillator();
       const gain = context.createGain();
-      oscillator.type = 'square';
-      oscillator.frequency.setValueAtTime(frequency, context.currentTime + (index * 0.18));
-      gain.gain.setValueAtTime(0.0001, context.currentTime + (index * 0.18));
-      gain.gain.exponentialRampToValueAtTime(0.13, context.currentTime + 0.04 + (index * 0.18));
-      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.16 + (index * 0.18));
+      oscillator.type = 'sine';
+      oscillator.frequency.setValueAtTime(index === 2 ? 520 : 440, start + offset);
+      gain.gain.setValueAtTime(0.0001, start + offset);
+      gain.gain.exponentialRampToValueAtTime(0.11, start + offset + 0.025);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + offset + 0.16);
       oscillator.connect(gain);
       gain.connect(master);
-      oscillator.start(context.currentTime + (index * 0.18));
-      oscillator.stop(context.currentTime + 0.24 + (index * 0.18));
+      oscillator.start(start + offset);
+      oscillator.stop(start + offset + 0.18);
     });
 
-    window.setTimeout(() => context.close().catch(() => {}), 1400);
+    // A short whistle immediately signals that play is under review.
+    const whistle = context.createOscillator();
+    const whistleGain = context.createGain();
+    whistle.type = 'sine';
+    whistle.frequency.setValueAtTime(2450, start);
+    whistle.frequency.linearRampToValueAtTime(2750, start + 0.18);
+    whistleGain.gain.setValueAtTime(0.0001, start);
+    whistleGain.gain.exponentialRampToValueAtTime(0.032, start + 0.018);
+    whistleGain.gain.exponentialRampToValueAtTime(0.0001, start + 0.24);
+    whistle.connect(whistleGain);
+    whistleGain.connect(master);
+    whistle.start(start);
+    whistle.stop(start + 0.25);
+
+    window.setTimeout(() => context.close().catch(() => {}), 2200);
   } catch (error) {
     // Browsers can block audio until interaction; the VAR visual still runs.
   }
@@ -5943,47 +6018,85 @@ function playGoalCelebrationSound() {
 
   try {
     const context = new AudioContext();
+    const start = context.currentTime;
+    const duration = 2.8;
+    const compressor = context.createDynamicsCompressor();
     const master = context.createGain();
-    master.gain.setValueAtTime(0.0001, context.currentTime);
-    master.gain.exponentialRampToValueAtTime(0.18, context.currentTime + 0.05);
-    master.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 1.45);
-    master.connect(context.destination);
+    compressor.threshold.setValueAtTime(-20, start);
+    compressor.knee.setValueAtTime(16, start);
+    compressor.ratio.setValueAtTime(7, start);
+    compressor.attack.setValueAtTime(0.006, start);
+    compressor.release.setValueAtTime(0.24, start);
+    master.gain.setValueAtTime(0.0001, start);
+    master.gain.exponentialRampToValueAtTime(0.24, start + 0.12);
+    master.gain.setValueAtTime(0.22, start + 1.55);
+    master.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    master.connect(compressor);
+    compressor.connect(context.destination);
 
-    [261.63, 329.63, 392, 523.25].forEach((frequency, index) => {
-      const oscillator = context.createOscillator();
+    // Layered, filtered noise produces a broad stadium crowd rather than a musical sting.
+    [520, 1050, 2200].forEach((frequency, layer) => {
+      const bufferSize = Math.ceil(context.sampleRate * duration);
+      const buffer = context.createBuffer(1, bufferSize, context.sampleRate);
+      const data = buffer.getChannelData(0);
+
+      for (let index = 0; index < bufferSize; index += 1) {
+        const progress = index / bufferSize;
+        const swell = Math.min(1, progress / 0.1) * Math.pow(1 - progress, 0.28);
+        const applause = layer === 2 && Math.random() > 0.985 ? Math.random() * 1.8 : 0;
+        data[index] = ((Math.random() * 2) - 1 + applause) * swell;
+      }
+
+      const crowd = context.createBufferSource();
+      const filter = context.createBiquadFilter();
       const gain = context.createGain();
-      oscillator.type = index % 2 ? 'triangle' : 'sine';
-      oscillator.frequency.setValueAtTime(frequency, context.currentTime + (index * 0.08));
-      gain.gain.setValueAtTime(0.0001, context.currentTime);
-      gain.gain.exponentialRampToValueAtTime(0.16, context.currentTime + 0.08 + (index * 0.08));
-      gain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 0.75 + (index * 0.08));
-      oscillator.connect(gain);
+      crowd.buffer = buffer;
+      filter.type = 'bandpass';
+      filter.frequency.setValueAtTime(frequency, start);
+      filter.Q.setValueAtTime(layer === 0 ? 0.7 : 1.15, start);
+      gain.gain.setValueAtTime([0.2, 0.13, 0.07][layer], start);
+      crowd.connect(filter);
+      filter.connect(gain);
       gain.connect(master);
-      oscillator.start(context.currentTime + (index * 0.08));
-      oscillator.stop(context.currentTime + 1.1 + (index * 0.08));
+      crowd.start(start);
+      crowd.stop(start + duration);
     });
 
-    const bufferSize = context.sampleRate * 1.2;
-    const buffer = context.createBuffer(1, bufferSize, context.sampleRate);
-    const data = buffer.getChannelData(0);
+    // Many detuned voice-like tones create the sense of supporters shouting together.
+    Array.from({ length: 14 }).forEach((_, index) => {
+      const oscillator = context.createOscillator();
+      const gain = context.createGain();
+      const entrance = start + (Math.random() * 0.32);
+      const frequency = 155 + (Math.random() * 260);
+      oscillator.type = index % 3 === 0 ? 'sawtooth' : 'triangle';
+      oscillator.frequency.setValueAtTime(frequency, entrance);
+      oscillator.frequency.linearRampToValueAtTime(frequency * (1.05 + Math.random() * 0.12), entrance + 1.2);
+      gain.gain.setValueAtTime(0.0001, entrance);
+      gain.gain.exponentialRampToValueAtTime(0.018 + Math.random() * 0.012, entrance + 0.08);
+      gain.gain.exponentialRampToValueAtTime(0.0001, start + duration - 0.08);
+      oscillator.connect(gain);
+      gain.connect(master);
+      oscillator.start(entrance);
+      oscillator.stop(start + duration);
+    });
 
-    for (let i = 0; i < bufferSize; i += 1) {
-      const envelope = Math.sin((i / bufferSize) * Math.PI);
-      data[i] = (Math.random() * 2 - 1) * envelope * 0.16;
-    }
+    // Two short whistles cut through the roar without dominating it.
+    [0.38, 1.05].forEach((offset, index) => {
+      const whistle = context.createOscillator();
+      const whistleGain = context.createGain();
+      whistle.type = 'sine';
+      whistle.frequency.setValueAtTime(index ? 2350 : 2700, start + offset);
+      whistle.frequency.linearRampToValueAtTime(index ? 2550 : 2450, start + offset + 0.24);
+      whistleGain.gain.setValueAtTime(0.0001, start + offset);
+      whistleGain.gain.exponentialRampToValueAtTime(0.025, start + offset + 0.025);
+      whistleGain.gain.exponentialRampToValueAtTime(0.0001, start + offset + 0.28);
+      whistle.connect(whistleGain);
+      whistleGain.connect(master);
+      whistle.start(start + offset);
+      whistle.stop(start + offset + 0.3);
+    });
 
-    const crowd = context.createBufferSource();
-    const crowdGain = context.createGain();
-    crowd.buffer = buffer;
-    crowdGain.gain.setValueAtTime(0.0001, context.currentTime);
-    crowdGain.gain.exponentialRampToValueAtTime(0.12, context.currentTime + 0.12);
-    crowdGain.gain.exponentialRampToValueAtTime(0.0001, context.currentTime + 1.35);
-    crowd.connect(crowdGain);
-    crowdGain.connect(master);
-    crowd.start(context.currentTime + 0.06);
-    crowd.stop(context.currentTime + 1.35);
-
-    window.setTimeout(() => context.close().catch(() => {}), 1600);
+    window.setTimeout(() => context.close().catch(() => {}), 3100);
   } catch (error) {
     // Some browsers block audio until interaction. The visual celebration still runs.
   }
@@ -7327,7 +7440,7 @@ function LiveScores({ live = false }) {
 
 function LiveTeamMini({ team = {}, align = 'left' }) {
   const fullName = decodeText(team.name || 'Team');
-  const displayName = liveSidebarTeamName(fullName);
+  const displayName = apiFootballTeamCode(team);
 
   return (
     <span className={`rs-live-team-mini ${align === 'right' ? 'is-right' : ''}`}>
@@ -7337,22 +7450,31 @@ function LiveTeamMini({ team = {}, align = 'left' }) {
   );
 }
 
-function liveSidebarTeamName(name = '') {
-  const compact = shortTeamName(name, 40)
-    .replace(/\bUnited\b/gi, 'Utd')
-    .replace(/\bWanderers\b/gi, 'Wdrs')
-    .replace(/\bAthletic\b/gi, 'Ath')
-    .replace(/\bSporting\b/gi, 'Sport')
-    .replace(/\bInternational\b/gi, 'Intl')
-    .replace(/\s+/g, ' ')
-    .trim();
+function apiFootballTeamCode(team = {}) {
+  const suppliedCode = String(team.code || team.short_code || team.abbreviation || '').replace(/[^a-z0-9]/gi, '').toUpperCase();
+  if (suppliedCode.length >= 2 && suppliedCode.length <= 4) return suppliedCode;
 
-  if (compact.length <= 12) {
-    return compact;
-  }
+  const fullName = decodeText(team.name || 'Team').replace(/\s+/g, ' ').trim();
+  const normalized = fullName.toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const knownCodes = {
+    arsenal: 'ARS', 'aston villa': 'AVL', bournemouth: 'BOU', brentford: 'BRE', brighton: 'BHA',
+    'brighton hove albion': 'BHA', burnley: 'BUR', chelsea: 'CHE', 'crystal palace': 'CRY', everton: 'EVE',
+    fulham: 'FUL', leeds: 'LEE', 'leeds united': 'LEE', liverpool: 'LIV', 'manchester city': 'MCI',
+    'manchester united': 'MUN', newcastle: 'NEW', 'newcastle united': 'NEW', 'nottingham forest': 'NFO',
+    sunderland: 'SUN', tottenham: 'TOT', 'tottenham hotspur': 'TOT', 'west ham': 'WHU', 'west ham united': 'WHU',
+    wolves: 'WOL', 'wolverhampton wanderers': 'WOL', barcelona: 'BAR', 'real madrid': 'RMA',
+    'atletico madrid': 'ATM', 'bayern munich': 'BAY', 'borussia dortmund': 'BVB', juventus: 'JUV',
+    'inter milan': 'INT', internazionale: 'INT', 'ac milan': 'MIL', napoli: 'NAP', psg: 'PSG',
+    'paris saint germain': 'PSG', ajax: 'AJA', benfica: 'BEN', porto: 'POR', sporting: 'SCP', celtic: 'CEL', rangers: 'RAN',
+  };
+  if (knownCodes[normalized]) return knownCodes[normalized];
 
-  const initials = compact.match(/[\p{L}\p{N}]+/gu)?.map((word) => word[0]).join('').slice(0, 4).toUpperCase();
-  return initials?.length > 1 ? initials : compact.slice(0, 12);
+  const words = normalized.split(' ').filter((word) => !['fc', 'cf', 'afc', 'sc', 'club', 'football'].includes(word));
+  if (!words.length) return 'TBD';
+  if (words.length === 1) return words[0].slice(0, 3).toUpperCase();
+
+  const initials = words.map((word) => word[0]).join('').toUpperCase();
+  return initials.length >= 3 ? initials.slice(0, 3) : words[0].slice(0, 3).toUpperCase();
 }
 
 function shortTeamName(name = '', limit = 12) {

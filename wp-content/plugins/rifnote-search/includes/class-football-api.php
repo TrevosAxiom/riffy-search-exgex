@@ -3353,12 +3353,14 @@ class Rifnote_Search_Football_API {
             'home' => array(
                 'id' => (int) ($teams['home']['id'] ?? 0),
                 'name' => sanitize_text_field($teams['home']['name'] ?? ''),
+                'code' => sanitize_text_field($teams['home']['code'] ?? ''),
                 'logo' => esc_url_raw($teams['home']['logo'] ?? ''),
                 'winner' => isset($teams['home']['winner']) ? (bool) $teams['home']['winner'] : null,
             ),
             'away' => array(
                 'id' => (int) ($teams['away']['id'] ?? 0),
                 'name' => sanitize_text_field($teams['away']['name'] ?? ''),
+                'code' => sanitize_text_field($teams['away']['code'] ?? ''),
                 'logo' => esc_url_raw($teams['away']['logo'] ?? ''),
                 'winner' => isset($teams['away']['winner']) ? (bool) $teams['away']['winner'] : null,
             ),
