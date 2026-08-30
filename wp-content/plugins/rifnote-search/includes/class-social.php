@@ -428,6 +428,13 @@ class Rifnote_Search_Social {
             return $preview;
         }
 
+        // X/Twitter embeds are deterministic. Return immediately instead of
+        // waiting for WordPress oEmbed and a full remote-page metadata scrape.
+        if ('x' === $platform || 'twitter' === $platform) {
+            $preview['embed_html'] = self::render_embed_for_url($url);
+            return $preview;
+        }
+
         $embed = wp_oembed_get($url, array('width' => 680));
         if ($embed) {
             $preview['embed_html'] = $embed;
@@ -520,9 +527,10 @@ class Rifnote_Search_Social {
                 $embed = '<iframe src="https://player.vimeo.com/video/' . esc_attr($video_id) . '" title="' . esc_attr($label ? $label : __('Vimeo video', 'rifnote-search')) . '" loading="lazy" allow="autoplay; fullscreen; picture-in-picture; clipboard-write" allowfullscreen></iframe>';
             }
         } elseif ('x' === $platform || 'twitter' === $platform) {
-            $twitter_url = str_replace('https://x.com/', 'https://twitter.com/', $url);
-            $twitter_url = str_replace('http://x.com/', 'https://twitter.com/', $twitter_url);
-            $embed = '<blockquote class="twitter-tweet" data-dnt="true" data-theme="light"><a href="' . esc_url($twitter_url) . '"></a></blockquote>';
+            $post_id = self::platform_post_id($url, 'x');
+            if ($post_id) {
+                $embed = '<iframe src="https://platform.twitter.com/embed/Tweet.html?id=' . rawurlencode($post_id) . '&amp;dnt=true&amp;theme=light" title="' . esc_attr($label ? $label : __('X post', 'rifnote-search')) . '" width="550" height="420" loading="eager" scrolling="no" frameborder="0" allowfullscreen></iframe>';
+            }
         } elseif ('instagram' === $platform) {
             $embed = '<blockquote class="instagram-media" data-instgrm-permalink="' . esc_url($url) . '" data-instgrm-version="14"><a href="' . esc_url($url) . '"></a></blockquote>';
         } elseif ('facebook' === $platform) {

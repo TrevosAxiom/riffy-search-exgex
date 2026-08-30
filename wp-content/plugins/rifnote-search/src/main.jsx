@@ -473,6 +473,14 @@ function getStoryEmbedUrl(story = {}) {
   return story?.embed_url || story?.original_url || story?.read_full_story_url || story?.source_url || '';
 }
 
+function instantSocialEmbedHtml(url = '') {
+  const value = String(url || '');
+  const tweetId = value.match(/(?:twitter\.com|x\.com)\/[^/]+\/status\/(\d+)/i)?.[1] || '';
+  if (!tweetId) return '';
+
+  return `<figure class="rs-smart-embed is-x is-instant"><iframe src="https://platform.twitter.com/embed/Tweet.html?id=${tweetId}&amp;dnt=true&amp;theme=light" title="X post" width="550" height="420" loading="eager" frameborder="0" scrolling="no" allowfullscreen></iframe></figure>`;
+}
+
 function shouldResolveRemoteEmbed(story = {}) {
   const platform = getStorySocialPlatform(story).toLowerCase();
   const sourceType = String(story.source_type || story.media_type || '').toLowerCase();
@@ -482,14 +490,16 @@ function shouldResolveRemoteEmbed(story = {}) {
 }
 
 function useResolvedStoryEmbed(story = {}) {
-  const initialHtml = getStoryEmbedHtml(story);
   const embedUrl = getStoryEmbedUrl(story);
+  const storedHtml = getStoryEmbedHtml(story);
+  const instantHtml = storedHtml ? '' : instantSocialEmbedHtml(embedUrl);
+  const initialHtml = storedHtml || instantHtml;
   const [html, setHtml] = useState(initialHtml);
 
   useEffect(() => {
     setHtml(initialHtml);
 
-    if (!shouldResolveRemoteEmbed(story)) {
+    if (instantHtml || !shouldResolveRemoteEmbed(story)) {
       return undefined;
     }
 
@@ -507,7 +517,7 @@ function useResolvedStoryEmbed(story = {}) {
     return () => {
       cancelled = true;
     };
-  }, [initialHtml, embedUrl, story?.id]);
+  }, [initialHtml, instantHtml, embedUrl, story?.id]);
 
   return html;
 }
