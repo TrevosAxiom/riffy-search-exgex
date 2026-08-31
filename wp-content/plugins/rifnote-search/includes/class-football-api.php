@@ -2005,9 +2005,10 @@ class Rifnote_Search_Football_API {
 
         $automatic_deals = self::build_transfer_deals($stories);
         $candidates = self::transfer_candidates($stories);
-        $deals = array_values(array_filter($automatic_deals, function ($deal) {
-            return !empty($deal['player']) && !empty($deal['from_club']) && !empty($deal['to_club']) && empty($deal['needs_review']);
-        }));
+        // Classification enriches a transfer card but is not a publishing gate.
+        // Valid transfer news can render from its headline while player/club
+        // fields remain available for later editorial refinement.
+        $deals = $automatic_deals;
         if (class_exists('Rifnote_Search_Transfer_Deadline')) {
             $deals = self::merge_manual_transfer_deals($deals, Rifnote_Search_Transfer_Deadline::public_deals());
         }
@@ -2122,9 +2123,11 @@ class Rifnote_Search_Football_API {
             $candidate['story'] = $story;
             $candidate['moderation_key'] = class_exists('Rifnote_Search_Transfer_Deadline') ? Rifnote_Search_Transfer_Deadline::moderation_key($story) : md5((string) ($story['id'] ?? $story['original_url'] ?? $story['headline'] ?? ''));
             $candidate['complete'] = !empty($candidate['player']) && !empty($candidate['from_club']) && !empty($candidate['to_club']);
+            $candidate['reviewed_as_news'] = class_exists('Rifnote_Search_Transfer_Deadline') && Rifnote_Search_Transfer_Deadline::is_reviewed_story($story);
             $candidates[] = $candidate;
         }
         usort($candidates, function ($a, $b) {
+            if (!empty($a['reviewed_as_news']) !== !empty($b['reviewed_as_news'])) return !empty($a['reviewed_as_news']) ? 1 : -1;
             if (!empty($a['complete']) !== !empty($b['complete'])) return !empty($a['complete']) ? 1 : -1;
             return strtotime($b['story']['published_at'] ?? '') <=> strtotime($a['story']['published_at'] ?? '');
         });
