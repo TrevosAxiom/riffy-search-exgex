@@ -3045,6 +3045,11 @@ class Rifnote_Search_Admin {
             'rifnote_api_football_details_cache_ttl' => array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_football_details_ttl'), 'default' => 600),
             'rifnote_api_football_competitions' => array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_football_competitions'), 'default' => "39:2025:Premier League\n2:2025:UEFA Champions League\n3:2025:UEFA Europa League\n1:2026:FIFA World Cup"),
             'rifnote_api_football_team_watchlist' => array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_football_team_watchlist'), 'default' => ''),
+            'rifnote_transfer_deadline_enabled' => array('type' => 'boolean', 'sanitize_callback' => 'rest_sanitize_boolean', 'default' => true),
+            'rifnote_transfer_deadline_at' => array('type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => '2026-09-01 23:00:00'),
+            'rifnote_transfer_deadline_label' => array('type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => 'Transfer Deadline Day'),
+            'rifnote_transfer_official_domains' => array('type' => 'string', 'sanitize_callback' => 'sanitize_textarea_field', 'default' => "premierleague.com\nuefa.com\nfifa.com"),
+            'rifnote_transfer_trusted_domains' => array('type' => 'string', 'sanitize_callback' => 'sanitize_textarea_field', 'default' => "bbc.com\nbbc.co.uk\nskysports.com\ntheathletic.com\nespn.com\nreuters.com"),
             'rifnote_home_featured_football_matches' => array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_home_featured_football_matches'), 'default' => ''),
         );
 
@@ -4149,6 +4154,20 @@ class Rifnote_Search_Admin {
                                 <tr>
                                     <th scope="row"><label for="rifnote_api_football_timezone"><?php esc_html_e('Timezone', 'rifnote-search'); ?></label></th>
                                     <td><input id="rifnote_api_football_timezone" class="regular-text" name="rifnote_api_football_timezone" value="<?php echo esc_attr($football_settings['timezone']); ?>" /></td>
+                                </tr>
+                                <tr>
+                                    <th scope="row"><?php esc_html_e('Automated Deadline Day', 'rifnote-search'); ?></th>
+                                    <td>
+                                        <label><input type="checkbox" name="rifnote_transfer_deadline_enabled" value="1" <?php checked((bool) get_option('rifnote_transfer_deadline_enabled', true)); ?> /> <?php esc_html_e('Show the automatic Deadline Day homepage strip and live dashboard', 'rifnote-search'); ?></label>
+                                        <p><input type="text" class="regular-text" name="rifnote_transfer_deadline_label" value="<?php echo esc_attr(get_option('rifnote_transfer_deadline_label', 'Transfer Deadline Day')); ?>" placeholder="Transfer Deadline Day" /></p>
+                                        <p><input type="datetime-local" name="rifnote_transfer_deadline_at" value="<?php echo esc_attr(str_replace(' ', 'T', substr((string) get_option('rifnote_transfer_deadline_at', '2026-09-01 23:00:00'), 0, 16))); ?>" /> <span class="description"><?php echo esc_html(sprintf(__('Uses the WordPress timezone: %s.', 'rifnote-search'), wp_timezone_string())); ?></span></p>
+                                        <details>
+                                            <summary><strong><?php esc_html_e('Source trust lists (optional)', 'rifnote-search'); ?></strong></summary>
+                                            <p><label><?php esc_html_e('Official domains — one per line', 'rifnote-search'); ?><br /><textarea class="large-text code" rows="4" name="rifnote_transfer_official_domains"><?php echo esc_textarea(get_option('rifnote_transfer_official_domains', "premierleague.com\nuefa.com\nfifa.com")); ?></textarea></label></p>
+                                            <p><label><?php esc_html_e('Trusted reporting domains — one per line', 'rifnote-search'); ?><br /><textarea class="large-text code" rows="5" name="rifnote_transfer_trusted_domains"><?php echo esc_textarea(get_option('rifnote_transfer_trusted_domains', "bbc.com\nbbc.co.uk\nskysports.com\ntheathletic.com\nespn.com\nreuters.com")); ?></textarea></label></p>
+                                        </details>
+                                        <p class="description"><?php esc_html_e('Rifnote clusters reports automatically. Only official domains can auto-confirm a deal; ambiguous or conflicting reports enter the exception count.', 'rifnote-search'); ?></p>
+                                    </td>
                                 </tr>
                                 <tr>
                                     <th scope="row"><?php esc_html_e('Polling cadence', 'rifnote-search'); ?></th>

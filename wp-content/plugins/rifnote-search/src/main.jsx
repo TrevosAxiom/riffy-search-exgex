@@ -802,6 +802,7 @@ function App({ mode }) {
   const hasAdminHomepageMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl) && !isElectionTakeoverActive && !hasFeaturedFootballTakeover;
   const hasHomeSearchMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl || isElectionTakeoverActive || hasFeaturedFootballTakeover);
   const homeLive = window.RIFNOTE_SEARCH?.homeLive || null;
+  const transferDeadline = window.RIFNOTE_SEARCH?.transferDeadline || null;
   const showMobileTakeoverLogo = hasHomeSearchMedia && !hasAdminHomepageMedia;
 
   useEffect(() => {
@@ -970,6 +971,7 @@ function App({ mode }) {
             </div>
           )}
           {homeLive?.enabled ? <HomeLiveFeature live={homeLive} /> : null}
+          {transferDeadline?.enabled ? <TransferDeadlineHomeStrip deadline={transferDeadline} /> : null}
           <SearchPanel state={state} onSubmit={submitSearch} compact="home" />
           <HomeQuickLinks activePill={homePill} items={homepagePills} onSelect={updateHomePill} showCategories={Boolean(siteCategories.length)} categoriesActive={showHomeCategories} onCategoriesToggle={toggleHomeCategories} />
         </section>
@@ -5266,48 +5268,50 @@ function FootballPlayersDirectory() {
 }
 
 function TransferNewsPage() {
-  const [payload, setPayload] = useState({ stories: [], topics: [], sources: 0 });
+  const [payload, setPayload] = useState({ stories: [], deals: [], topics: [], sources: 0 });
   const [status, setStatus] = useState({ loading: true, error: '' });
+  const [activeStatus, setActiveStatus] = useState('all');
 
-  useEffect(() => {
+  const loadTransfers = useCallback(() => {
     let cancelled = false;
-    setStatus({ loading: true, error: '' });
+    setStatus((current) => ({ ...current, error: '' }));
     getFootballTransfers({ limit: 30 })
       .then((data) => !cancelled && setPayload(data))
       .catch((error) => !cancelled && setStatus({ loading: false, error: error.message }))
       .finally(() => !cancelled && setStatus((current) => ({ ...current, loading: false })));
-
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
+  useEffect(() => { loadTransfers(); }, [loadTransfers]);
+  useLiveInterval(loadTransfers, 30000, true);
+
   const stories = payload.stories ?? [];
+  const deals = payload.deals ?? [];
+  const visibleDeals = activeStatus === 'all' ? deals : deals.filter((deal) => deal.status === activeStatus);
   const lead = stories[0] || null;
   const sources = payload.sources ?? new Set(stories.map((story) => story.source_domain).filter(Boolean)).size;
   const topics = payload.topics ?? [];
 
   return (
     <main className="rs-shell compact-page rs-transfer-page">
+      {payload.deadline?.enabled ? <TransferDeadlineHero deadline={payload.deadline} confirmed={payload.confirmed_count || 0} deals={deals.length} /> : null}
       <section className="rs-stat-grid rs-product-stats">
-        <DashboardStat label="Transfer stories" value={stories.length} note="Indexed" />
+        <DashboardStat label="Tracked deals" value={deals.length} note="Automatically clustered" />
         <DashboardStat label="Sources" value={sources} note="Covering the window" />
-        <DashboardStat label="Updated" value={payload.updated_at ? formatTime(payload.updated_at) : 'Now'} note="Latest scan" />
+        <DashboardStat label="Admin review" value={payload.exceptions_count || 0} note="Exceptions only" />
       </section>
 
       {status.error ? <Card><CardHeader title="Couldn’t load transfers" action={<Badge tone="danger">REST</Badge>} /><p>{status.error}</p></Card> : null}
 
-      {lead ? (
-        <Card className="rs-transfer-lead">
-          <Badge>Big talk</Badge>
-          <h2>{decodeText(lead.headline)}</h2>
-          <p>{decodeText(lead.excerpt || 'Open the source to follow the full transfer context.')}</p>
-          <div>
-            <SourceMention story={lead} showTime />
-            <a href={lead.read_full_story_url || lead.original_url} target="_blank" rel="noreferrer" onClick={() => trackStoryClick(lead, 'read_full_story_click', 'transfer')}>Read story <ExternalLink size={15} /></a>
-          </div>
-        </Card>
-      ) : null}
+      <section className="rs-transfer-status-filter" aria-label="Transfer status filters">
+        {['all', 'confirmed', 'medical', 'strongly-reported', 'agreement', 'reported', 'off', 'disputed'].map((item) => (
+          <button className={activeStatus === item ? 'active' : ''} type="button" onClick={() => setActiveStatus(item)} key={item}>{item.replace('-', ' ')}</button>
+        ))}
+      </section>
+
+      <section className="rs-transfer-deal-grid" aria-live="polite">
+        {visibleDeals.map((deal) => <TransferDealCard deal={deal} key={`${deal.player}-${deal.to_club}-${deal.status}`} />)}
+        {!status.loading && !visibleDeals.length ? <p>No automated deals match this status yet.</p> : null}
+      </section>
 
       <section className="rs-transfer-layout">
         <Card className="rs-transfer-card rs-product-card">
@@ -5342,6 +5346,46 @@ function TransferNewsPage() {
         </Card>
       </section>
     </main>
+  );
+}
+
+function TransferDeadlineHero({ deadline = {}, confirmed = 0, deals = 0 }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const target = new Date(deadline.timestamp || '').getTime();
+  const remaining = Math.max(0, target - now);
+  const days = Math.floor(remaining / 86400000);
+  const hours = Math.floor((remaining % 86400000) / 3600000);
+  const minutes = Math.floor((remaining % 3600000) / 60000);
+  const seconds = Math.floor((remaining % 60000) / 1000);
+
+  return (
+    <section className="rs-transfer-deadline-hero">
+      <div><Badge tone="danger">Live automation</Badge><h1>{deadline.label || 'Transfer Deadline Day'}</h1><p>Rifnote is automatically extracting, clustering and verifying updates from indexed football sources.</p></div>
+      <div className="rs-transfer-countdown" aria-label="Time until transfer deadline">
+        {deadline.is_closed ? <strong>Window closed</strong> : <strong>{days ? `${days}d ` : ''}{String(hours).padStart(2, '0')}:{String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}</strong>}
+        <span>{confirmed} confirmed · {deals} tracked</span>
+      </div>
+    </section>
+  );
+}
+
+function TransferDealCard({ deal = {} }) {
+  const story = deal.latest_story || {};
+  return (
+    <article className={`rs-transfer-deal is-${deal.status || 'reported'}`}>
+      <header><span>{deal.status_label || 'Reported'}</span><small>{Math.round(Number(deal.confidence || 0) * 100)}% confidence</small></header>
+      <h2>{deal.player || decodeText(story.headline || 'Developing transfer')}</h2>
+      {(deal.from_club || deal.to_club) ? <div className="rs-transfer-route"><b>{deal.from_club || 'Current club'}</b><ArrowRight size={16} /><b>{deal.to_club || 'Destination developing'}</b></div> : null}
+      <p>{decodeText(story.headline || '')}</p>
+      <footer>
+        <span>{deal.source_count || 1} source{deal.source_count === 1 ? '' : 's'} · {deal.transfer_type || 'transfer'}{deal.fee ? ` · ${deal.fee}` : ''}</span>
+        <a href={story.read_full_story_url || story.original_url || '#'} target="_blank" rel="noreferrer">Latest source <ExternalLink size={13} /></a>
+      </footer>
+    </article>
   );
 }
 
@@ -5381,6 +5425,31 @@ function HomeLiveFeature({ live = {} }) {
         {source && source.toLowerCase() !== 'live' ? <small>{source}</small> : null}
       </span>
       <ArrowRight size={17} aria-hidden="true" />
+    </a>
+  );
+}
+
+function TransferDeadlineHomeStrip({ deadline = {} }) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+
+  const target = new Date(deadline.timestamp || '').getTime();
+  const remaining = Number.isFinite(target) ? Math.max(0, target - now) : 0;
+  const hours = Math.floor(remaining / 3600000);
+  const minutes = Math.floor((remaining % 3600000) / 60000);
+  const seconds = Math.floor((remaining % 60000) / 1000);
+  const closed = deadline.is_closed || remaining <= 0;
+
+  return (
+    <a className={`rs-transfer-deadline-strip ${closed ? 'is-closed' : ''}`} href={deadline.url || appPageUrl('transfers')}>
+      <span><i /> {closed ? 'Window closed' : 'Deadline Day'}</span>
+      <b>{closed ? 'Transfer recap' : `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`}</b>
+      <small>{deadline.label || 'Transfer Deadline Day'}</small>
+      <ArrowRight size={16} />
     </a>
   );
 }

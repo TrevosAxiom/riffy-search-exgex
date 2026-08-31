@@ -1975,15 +1975,170 @@ class Rifnote_Search_Football_API {
             return strtotime($b['published_at'] ?? '') <=> strtotime($a['published_at'] ?? '');
         });
 
+        $deals = self::build_transfer_deals($stories);
+        $exceptions = array_values(array_filter($deals, function ($deal) {
+            return !empty($deal['needs_review']);
+        }));
+
         return array(
             'source' => 'database',
             'configured' => true,
             'stories' => array_slice($stories, 0, $limit),
+            'deals' => array_slice($deals, 0, $limit),
+            'confirmed_count' => count(array_filter($deals, function ($deal) { return 'confirmed' === $deal['status']; })),
+            'exceptions_count' => count($exceptions),
+            'deadline' => self::transfer_deadline_context(),
             'sources' => count($sources),
             'topics' => self::transfer_topics($stories),
             'updated_at' => gmdate(DATE_ATOM),
             'message' => $stories ? '' : __('No transfer stories are indexed yet. Add football sources or run a TheNewsAPI/RSS import with transfer keywords.', 'rifnote-search'),
         );
+    }
+
+    public static function transfer_deadline_context() {
+        $timezone = wp_timezone();
+        $now = new DateTimeImmutable('now', $timezone);
+        $default = $now->format('Y') . '-09-01 23:00:00';
+        $deadline_text = sanitize_text_field((string) get_option('rifnote_transfer_deadline_at', $default));
+
+        try {
+            $deadline = new DateTimeImmutable($deadline_text, $timezone);
+        } catch (Exception $exception) {
+            $deadline = new DateTimeImmutable($default, $timezone);
+        }
+
+        return array(
+            'enabled' => (bool) get_option('rifnote_transfer_deadline_enabled', true) && $now <= $deadline->modify('+2 days'),
+            'timestamp' => $deadline->format(DATE_ATOM),
+            'timezone' => $timezone->getName(),
+            'label' => sanitize_text_field((string) get_option('rifnote_transfer_deadline_label', __('Transfer Deadline Day', 'rifnote-search'))),
+            'is_closed' => $now >= $deadline,
+            'url' => home_url('/transfers/'),
+        );
+    }
+
+    private static function build_transfer_deals($stories) {
+        $clusters = array();
+
+        foreach ((array) $stories as $story) {
+            $parsed = self::parse_transfer_story($story);
+            $key = $parsed['cluster_key'];
+
+            if (!isset($clusters[$key])) {
+                $clusters[$key] = array_merge($parsed, array(
+                    'stories' => array(),
+                    'sources' => array(),
+                    'destinations' => array(),
+                ));
+            }
+
+            $clusters[$key]['stories'][] = $story;
+            $domain = sanitize_text_field((string) ($story['source_domain'] ?? ''));
+            if ($domain) $clusters[$key]['sources'][$domain] = true;
+            if (!empty($parsed['to_club'])) $clusters[$key]['destinations'][sanitize_key($parsed['to_club'])] = $parsed['to_club'];
+
+            if ($parsed['status_rank'] > $clusters[$key]['status_rank']) {
+                foreach (array('status', 'status_label', 'status_rank', 'confidence', 'official', 'to_club', 'from_club', 'fee', 'transfer_type') as $field) {
+                    $clusters[$key][$field] = $parsed[$field];
+                }
+            }
+        }
+
+        $deals = array();
+        foreach ($clusters as $deal) {
+            $deal['source_count'] = count($deal['sources']);
+            $deal['supporting_sources'] = array_values(array_keys($deal['sources']));
+            $deal['story_count'] = count($deal['stories']);
+            $deal['latest_story'] = $deal['stories'][0] ?? array();
+            $conflicting = count($deal['destinations']) > 1;
+
+            if (!$deal['official'] && $deal['source_count'] >= 2 && $deal['status_rank'] < 4) {
+                $deal['status'] = 'strongly-reported';
+                $deal['status_label'] = __('Strongly reported', 'rifnote-search');
+                $deal['status_rank'] = 3;
+                $deal['confidence'] = max(.78, $deal['confidence']);
+            }
+
+            if ($conflicting) {
+                $deal['status'] = 'disputed';
+                $deal['status_label'] = __('Disputed', 'rifnote-search');
+            }
+
+            $deal['needs_review'] = $conflicting || $deal['confidence'] < .55 || empty($deal['player']);
+            unset($deal['sources'], $deal['destinations'], $deal['stories'], $deal['status_rank'], $deal['cluster_key']);
+            $deals[] = $deal;
+        }
+
+        usort($deals, function ($a, $b) {
+            $rank = array('confirmed' => 6, 'medical' => 5, 'strongly-reported' => 4, 'agreement' => 3, 'reported' => 2, 'off' => 1, 'disputed' => 0);
+            $score = ($rank[$b['status']] ?? 0) <=> ($rank[$a['status']] ?? 0);
+            return $score ?: (strtotime($b['latest_story']['published_at'] ?? '') <=> strtotime($a['latest_story']['published_at'] ?? ''));
+        });
+
+        return $deals;
+    }
+
+    private static function parse_transfer_story($story) {
+        $headline = sanitize_text_field((string) ($story['headline'] ?? ''));
+        $excerpt = sanitize_text_field((string) ($story['excerpt'] ?? ''));
+        $text = trim($headline . ' ' . $excerpt);
+        $lower = strtolower($text);
+        $domain = strtolower((string) ($story['source_domain'] ?? ''));
+        $official_domains = array_filter(array_map('trim', preg_split('/[\r\n,]+/', strtolower((string) get_option('rifnote_transfer_official_domains', 'premierleague.com,uefa.com,fifa.com')))));
+        $trusted_domains = array_filter(array_map('trim', preg_split('/[\r\n,]+/', strtolower((string) get_option('rifnote_transfer_trusted_domains', 'bbc.com,bbc.co.uk,skysports.com,theathletic.com,espn.com,reuters.com')))));
+        $official = (bool) array_filter($official_domains, function ($item) use ($domain) { return $item && false !== strpos($domain, $item); });
+        $trusted = $official || (bool) array_filter($trusted_domains, function ($item) use ($domain) { return $item && false !== strpos($domain, $item); });
+        $player = self::extract_transfer_player($headline);
+        $to_club = '';
+        $from_club = '';
+
+        if (preg_match('/\bto\s+(?:join\s+)?([A-Z][A-Za-z0-9 .&-]{2,35})(?:\s+(?:for|after|as|on)\b|$)/', $headline, $match)) $to_club = trim($match[1]);
+        if (preg_match('/\bfrom\s+([A-Z][A-Za-z0-9 .&-]{2,35})(?:\s+(?:for|after|as|on|to)\b|$)/', $headline, $match)) $from_club = trim($match[1]);
+        if (!$to_club && preg_match('/^([A-Z][A-Za-z .&-]{2,30})\s+(?:sign|signs|agree|complete)/', $headline, $match)) $to_club = trim($match[1]);
+
+        $status = 'reported';
+        $label = __('Reported', 'rifnote-search');
+        $rank = 1;
+        $confidence = $trusted ? .62 : .45;
+        if (preg_match('/\b(deal off|move off|collapsed|collapse|pulls out|withdraws)\b/i', $text)) {
+            $status = 'off'; $label = __('Off', 'rifnote-search'); $rank = 5; $confidence = $trusted ? .9 : .7;
+        } elseif ($official && preg_match('/\b(signs|signed|signing|joins|joined|complete[sd]?|announc(?:e|es|ed)|confirmed)\b/i', $text)) {
+            $status = 'confirmed'; $label = __('Confirmed', 'rifnote-search'); $rank = 6; $confidence = .98;
+        } elseif (preg_match('/\bmedical\b/i', $text)) {
+            $status = 'medical'; $label = __('Medical', 'rifnote-search'); $rank = 4; $confidence = $trusted ? .84 : .68;
+        } elseif (preg_match('/\b(agreed|agreement|deal agreed|terms agreed|here we go)\b/i', $text)) {
+            $status = 'agreement'; $label = __('Agreement', 'rifnote-search'); $rank = 3; $confidence = $trusted ? .8 : .62;
+        }
+
+        $fee = preg_match('/(?:£|€|\$)\s?\d+(?:\.\d+)?\s?(?:m|million|bn|billion)?/i', $text, $fee_match) ? $fee_match[0] : '';
+        $type = false !== strpos($lower, 'loan') ? 'loan' : (false !== strpos($lower, 'free transfer') ? 'free' : 'permanent');
+        $cluster_seed = $player ? $player : implode(' ', array_slice(preg_split('/\s+/', strtolower($headline)), 0, 7));
+
+        return array(
+            'cluster_key' => sanitize_key($cluster_seed),
+            'player' => $player,
+            'from_club' => $from_club,
+            'to_club' => $to_club,
+            'fee' => $fee,
+            'transfer_type' => $type,
+            'status' => $status,
+            'status_label' => $label,
+            'status_rank' => $rank,
+            'confidence' => $confidence,
+            'official' => $official,
+        );
+    }
+
+    private static function extract_transfer_player($headline) {
+        $headline = preg_replace('/^(Report|Transfer news|Exclusive|Breaking)\s*:\s*/i', '', (string) $headline);
+        $patterns = array(
+            '/^[A-Z][A-Za-z .\'-]{2,45}?(?=\s+(?:signs|joins|moves|agrees|completes|set to|close to|undergoes|has joined)\b)/',
+            '/\b(?:sign|signs|signing of|deal for|bid for)\s+([A-Z][A-Za-z .\'-]{2,45}?)(?=\s+(?:from|for|after|as|on|to)\b|$)/',
+        );
+        foreach ($patterns as $pattern) {
+            if (preg_match($pattern, $headline, $match)) return trim($match[1] ?? $match[0]);
+        }
+        return '';
     }
 
     public static function backfill_history($years = 1, $detail_limit = 25) {
