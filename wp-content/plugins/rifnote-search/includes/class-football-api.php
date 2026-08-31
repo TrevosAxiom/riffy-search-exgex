@@ -1940,29 +1940,22 @@ class Rifnote_Search_Football_API {
 
     public static function transfer_news_payload($limit = 24) {
         $limit = max(1, min(60, (int) $limit));
-        $terms = array('transfer', 'signs', 'joins', 'loan', 'bid', 'contract', 'release clause', 'move');
+        $terms = array('transfer', 'signing', 'joins', 'loan', 'bid', 'contract', 'release clause', 'personal terms');
         $stories = array();
         $sources = array();
 
         if (class_exists('Rifnote_Search_Engine')) {
-            foreach ($terms as $term) {
-                $payload = Rifnote_Search_Engine::payload(array(
-                    'query' => $term,
-                    // Warehouse RSS items are often categorised as Sport rather
-                    // than Football. The transfer classifier below is the safer filter.
-                    'category' => '',
-                    'sort' => 'latest',
-                    'date_range' => 'all',
-                    'include_warehouse' => true,
-                ), 1, 10);
-
+            $collect = function ($payload) use (&$stories, &$sources) {
                 foreach ($payload['results'] ?? array() as $story) {
-                    $key = !empty($story['id']) ? 'post_' . (int) $story['id'] : md5(($story['headline'] ?? '') . ($story['original_url'] ?? ''));
-                    $text = strtolower(wp_strip_all_tags(($story['headline'] ?? '') . ' ' . ($story['excerpt'] ?? '')));
+                    $story_id = trim((string) ($story['id'] ?? ''));
+                    $key = $story_id
+                        ? (ctype_digit($story_id) ? 'post_' . $story_id : 'warehouse_' . md5($story_id))
+                        : 'url_' . md5(($story['headline'] ?? '') . ($story['original_url'] ?? ''));
 
-                    if (!self::looks_like_transfer_story($text)) {
+                    if (!self::looks_like_transfer_story($story)) {
                         continue;
                     }
+                    if (class_exists('Rifnote_Search_Transfer_Deadline') && Rifnote_Search_Transfer_Deadline::is_rejected_story($story)) continue;
 
                     $stories[$key] = $story;
 
@@ -1970,20 +1963,56 @@ class Rifnote_Search_Football_API {
                         $sources[$story['source_domain']] = true;
                     }
                 }
+            };
+
+            // Sports RSS and sports WordPress categories are the authoritative
+            // first pass. This avoids letting a general-news keyword collision
+            // outrank actual football reporting.
+            foreach (array('Football', 'Sport') as $sports_category) {
+                $collect(Rifnote_Search_Engine::payload(array(
+                    'query' => '',
+                    'category' => $sports_category,
+                    'sort' => 'latest',
+                    'date_range' => '30d',
+                    'include_warehouse' => true,
+                ), 1, 80));
+                if (class_exists('Rifnote_Search_Data_API')) {
+                    $collect(array('results' => Rifnote_Search_Data_API::recent_story_payload($sports_category, 50)));
+                }
+            }
+
+            // Only widen into general sources when sports feeds did not supply a
+            // useful batch. General candidates still pass the strict classifier.
+            if (count($stories) < min(12, $limit)) {
+                foreach ($terms as $term) {
+                    $collect(Rifnote_Search_Engine::payload(array(
+                        'query' => $term,
+                        'category' => '',
+                        'sort' => 'latest',
+                        'date_range' => 'all',
+                        'include_warehouse' => true,
+                    ), 1, 40));
+                }
             }
         }
 
         $stories = array_values($stories);
         usort($stories, function ($a, $b) {
+            $priority = self::transfer_source_priority($b) <=> self::transfer_source_priority($a);
+            if ($priority) return $priority;
             return strtotime($b['published_at'] ?? '') <=> strtotime($a['published_at'] ?? '');
         });
 
-        $deals = self::build_transfer_deals($stories);
+        $automatic_deals = self::build_transfer_deals($stories);
+        $candidates = self::transfer_candidates($stories);
+        $deals = array_values(array_filter($automatic_deals, function ($deal) {
+            return !empty($deal['player']) && !empty($deal['from_club']) && !empty($deal['to_club']) && empty($deal['needs_review']);
+        }));
         if (class_exists('Rifnote_Search_Transfer_Deadline')) {
             $deals = self::merge_manual_transfer_deals($deals, Rifnote_Search_Transfer_Deadline::public_deals());
         }
-        $exceptions = array_values(array_filter($deals, function ($deal) {
-            return !empty($deal['needs_review']);
+        $exceptions = array_values(array_filter($automatic_deals, function ($deal) {
+            return !empty($deal['needs_review']) || empty($deal['player']) || empty($deal['from_club']) || empty($deal['to_club']);
         }));
 
         return array(
@@ -1991,6 +2020,7 @@ class Rifnote_Search_Football_API {
             'configured' => true,
             'stories' => array_slice($stories, 0, $limit),
             'deals' => array_slice($deals, 0, $limit),
+            'candidates' => array_slice($candidates, 0, $limit),
             'confirmed_count' => count(array_filter($deals, function ($deal) { return 'confirmed' === $deal['status']; })),
             'exceptions_count' => count($exceptions),
             'deadline' => self::transfer_deadline_context(),
@@ -2084,6 +2114,31 @@ class Rifnote_Search_Football_API {
         return $deals;
     }
 
+    private static function transfer_candidates($stories) {
+        $candidates = array();
+        foreach ((array) $stories as $story) {
+            $candidate = self::parse_transfer_story($story);
+            unset($candidate['cluster_key'], $candidate['status_rank']);
+            $candidate['story'] = $story;
+            $candidate['moderation_key'] = class_exists('Rifnote_Search_Transfer_Deadline') ? Rifnote_Search_Transfer_Deadline::moderation_key($story) : md5((string) ($story['id'] ?? $story['original_url'] ?? $story['headline'] ?? ''));
+            $candidate['complete'] = !empty($candidate['player']) && !empty($candidate['from_club']) && !empty($candidate['to_club']);
+            $candidates[] = $candidate;
+        }
+        usort($candidates, function ($a, $b) {
+            if (!empty($a['complete']) !== !empty($b['complete'])) return !empty($a['complete']) ? 1 : -1;
+            return strtotime($b['story']['published_at'] ?? '') <=> strtotime($a['story']['published_at'] ?? '');
+        });
+        return $candidates;
+    }
+
+    private static function transfer_source_priority($story) {
+        $category = strtolower((string) ($story['category_slug'] ?? $story['category'] ?? ''));
+        $source_type = strtolower((string) ($story['source_type'] ?? $story['aggregation_source'] ?? ''));
+        $is_sports = (bool) preg_match('/(?:^|[-_])(football|sport|sports)(?:$|[-_])/', sanitize_title($category));
+        $is_rss = false !== strpos($source_type, 'rss') || false !== strpos($source_type, 'warehouse');
+        return ($is_sports ? 2 : 0) + ($is_rss ? 1 : 0);
+    }
+
     private static function merge_manual_transfer_deals($automatic, $manual) {
         $merged = array_values((array) $automatic);
 
@@ -2127,8 +2182,8 @@ class Rifnote_Search_Football_API {
         $to_club = '';
         $from_club = '';
 
-        if (preg_match('/\bto\s+(?:join\s+)?([A-Z][A-Za-z0-9 .&-]{2,35})(?:\s+(?:for|after|as|on)\b|$)/', $headline, $match)) $to_club = trim($match[1]);
-        if (preg_match('/\bfrom\s+([A-Z][A-Za-z0-9 .&-]{2,35})(?:\s+(?:for|after|as|on|to)\b|$)/', $headline, $match)) $from_club = trim($match[1]);
+        if (preg_match('/\bto\s+(?:join\s+)?([A-Z][A-Za-z0-9 .&-]{2,35}?)(?:\s+(?:for|after|as|on)\b|$)/', $headline, $match)) $to_club = trim($match[1]);
+        if (preg_match('/\bfrom\s+([A-Z][A-Za-z0-9 .&-]{2,35}?)(?:\s+(?:for|after|as|on|to)\b|$)/', $headline, $match)) $from_club = trim($match[1]);
         if (!$to_club && preg_match('/^([A-Z][A-Za-z .&-]{2,30})\s+(?:sign|signs|agree|complete)/', $headline, $match)) $to_club = trim($match[1]);
 
         $status = 'reported';
@@ -2167,7 +2222,8 @@ class Rifnote_Search_Football_API {
     private static function extract_transfer_player($headline) {
         $headline = preg_replace('/^(Report|Transfer news|Exclusive|Breaking)\s*:\s*/i', '', (string) $headline);
         $patterns = array(
-            '/^[A-Z][A-Za-z .\'-]{2,45}?(?=\s+(?:signs|joins|moves|agrees|completes|set to|close to|undergoes|has joined)\b)/',
+            '/\bpersonal terms with\s+([A-Z][A-Za-z .\'-]{2,45}?)(?=\s+(?:ahead|after|before|for|on|as)\b|$)/',
+            '/^[A-Z][A-Za-z .\'-]{2,45}?(?=\s+(?:signs|joins|moves|completes|set to|close to|undergoes|has joined)\b)/',
             '/\b(?:sign|signs|signing of|deal for|bid for)\s+([A-Z][A-Za-z .\'-]{2,45}?)(?=\s+(?:from|for|after|as|on|to)\b|$)/',
         );
         foreach ($patterns as $pattern) {
@@ -2352,14 +2408,31 @@ class Rifnote_Search_Football_API {
         return '' !== $player_name && 0 === strcasecmp(trim((string) ($player['name'] ?? '')), $player_name);
     }
 
-    private static function looks_like_transfer_story($text) {
-        $has_transfer_signal = (bool) preg_match('/\b(transfer|transfers|signs|signed|signing|joins|joined|loan|bid|bids|contract|clause|move|deal|medical)\b/i', $text);
+    private static function looks_like_transfer_story($story) {
+        $headline = wp_strip_all_tags((string) ($story['headline'] ?? ''));
+        $excerpt = wp_strip_all_tags((string) ($story['excerpt'] ?? ''));
+        $category = strtolower(sanitize_text_field((string) ($story['category_slug'] ?? $story['category'] ?? '')));
+        $tags = implode(' ', array_map(function ($tag) {
+            return is_array($tag) ? (string) ($tag['name'] ?? '') : (string) $tag;
+        }, (array) ($story['tags'] ?? array())));
+        $text = strtolower(trim($headline . ' ' . $excerpt . ' ' . $tags));
+
+        $has_transfer_signal = (bool) preg_match('/\b(transfer|transfers|signs|signed|signing|joins|joined|loan|bid|bids|release clause|free agent|personal terms|medical|deal agreed|agreement|move (?:to|from)|contract (?:with|at|for))\b/i', $text);
 
         if (!$has_transfer_signal) {
             return false;
         }
 
-        return (bool) preg_match('/\b(football|soccer|club|clubs|league|cup|striker|forward|winger|midfielder|defender|keeper|goalkeeper|manager|coach|premier|laliga|serie\s*a|bundesliga|uefa|fifa|afcon|chelsea|arsenal|liverpool|manchester|united|city|madrid|barcelona|napoli|psg|bayern|inter|milan|juventus|fc)\b/i', $text);
+        $football_category = (bool) preg_match('/(?:^|[-_])(football|sport|sports)(?:$|[-_])/', $category);
+        $football_context = (bool) preg_match('/\b(football|footballer|soccer|premier league|champions league|la ?liga|serie\s*a|bundesliga|uefa|fifa|afcon|striker|forward|winger|midfielder|defender|goalkeeper|chelsea|arsenal|liverpool|manchester united|manchester city|real madrid|barcelona|napoli|psg|bayern|inter milan|ac milan|juventus|tottenham|newcastle|everton|aston villa)\b/i', $text);
+
+        // A politics/business/world item must prove football relevance in its
+        // actual text; a generic word such as "club" is deliberately not enough.
+        if (preg_match('/(?:^|[-_])(politics|world|business|technology|tech|entertainment)(?:$|[-_])/', $category)) {
+            return $football_context;
+        }
+
+        return $football_category || $football_context;
     }
 
     private static function transfer_topics($stories) {

@@ -13514,6 +13514,98 @@ body.rifnote-search-plugin-page .rs-plugin-search button {
 .rs-transfer-deadline-strip > b { font-size: 1rem; font-weight: 950; font-variant-numeric: tabular-nums; }
 .rs-transfer-deadline-strip > small { overflow: hidden; color: #667085; font-weight: 760; text-overflow: ellipsis; white-space: nowrap; }
 
+.rs-transfer-home-takeover {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "eyebrow clock"
+    "copy clock"
+    "cta clock";
+  align-items: center;
+  gap: 14px clamp(24px, 5vw, 74px);
+  width: min(1120px, 94vw);
+  min-height: clamp(270px, 29vw, 410px);
+  margin: 0 auto;
+  padding: clamp(26px, 5vw, 62px);
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 16%);
+  border-radius: 30px;
+  background:
+    linear-gradient(90deg, rgb(4 9 18 / 97%) 0%, rgb(8 15 27 / 88%) 45%, rgb(8 15 27 / 34%) 75%, rgb(8 15 27 / 56%) 100%),
+    var(--rs-transfer-home-image) center / cover no-repeat,
+    #0b1220;
+  color: #fff;
+  text-align: left;
+  text-decoration: none;
+  box-shadow: 0 26px 70px rgb(15 23 42 / 22%);
+}
+
+.rs-transfer-home-takeover::after {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: "";
+  background: radial-gradient(circle at 82% 22%, rgb(237 28 36 / 35%), transparent 30%);
+  pointer-events: none;
+}
+
+.rs-transfer-home-takeover:focus-visible {
+  outline: 4px solid rgb(237 28 36 / 42%);
+  outline-offset: 6px;
+}
+
+.rs-transfer-home-eyebrow {
+  grid-area: eyebrow;
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 11px;
+  border: 1px solid rgb(255 255 255 / 18%);
+  border-radius: 999px;
+  background: rgb(237 28 36 / 88%);
+  font-size: .72rem;
+  font-weight: 950;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.rs-transfer-home-eyebrow i {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 0 0 0 rgb(255 255 255 / 55%);
+  animation: rsHomeLivePulse 1.35s infinite;
+}
+
+.rs-transfer-home-copy { grid-area: copy; display: grid; gap: 10px; max-width: 720px; }
+.rs-transfer-home-copy strong { color: #fff; font-size: clamp(2.35rem, 5.4vw, 5.25rem); font-weight: 950; letter-spacing: -.065em; line-height: .92; }
+.rs-transfer-home-copy small { max-width: 610px; color: #d7dfeb; font-size: clamp(.9rem, 1.35vw, 1.12rem); font-weight: 650; line-height: 1.45; }
+
+.rs-transfer-home-clock {
+  grid-area: clock;
+  display: grid;
+  min-width: min(310px, 28vw);
+  gap: 8px;
+  padding: 20px 22px;
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: 22px;
+  background: rgb(5 11 21 / 68%);
+  text-align: center;
+  backdrop-filter: blur(12px);
+}
+
+.rs-transfer-home-clock b { color: #fff; font-size: clamp(1.65rem, 3.2vw, 3rem); font-variant-numeric: tabular-nums; line-height: 1; white-space: nowrap; }
+.rs-transfer-home-clock em { color: #fecaca; font-size: .74rem; font-style: normal; font-weight: 850; text-transform: uppercase; }
+.rs-transfer-home-cta { grid-area: cta; display: inline-flex; width: fit-content; align-items: center; gap: 9px; color: #fff; font-size: .9rem; font-weight: 900; }
+.rs-transfer-home-takeover:hover .rs-transfer-home-cta svg { transform: translateX(4px); }
+.rs-transfer-home-cta svg { transition: transform .18s ease; }
+.rs-transfer-home-takeover.is-closed .rs-transfer-home-eyebrow { background: #475467; }
+
 .rs-transfer-deadline-hero {
   position: relative;
   isolation: isolate;
@@ -13586,6 +13678,20 @@ body.rifnote-search-plugin-page .rs-plugin-search button {
   .rs-transfer-news-list article { grid-template-columns: 82px minmax(0, 1fr); }
   .rs-transfer-news-list article > a { grid-column: 2; }
   .rs-transfer-story-image { width: 82px; }
+  .rs-transfer-home-takeover {
+    grid-template-columns: 1fr;
+    grid-template-areas: "eyebrow" "copy" "clock" "cta";
+    gap: 14px;
+    width: 100%;
+    min-height: 390px;
+    padding: 24px 20px;
+    border-radius: 24px;
+    background-position: 58% center;
+  }
+  .rs-transfer-home-copy strong { font-size: clamp(2.25rem, 12vw, 3.4rem); }
+  .rs-transfer-home-copy small { max-width: 30ch; font-size: .86rem; }
+  .rs-transfer-home-clock { min-width: 0; width: 100%; padding: 14px 16px; text-align: left; }
+  .rs-transfer-home-clock b { font-size: clamp(1.55rem, 8vw, 2.15rem); }
 }
 
 @keyframes rsHomeLivePulse {

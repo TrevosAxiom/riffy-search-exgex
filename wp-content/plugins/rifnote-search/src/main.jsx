@@ -797,12 +797,13 @@ function App({ mode }) {
 
   const featuredFootballMatches = Array.isArray(window.RIFNOTE_SEARCH?.featuredFootballMatches) ? window.RIFNOTE_SEARCH.featuredFootballMatches : [];
   const activeFeaturedFootballMatches = featuredFootballMatches.filter((fixture) => fixture && !isFootballFixtureFinished(fixture));
+  const transferDeadline = window.RIFNOTE_SEARCH?.transferDeadline || null;
+  const hasTransferDeadlineTakeover = Boolean(transferDeadline?.enabled);
   const isElectionTakeoverActive = Boolean(window.RIFNOTE_SEARCH?.electionTakeover?.enabled);
   const hasFeaturedFootballTakeover = activeFeaturedFootballMatches.length > 0;
-  const hasAdminHomepageMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl) && !isElectionTakeoverActive && !hasFeaturedFootballTakeover;
-  const hasHomeSearchMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl || isElectionTakeoverActive || hasFeaturedFootballTakeover);
+  const hasAdminHomepageMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl) && !hasTransferDeadlineTakeover && !isElectionTakeoverActive && !hasFeaturedFootballTakeover;
+  const hasHomeSearchMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl || hasTransferDeadlineTakeover || isElectionTakeoverActive || hasFeaturedFootballTakeover);
   const homeLive = window.RIFNOTE_SEARCH?.homeLive || null;
-  const transferDeadline = window.RIFNOTE_SEARCH?.transferDeadline || null;
   const showMobileTakeoverLogo = hasHomeSearchMedia && !hasAdminHomepageMedia;
 
   useEffect(() => {
@@ -951,7 +952,9 @@ function App({ mode }) {
       {isHome ? (
         <section className={`rs-google-home ${hasHomeSearchMedia ? 'has-home-media' : ''}`}>
           {hasHomeSearchMedia ? (
-            <HomeSearchMedia primary featuredFootballMatches={activeFeaturedFootballMatches} />
+            hasTransferDeadlineTakeover
+              ? <TransferDeadlineHomeTakeover deadline={transferDeadline} />
+              : <HomeSearchMedia primary featuredFootballMatches={activeFeaturedFootballMatches} />
           ) : (
             <div className="rs-orbit-logo" aria-label="Rifnote Search">
               <h1 className="rs-google-logo">
@@ -971,7 +974,6 @@ function App({ mode }) {
             </div>
           )}
           {homeLive?.enabled ? <HomeLiveFeature live={homeLive} /> : null}
-          {transferDeadline?.enabled ? <TransferDeadlineHomeStrip deadline={transferDeadline} /> : null}
           <SearchPanel state={state} onSubmit={submitSearch} compact="home" />
           <HomeQuickLinks activePill={homePill} items={homepagePills} onSelect={updateHomePill} showCategories={Boolean(siteCategories.length)} categoriesActive={showHomeCategories} onCategoriesToggle={toggleHomeCategories} />
         </section>
@@ -5450,7 +5452,7 @@ function HomeLiveFeature({ live = {} }) {
   );
 }
 
-function TransferDeadlineHomeStrip({ deadline = {} }) {
+function TransferDeadlineHomeTakeover({ deadline = {} }) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -5460,17 +5462,30 @@ function TransferDeadlineHomeStrip({ deadline = {} }) {
 
   const target = new Date(deadline.timestamp || '').getTime();
   const remaining = Number.isFinite(target) ? Math.max(0, target - now) : 0;
-  const hours = Math.floor(remaining / 3600000);
+  const days = Math.floor(remaining / 86400000);
+  const hours = Math.floor((remaining % 86400000) / 3600000);
   const minutes = Math.floor((remaining % 3600000) / 60000);
   const seconds = Math.floor((remaining % 60000) / 1000);
   const closed = deadline.is_closed || remaining <= 0;
+  const image = `${window.RIFNOTE_SEARCH?.pluginUrl || ''}public/images/transfer-deadline-hero.jpg`;
 
   return (
-    <a className={`rs-transfer-deadline-strip ${closed ? 'is-closed' : ''}`} href={deadline.url || appPageUrl('transfers')}>
-      <span><i /> {closed ? 'Window closed' : 'Deadline Day'}</span>
-      <b>{closed ? 'Transfer recap' : `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`}</b>
-      <small>{deadline.label || 'Transfer Deadline Day'}</small>
-      <ArrowRight size={16} />
+    <a
+      className={`rs-transfer-home-takeover ${closed ? 'is-closed' : ''}`}
+      href={deadline.url || appPageUrl('transfers')}
+      style={{ '--rs-transfer-home-image': `url(${image})` }}
+      aria-label="Follow Transfer Deadline Day"
+    >
+      <span className="rs-transfer-home-eyebrow"><i /> {closed ? 'Window closed' : 'Live transfer tracker'}</span>
+      <span className="rs-transfer-home-copy">
+        <strong>Follow Transfer Deadline Day</strong>
+        <small>Verified moves, agreements, medicals and breaking reports in one place.</small>
+      </span>
+      <span className="rs-transfer-home-clock" aria-label={closed ? 'Transfer window closed' : 'Time remaining'}>
+        <b>{closed ? 'Full recap' : `${days ? `${days}d ` : ''}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}:${String(seconds).padStart(2, '0')}`}</b>
+        <em>{closed ? 'See every tracked deal' : deadline.label || 'Transfer Deadline Day'}</em>
+      </span>
+      <span className="rs-transfer-home-cta">Open live tracker <ArrowRight size={18} /></span>
     </a>
   );
 }

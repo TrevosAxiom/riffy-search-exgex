@@ -101,6 +101,19 @@ class Rifnote_Search_Data_API {
         return $items;
     }
 
+    public static function recent_story_payload($category = '', $limit = 50) {
+        $response = self::warehouse_items(array(
+            'category' => sanitize_key((string) $category),
+            'limit' => max(1, min(50, absint($limit))),
+        ), false);
+        if (empty($response['ok']) || empty($response['items']) || !is_array($response['items'])) return array();
+
+        $request_args = array('query' => '', 'category' => (string) $category, 'sort' => 'latest', 'date_range' => '30d');
+        return array_values(array_filter(array_map(function ($item) use ($request_args) {
+            return self::normalize_story($item, $request_args);
+        }, $response['items'])));
+    }
+
     public static function stats($force = false) {
         if (!self::enabled()) {
             return array(

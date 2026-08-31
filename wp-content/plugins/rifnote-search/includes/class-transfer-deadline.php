@@ -8,6 +8,7 @@ class Rifnote_Search_Transfer_Deadline {
     const POST_TYPE = 'rifnote_transfer';
     const MENU_SLUG = 'rifnote-transfer-desk';
     const NONCE = 'rifnote_transfer_details';
+    const MODERATION_OPTION = 'rifnote_transfer_rejected_stories';
 
     public static function init() {
         add_action('init', array(__CLASS__, 'register_post_type'));
@@ -16,6 +17,7 @@ class Rifnote_Search_Transfer_Deadline {
         add_action('save_post_' . self::POST_TYPE, array(__CLASS__, 'save'), 10, 2);
         add_filter('manage_' . self::POST_TYPE . '_posts_columns', array(__CLASS__, 'columns'));
         add_action('manage_' . self::POST_TYPE . '_posts_custom_column', array(__CLASS__, 'column_value'), 10, 2);
+        add_action('admin_post_rifnote_transfer_moderate', array(__CLASS__, 'moderate_story'));
     }
 
     public static function register_post_type() {
@@ -56,6 +58,8 @@ class Rifnote_Search_Transfer_Deadline {
         if (!current_user_can('edit_posts')) return;
         $manual = wp_count_posts(self::POST_TYPE);
         $payload = class_exists('Rifnote_Search_Football_API') ? Rifnote_Search_Football_API::transfer_news_payload(60) : array();
+        $candidates = (array) ($payload['candidates'] ?? array());
+        $rejected_stories = array_reverse((array) get_option(self::MODERATION_OPTION, array()), true);
         ?>
         <div class="wrap">
             <h1><?php esc_html_e('Transfer Deadline Desk', 'rifnote-search'); ?></h1>
@@ -77,6 +81,72 @@ class Rifnote_Search_Transfer_Deadline {
                 <a class="button" href="<?php echo esc_url(admin_url('edit.php?post_type=' . self::POST_TYPE)); ?>"><?php esc_html_e('Manage manual updates', 'rifnote-search'); ?></a>
                 <a class="button" href="<?php echo esc_url(home_url('/transfers/')); ?>" target="_blank" rel="noreferrer"><?php esc_html_e('View public tracker', 'rifnote-search'); ?></a>
             </p>
+            <?php if (isset($_GET['transfer_notice'])) : ?>
+                <div class="notice notice-<?php echo 'error' === sanitize_key(wp_unslash($_GET['transfer_notice'])) ? 'error' : 'success'; ?> is-dismissible"><p>
+                    <?php echo 'error' === sanitize_key(wp_unslash($_GET['transfer_notice'])) ? esc_html__('Player, from club and destination club are required before approval.', 'rifnote-search') : esc_html__('Transfer moderation updated.', 'rifnote-search'); ?>
+                </p></div>
+            <?php endif; ?>
+            <h2><?php esc_html_e('Story moderation queue', 'rifnote-search'); ?></h2>
+            <p><?php esc_html_e('Sports RSS candidates are reviewed first. Complete, high-confidence deals publish automatically; incomplete reports stay here until classified. Removing a candidate only excludes it from the transfer tracker.', 'rifnote-search'); ?></p>
+            <?php if (!$candidates) : ?>
+                <div class="card" style="padding:18px;max-width:980px;"><p style="margin:0;"><?php esc_html_e('No transfer candidates were discovered in the indexed feeds.', 'rifnote-search'); ?></p></div>
+            <?php else : ?>
+                <div style="display:grid;gap:14px;max-width:1180px;">
+                <?php foreach ($candidates as $candidate) :
+                    $story = (array) ($candidate['story'] ?? array());
+                    $complete = !empty($candidate['complete']);
+                    $story_id = trim((string) ($story['id'] ?? ''));
+                    $post_id = ctype_digit($story_id) && get_post((int) $story_id) ? (int) $story_id : 0;
+                    ?>
+                    <div class="card" style="padding:16px;margin:0;border-left:4px solid <?php echo $complete ? '#00a32a' : '#d63638'; ?>;">
+                        <div style="display:flex;justify-content:space-between;gap:16px;align-items:flex-start;">
+                            <div>
+                                <strong style="font-size:15px;"><?php echo esc_html($story['headline'] ?? __('Untitled transfer report', 'rifnote-search')); ?></strong>
+                                <p style="margin:5px 0;color:#646970;"><?php echo esc_html(($story['source_name'] ?? $story['source_domain'] ?? __('Unknown source', 'rifnote-search')) . ' · ' . ($story['published_at_human'] ?? '')); ?></p>
+                            </div>
+                            <span style="white-space:nowrap;font-weight:600;color:<?php echo $complete ? '#008a20' : '#b32d2e'; ?>;"><?php echo $complete ? esc_html__('Complete', 'rifnote-search') : esc_html__('Needs classification', 'rifnote-search'); ?></span>
+                        </div>
+                        <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;align-items:end;margin-top:12px;">
+                            <input type="hidden" name="action" value="rifnote_transfer_moderate" />
+                            <input type="hidden" name="candidate_key" value="<?php echo esc_attr($candidate['moderation_key'] ?? ''); ?>" />
+                            <input type="hidden" name="headline" value="<?php echo esc_attr($story['headline'] ?? ''); ?>" />
+                            <input type="hidden" name="source_url" value="<?php echo esc_url($story['read_full_story_url'] ?? $story['original_url'] ?? ''); ?>" />
+                            <input type="hidden" name="source_name" value="<?php echo esc_attr($story['source_name'] ?? $story['source_domain'] ?? ''); ?>" />
+                            <?php wp_nonce_field('rifnote_transfer_moderate', 'rifnote_transfer_moderate_nonce'); ?>
+                            <label><span style="display:block;font-weight:600;margin-bottom:4px;"><?php esc_html_e('Player', 'rifnote-search'); ?></span><input class="regular-text" style="width:100%;" name="player" value="<?php echo esc_attr($candidate['player'] ?? ''); ?>" required /></label>
+                            <label><span style="display:block;font-weight:600;margin-bottom:4px;"><?php esc_html_e('From club', 'rifnote-search'); ?></span><input class="regular-text" style="width:100%;" name="from_club" value="<?php echo esc_attr($candidate['from_club'] ?? ''); ?>" required /></label>
+                            <label><span style="display:block;font-weight:600;margin-bottom:4px;"><?php esc_html_e('Destination club', 'rifnote-search'); ?></span><input class="regular-text" style="width:100%;" name="to_club" value="<?php echo esc_attr($candidate['to_club'] ?? ''); ?>" required /></label>
+                            <label><span style="display:block;font-weight:600;margin-bottom:4px;"><?php esc_html_e('Classification', 'rifnote-search'); ?></span><select name="status" style="width:100%;"><?php foreach (self::fields()['status']['options'] as $status => $label) : ?><option value="<?php echo esc_attr($status); ?>" <?php selected($candidate['status'] ?? 'reported', $status); ?>><?php echo esc_html($label); ?></option><?php endforeach; ?></select></label>
+                            <label><span style="display:block;font-weight:600;margin-bottom:4px;"><?php esc_html_e('Transfer type', 'rifnote-search'); ?></span><select name="transfer_type" style="width:100%;"><?php foreach (self::fields()['transfer_type']['options'] as $type => $label) : ?><option value="<?php echo esc_attr($type); ?>" <?php selected($candidate['transfer_type'] ?? 'permanent', $type); ?>><?php echo esc_html($label); ?></option><?php endforeach; ?></select></label>
+                            <label><span style="display:block;font-weight:600;margin-bottom:4px;"><?php esc_html_e('Fee', 'rifnote-search'); ?></span><input class="regular-text" style="width:100%;" name="fee" value="<?php echo esc_attr($candidate['fee'] ?? ''); ?>" placeholder="£45m / undisclosed" /></label>
+                            <div style="display:flex;gap:7px;flex-wrap:wrap;">
+                                <button class="button button-primary" name="moderation_action" value="approve"><?php esc_html_e('Approve', 'rifnote-search'); ?></button>
+                                <button class="button" name="moderation_action" value="reject" formnovalidate><?php esc_html_e('Remove', 'rifnote-search'); ?></button>
+                                <?php if ($post_id && get_edit_post_link($post_id)) : ?><a class="button" href="<?php echo esc_url(get_edit_post_link($post_id)); ?>"><?php esc_html_e('Edit story', 'rifnote-search'); ?></a><?php endif; ?>
+                                <?php if (!empty($story['read_full_story_url']) || !empty($story['original_url'])) : ?><a class="button" target="_blank" rel="noreferrer" href="<?php echo esc_url($story['read_full_story_url'] ?? $story['original_url']); ?>"><?php esc_html_e('Open source', 'rifnote-search'); ?></a><?php endif; ?>
+                            </div>
+                        </form>
+                    </div>
+                <?php endforeach; ?>
+                </div>
+            <?php endif; ?>
+            <?php if ($rejected_stories) : ?>
+                <details style="margin-top:20px;max-width:1180px;">
+                    <summary style="cursor:pointer;font-weight:600;"><?php echo esc_html(sprintf(__('Removed from tracker (%d)', 'rifnote-search'), count($rejected_stories))); ?></summary>
+                    <div class="card" style="padding:0 16px;margin-top:10px;">
+                        <?php foreach ($rejected_stories as $key => $removed) : $removed = is_array($removed) ? $removed : array(); ?>
+                            <div style="display:flex;justify-content:space-between;gap:12px;align-items:center;padding:12px 0;border-bottom:1px solid #dcdcde;">
+                                <div><strong><?php echo esc_html($removed['headline'] ?? $key); ?></strong><?php if (!empty($removed['source_name'])) : ?><br /><small><?php echo esc_html($removed['source_name']); ?></small><?php endif; ?></div>
+                                <form method="post" action="<?php echo esc_url(admin_url('admin-post.php')); ?>">
+                                    <input type="hidden" name="action" value="rifnote_transfer_moderate" /><input type="hidden" name="moderation_action" value="restore" /><input type="hidden" name="candidate_key" value="<?php echo esc_attr($key); ?>" />
+                                    <?php wp_nonce_field('rifnote_transfer_moderate', 'rifnote_transfer_moderate_nonce'); ?>
+                                    <button class="button"><?php esc_html_e('Restore', 'rifnote-search'); ?></button>
+                                </form>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </details>
+            <?php endif; ?>
         </div>
         <?php
     }
@@ -128,6 +198,83 @@ class Rifnote_Search_Transfer_Deadline {
         }
     }
 
+    public static function moderation_key($story) {
+        $identity = (string) ($story['id'] ?? $story['canonical_url'] ?? $story['original_url'] ?? $story['headline'] ?? '');
+        return md5(strtolower(trim($identity)));
+    }
+
+    public static function is_rejected_story($story) {
+        $rejected = (array) get_option(self::MODERATION_OPTION, array());
+        return isset($rejected[self::moderation_key($story)]);
+    }
+
+    public static function moderate_story() {
+        if (!current_user_can('edit_posts') || !isset($_POST['rifnote_transfer_moderate_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash($_POST['rifnote_transfer_moderate_nonce'])), 'rifnote_transfer_moderate')) {
+            wp_die(esc_html__('You are not allowed to moderate transfer stories.', 'rifnote-search'));
+        }
+
+        $action = sanitize_key(wp_unslash($_POST['moderation_action'] ?? ''));
+        $candidate_key = sanitize_text_field(wp_unslash($_POST['candidate_key'] ?? ''));
+        $rejected = (array) get_option(self::MODERATION_OPTION, array());
+
+        if ('restore' === $action) {
+            unset($rejected[$candidate_key]);
+            update_option(self::MODERATION_OPTION, $rejected, false);
+            wp_safe_redirect(add_query_arg('transfer_notice', 'success', admin_url('admin.php?page=' . self::MENU_SLUG)));
+            exit;
+        }
+
+        if ('reject' === $action) {
+            if ($candidate_key) $rejected[$candidate_key] = array(
+                'headline' => sanitize_text_field(wp_unslash($_POST['headline'] ?? '')),
+                'source_name' => sanitize_text_field(wp_unslash($_POST['source_name'] ?? '')),
+                'removed_at' => time(),
+            );
+            if (count($rejected) > 1000) $rejected = array_slice($rejected, -1000, null, true);
+            update_option(self::MODERATION_OPTION, $rejected, false);
+            wp_safe_redirect(add_query_arg('transfer_notice', 'success', admin_url('admin.php?page=' . self::MENU_SLUG)));
+            exit;
+        }
+
+        $player = sanitize_text_field(wp_unslash($_POST['player'] ?? ''));
+        $from_club = sanitize_text_field(wp_unslash($_POST['from_club'] ?? ''));
+        $to_club = sanitize_text_field(wp_unslash($_POST['to_club'] ?? ''));
+        if (!$player || !$from_club || !$to_club) {
+            wp_safe_redirect(add_query_arg('transfer_notice', 'error', admin_url('admin.php?page=' . self::MENU_SLUG)));
+            exit;
+        }
+
+        unset($rejected[$candidate_key]);
+        update_option(self::MODERATION_OPTION, $rejected, false);
+        $headline = sanitize_text_field(wp_unslash($_POST['headline'] ?? '')) ?: sprintf(__('%1$s: %2$s to %3$s', 'rifnote-search'), $player, $from_club, $to_club);
+        $existing = get_posts(array('post_type' => self::POST_TYPE, 'post_status' => array('publish', 'draft'), 'meta_key' => '_rifnote_transfer_origin_key', 'meta_value' => $candidate_key, 'posts_per_page' => 1));
+        $post_id = wp_insert_post(array(
+            'ID' => $existing ? $existing[0]->ID : 0,
+            'post_type' => self::POST_TYPE,
+            'post_status' => 'publish',
+            'post_title' => $headline,
+            'post_content' => sprintf(__('Approved from indexed coverage: %s', 'rifnote-search'), esc_url_raw(wp_unslash($_POST['source_url'] ?? ''))),
+        ));
+        if (!is_wp_error($post_id)) {
+            $status = sanitize_key(wp_unslash($_POST['status'] ?? 'reported'));
+            $type = sanitize_key(wp_unslash($_POST['transfer_type'] ?? 'permanent'));
+            if (!isset(self::fields()['status']['options'][$status])) $status = 'reported';
+            if (!isset(self::fields()['transfer_type']['options'][$type])) $type = 'permanent';
+            $values = array(
+                'player' => $player, 'from_club' => $from_club, 'to_club' => $to_club,
+                'status' => $status,
+                'source_url' => esc_url_raw(wp_unslash($_POST['source_url'] ?? '')),
+                'source_name' => sanitize_text_field(wp_unslash($_POST['source_name'] ?? '')),
+                'transfer_type' => $type,
+                'fee' => sanitize_text_field(wp_unslash($_POST['fee'] ?? '')),
+            );
+            foreach ($values as $key => $value) update_post_meta($post_id, '_rifnote_transfer_' . $key, $value);
+            update_post_meta($post_id, '_rifnote_transfer_origin_key', $candidate_key);
+        }
+        wp_safe_redirect(add_query_arg('transfer_notice', 'success', admin_url('admin.php?page=' . self::MENU_SLUG)));
+        exit;
+    }
+
     public static function columns($columns) {
         return array('cb' => $columns['cb'], 'title' => __('Update title', 'rifnote-search'), 'player' => __('Player', 'rifnote-search'), 'route' => __('Route', 'rifnote-search'), 'status' => __('Status', 'rifnote-search'), 'date' => $columns['date']);
     }
@@ -140,9 +287,9 @@ class Rifnote_Search_Transfer_Deadline {
 
     public static function public_deals() {
         $posts = get_posts(array('post_type' => self::POST_TYPE, 'post_status' => 'publish', 'posts_per_page' => 100, 'orderby' => 'modified', 'order' => 'DESC'));
-        return array_map(function ($post) {
+        $deals = array_map(function ($post) {
             $meta = function ($key) use ($post) { return sanitize_text_field((string) get_post_meta($post->ID, '_rifnote_transfer_' . $key, true)); };
-            $player = $meta('player') ?: get_the_title($post);
+            $player = $meta('player');
             $status = sanitize_key($meta('status') ?: 'reported');
             $source_url = esc_url_raw((string) get_post_meta($post->ID, '_rifnote_transfer_source_url', true));
             return array(
@@ -174,5 +321,8 @@ class Rifnote_Search_Transfer_Deadline {
                 ),
             );
         }, $posts);
+        return array_values(array_filter($deals, function ($deal) {
+            return !empty($deal['player']) && !empty($deal['from_club']) && !empty($deal['to_club']);
+        }));
     }
 }
