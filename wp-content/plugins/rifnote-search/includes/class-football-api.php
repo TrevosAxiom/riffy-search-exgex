@@ -1979,6 +1979,9 @@ class Rifnote_Search_Football_API {
         });
 
         $deals = self::build_transfer_deals($stories);
+        if (class_exists('Rifnote_Search_Transfer_Deadline')) {
+            $deals = self::merge_manual_transfer_deals($deals, Rifnote_Search_Transfer_Deadline::public_deals());
+        }
         $exceptions = array_values(array_filter($deals, function ($deal) {
             return !empty($deal['needs_review']);
         }));
@@ -2079,6 +2082,35 @@ class Rifnote_Search_Football_API {
         });
 
         return $deals;
+    }
+
+    private static function merge_manual_transfer_deals($automatic, $manual) {
+        $merged = array_values((array) $automatic);
+
+        foreach ((array) $manual as $manual_deal) {
+            $manual_key = sanitize_key((string) ($manual_deal['player'] ?? ''));
+            $matched = false;
+
+            foreach ($merged as $index => $automatic_deal) {
+                if (!$manual_key || $manual_key !== sanitize_key((string) ($automatic_deal['player'] ?? ''))) continue;
+                $manual_deal['source_count'] = max((int) ($manual_deal['source_count'] ?? 0), (int) ($automatic_deal['source_count'] ?? 0));
+                $manual_deal['story_count'] = 1 + (int) ($automatic_deal['story_count'] ?? 0);
+                $manual_deal['supporting_sources'] = array_values(array_unique(array_merge((array) ($manual_deal['supporting_sources'] ?? array()), (array) ($automatic_deal['supporting_sources'] ?? array()))));
+                $manual_deal['related_story'] = $automatic_deal['latest_story'] ?? array();
+                $merged[$index] = array_merge($automatic_deal, $manual_deal);
+                $matched = true;
+                break;
+            }
+
+            if (!$matched) $merged[] = $manual_deal;
+        }
+
+        usort($merged, function ($a, $b) {
+            if (!empty($a['manual']) !== !empty($b['manual'])) return !empty($a['manual']) ? -1 : 1;
+            return strtotime($b['latest_story']['published_at'] ?? '') <=> strtotime($a['latest_story']['published_at'] ?? '');
+        });
+
+        return $merged;
     }
 
     private static function parse_transfer_story($story) {

@@ -5384,6 +5384,24 @@ function TransferDealCard({ deal = {} }) {
       <h2>{deal.player || decodeText(story.headline || 'Developing transfer')}</h2>
       {(deal.from_club || deal.to_club) ? <div className="rs-transfer-route"><b>{deal.from_club || 'Current club'}</b><ArrowRight size={16} /><b>{deal.to_club || 'Destination developing'}</b></div> : null}
       <p>{decodeText(story.headline || '')}</p>
+      <details className="rs-transfer-deal-details">
+        <summary>Full deal details</summary>
+        <dl>
+          <div><dt>Player</dt><dd>{deal.player || 'Developing'}</dd></div>
+          <div><dt>From</dt><dd>{deal.from_club || 'Not reported'}</dd></div>
+          <div><dt>To</dt><dd>{deal.to_club || 'Not reported'}</dd></div>
+          <div><dt>Fee</dt><dd>{deal.fee || 'Not disclosed'}</dd></div>
+          <div><dt>Type</dt><dd>{deal.transfer_type || 'Transfer'}</dd></div>
+          <div><dt>Coverage</dt><dd>{deal.source_count || 1} source{deal.source_count === 1 ? '' : 's'} · {deal.story_count || 1} update{deal.story_count === 1 ? '' : 's'}</dd></div>
+        </dl>
+        {deal.details ? <div className="rs-transfer-manual-details" dangerouslySetInnerHTML={{ __html: deal.details }} /> : null}
+        {Array.isArray(deal.supporting_sources) && deal.supporting_sources.length ? (
+          <div className="rs-transfer-supporting-sources"><b>Sources</b>{deal.supporting_sources.map((source) => <span key={source}>{source}</span>)}</div>
+        ) : null}
+        {deal.related_story?.headline ? (
+          <a className="rs-transfer-related-link" href={deal.related_story.read_full_story_url || deal.related_story.original_url} target="_blank" rel="noreferrer">Related report: {decodeText(deal.related_story.headline)} <ExternalLink size={12} /></a>
+        ) : null}
+      </details>
       <footer>
         <span>{deal.source_count || 1} source{deal.source_count === 1 ? '' : 's'} · {deal.transfer_type || 'transfer'}{deal.fee ? ` · ${deal.fee}` : ''}</span>
         <a href={story.read_full_story_url || story.original_url || '#'} target="_blank" rel="noreferrer">Latest source <ExternalLink size={13} /></a>

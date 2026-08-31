@@ -3,7 +3,7 @@
  * Plugin Name: Rifnote Search
  * Plugin URI: https://rifnote.com/
  * Description: AI-powered news search and publisher discovery plugin for Rifnote.
- * Version: 0.2.43
+ * Version: 0.2.44
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Rifnote
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RIFNOTE_SEARCH_VERSION', '0.2.43');
+define('RIFNOTE_SEARCH_VERSION', '0.2.44');
 define('RIFNOTE_SEARCH_FILE', __FILE__);
 define('RIFNOTE_SEARCH_DIR', plugin_dir_path(__FILE__));
 define('RIFNOTE_SEARCH_URL', plugin_dir_url(__FILE__));
@@ -41,6 +41,7 @@ require_once RIFNOTE_SEARCH_DIR . 'includes/class-delivery.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-launch-readiness.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-release.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-football-api.php';
+require_once RIFNOTE_SEARCH_DIR . 'includes/class-transfer-deadline.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-live-data.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-news-api.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-social.php';
@@ -83,6 +84,7 @@ final class Rifnote_Search_Plugin {
         add_action('plugins_loaded', array('Rifnote_Search_GitHub_Updater', 'init'));
         add_action('plugins_loaded', array('Rifnote_Search_Election', 'init'));
         add_action('plugins_loaded', array('Rifnote_Search_Football_API', 'maybe_install'));
+        add_action('plugins_loaded', array('Rifnote_Search_Transfer_Deadline', 'init'));
         add_action('plugins_loaded', array('Rifnote_Search_Live_Data', 'maybe_install'));
         add_action('plugins_loaded', array('Rifnote_Search_Aggregation', 'ensure_categories'));
         add_action('init', array('Rifnote_Search_Aggregation', 'maybe_repair_categories'), 30);
