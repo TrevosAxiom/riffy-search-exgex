@@ -3,7 +3,7 @@
  * Plugin Name: Rifnote Search
  * Plugin URI: https://rifnote.com/
  * Description: AI-powered news search and publisher discovery plugin for Rifnote.
- * Version: 0.2.42
+ * Version: 0.2.43
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Rifnote
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RIFNOTE_SEARCH_VERSION', '0.2.42');
+define('RIFNOTE_SEARCH_VERSION', '0.2.43');
 define('RIFNOTE_SEARCH_FILE', __FILE__);
 define('RIFNOTE_SEARCH_DIR', plugin_dir_path(__FILE__));
 define('RIFNOTE_SEARCH_URL', plugin_dir_url(__FILE__));

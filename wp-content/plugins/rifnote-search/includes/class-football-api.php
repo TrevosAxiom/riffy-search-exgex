@@ -1948,9 +1948,12 @@ class Rifnote_Search_Football_API {
             foreach ($terms as $term) {
                 $payload = Rifnote_Search_Engine::payload(array(
                     'query' => $term,
-                    'category' => 'Football',
+                    // Warehouse RSS items are often categorised as Sport rather
+                    // than Football. The transfer classifier below is the safer filter.
+                    'category' => '',
                     'sort' => 'latest',
                     'date_range' => 'all',
+                    'include_warehouse' => true,
                 ), 1, 10);
 
                 foreach ($payload['results'] ?? array() as $story) {

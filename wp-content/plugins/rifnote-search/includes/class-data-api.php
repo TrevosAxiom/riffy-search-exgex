@@ -69,7 +69,7 @@ class Rifnote_Search_Data_API {
     }
 
     public static function search_payload($request_args, $limit = 20) {
-        if (!self::merge_search_enabled() || empty($request_args['query'])) {
+        if ((!self::merge_search_enabled() && empty($request_args['include_warehouse'])) || empty($request_args['query'])) {
             return array();
         }
 

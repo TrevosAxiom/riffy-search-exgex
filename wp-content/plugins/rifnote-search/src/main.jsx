@@ -5295,9 +5295,9 @@ function TransferNewsPage() {
     <main className="rs-shell compact-page rs-transfer-page">
       {payload.deadline?.enabled ? <TransferDeadlineHero deadline={payload.deadline} confirmed={payload.confirmed_count || 0} deals={deals.length} /> : null}
       <section className="rs-stat-grid rs-product-stats">
-        <DashboardStat label="Tracked deals" value={deals.length} note="Automatically clustered" />
+        <DashboardStat label="Tracked deals" value={deals.length} note="Live window" />
         <DashboardStat label="Sources" value={sources} note="Covering the window" />
-        <DashboardStat label="Admin review" value={payload.exceptions_count || 0} note="Exceptions only" />
+        <DashboardStat label="Confirmed" value={payload.confirmed_count || 0} note="Completed moves" />
       </section>
 
       {status.error ? <Card><CardHeader title="Couldn’t load transfers" action={<Badge tone="danger">REST</Badge>} /><p>{status.error}</p></Card> : null}
@@ -5310,7 +5310,7 @@ function TransferNewsPage() {
 
       <section className="rs-transfer-deal-grid" aria-live="polite">
         {visibleDeals.map((deal) => <TransferDealCard deal={deal} key={`${deal.player}-${deal.to_club}-${deal.status}`} />)}
-        {!status.loading && !visibleDeals.length ? <p>No automated deals match this status yet.</p> : null}
+        {!status.loading && !visibleDeals.length ? <p>No deals match this status yet.</p> : null}
       </section>
 
       <section className="rs-transfer-layout">
@@ -5319,6 +5319,7 @@ function TransferNewsPage() {
           <div className="rs-transfer-news-list">
             {stories.slice(lead ? 1 : 0).map((story) => (
               <article key={`${story.id}-${story.headline}`}>
+                <img className="rs-transfer-story-image" src={story.image || story.image_url || story.thumbnail_url || `${window.RIFNOTE_SEARCH?.pluginUrl || ''}public/images/transfer-deadline-hero.jpg`} alt="" loading="lazy" />
                 <div>
                   <SourceMention story={story} showTime />
                   <h3>{decodeText(story.headline)}</h3>
@@ -5342,7 +5343,6 @@ function TransferNewsPage() {
               </>
             )}
           </div>
-          <p>Buzz tags from saved transfer stories. CustomGPT can sharpen these when you start tagging batches.</p>
         </Card>
       </section>
     </main>
@@ -5363,8 +5363,8 @@ function TransferDeadlineHero({ deadline = {}, confirmed = 0, deals = 0 }) {
   const seconds = Math.floor((remaining % 60000) / 1000);
 
   return (
-    <section className="rs-transfer-deadline-hero">
-      <div><Badge tone="danger">Live automation</Badge><h1>{deadline.label || 'Transfer Deadline Day'}</h1><p>Rifnote is automatically extracting, clustering and verifying updates from indexed football sources.</p></div>
+    <section className="rs-transfer-deadline-hero" style={{ '--rs-transfer-hero-image': `url(${window.RIFNOTE_SEARCH?.pluginUrl || ''}public/images/transfer-deadline-hero.jpg)` }}>
+      <div><h1>{deadline.label || 'Transfer Deadline Day'}</h1></div>
       <div className="rs-transfer-countdown" aria-label="Time until transfer deadline">
         {deadline.is_closed ? <strong>Window closed</strong> : <strong>{days ? `${days}d ` : ''}{String(hours).padStart(2, '0')}:{String(minutes).padStart(2, '0')}:{String(seconds).padStart(2, '0')}</strong>}
         <span>{confirmed} confirmed · {deals} tracked</span>
@@ -5375,8 +5375,11 @@ function TransferDeadlineHero({ deadline = {}, confirmed = 0, deals = 0 }) {
 
 function TransferDealCard({ deal = {} }) {
   const story = deal.latest_story || {};
+  const fallbackImage = `${window.RIFNOTE_SEARCH?.pluginUrl || ''}public/images/transfer-deadline-hero.jpg`;
+  const storyImage = story.image || story.image_url || story.thumbnail_url || fallbackImage;
   return (
     <article className={`rs-transfer-deal is-${deal.status || 'reported'}`}>
+      <img className="rs-transfer-deal-image" src={storyImage} alt="" loading="lazy" />
       <header><span>{deal.status_label || 'Reported'}</span><small>{Math.round(Number(deal.confidence || 0) * 100)}% confidence</small></header>
       <h2>{deal.player || decodeText(story.headline || 'Developing transfer')}</h2>
       {(deal.from_club || deal.to_club) ? <div className="rs-transfer-route"><b>{deal.from_club || 'Current club'}</b><ArrowRight size={16} /><b>{deal.to_club || 'Destination developing'}</b></div> : null}
