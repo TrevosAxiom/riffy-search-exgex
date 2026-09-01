@@ -19,6 +19,9 @@ class Rifnote_Search_Transfer_Deadline {
         add_filter('manage_' . self::POST_TYPE . '_posts_columns', array(__CLASS__, 'columns'));
         add_action('manage_' . self::POST_TYPE . '_posts_custom_column', array(__CLASS__, 'column_value'), 10, 2);
         add_action('admin_post_rifnote_transfer_moderate', array(__CLASS__, 'moderate_story'));
+        add_action('trashed_post', array(__CLASS__, 'transfer_record_changed'));
+        add_action('untrashed_post', array(__CLASS__, 'transfer_record_changed'));
+        add_action('deleted_post', array(__CLASS__, 'transfer_record_changed'));
     }
 
     public static function register_post_type() {
@@ -198,6 +201,15 @@ class Rifnote_Search_Transfer_Deadline {
             $value = 'url' === $field['type'] ? esc_url_raw($value) : sanitize_text_field($value);
             update_post_meta($post_id, '_rifnote_transfer_' . $key, $value);
         }
+        self::invalidate_cache();
+    }
+
+    private static function invalidate_cache() {
+        if (class_exists('Rifnote_Search_Football_API')) Rifnote_Search_Football_API::invalidate_transfer_cache();
+    }
+
+    public static function transfer_record_changed($post_id) {
+        if (self::POST_TYPE === get_post_type($post_id)) self::invalidate_cache();
     }
 
     public static function moderation_key($story) {
@@ -228,6 +240,7 @@ class Rifnote_Search_Transfer_Deadline {
         if ('restore' === $action) {
             unset($rejected[$candidate_key]);
             update_option(self::MODERATION_OPTION, $rejected, false);
+            self::invalidate_cache();
             wp_safe_redirect(add_query_arg('transfer_notice', 'success', admin_url('admin.php?page=' . self::MENU_SLUG)));
             exit;
         }
@@ -242,6 +255,7 @@ class Rifnote_Search_Transfer_Deadline {
             update_option(self::MODERATION_OPTION, $rejected, false);
             unset($reviewed[$candidate_key]);
             update_option(self::REVIEWED_OPTION, $reviewed, false);
+            self::invalidate_cache();
             wp_safe_redirect(add_query_arg('transfer_notice', 'success', admin_url('admin.php?page=' . self::MENU_SLUG)));
             exit;
         }
@@ -255,6 +269,7 @@ class Rifnote_Search_Transfer_Deadline {
             if ($candidate_key) $reviewed[$candidate_key] = time();
             if (count($reviewed) > 1000) $reviewed = array_slice($reviewed, -1000, null, true);
             update_option(self::REVIEWED_OPTION, $reviewed, false);
+            self::invalidate_cache();
             wp_safe_redirect(add_query_arg('transfer_notice', 'success', admin_url('admin.php?page=' . self::MENU_SLUG)));
             exit;
         }
@@ -288,6 +303,7 @@ class Rifnote_Search_Transfer_Deadline {
             foreach ($values as $key => $value) update_post_meta($post_id, '_rifnote_transfer_' . $key, $value);
             update_post_meta($post_id, '_rifnote_transfer_origin_key', $candidate_key);
         }
+        self::invalidate_cache();
         wp_safe_redirect(add_query_arg('transfer_notice', 'success', admin_url('admin.php?page=' . self::MENU_SLUG)));
         exit;
     }

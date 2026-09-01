@@ -1717,9 +1717,13 @@ class Rifnote_Search_REST_API {
             return $rate;
         }
 
-        return rest_ensure_response(Rifnote_Search_Football_API::transfer_news_payload(
+        $response = rest_ensure_response(Rifnote_Search_Football_API::transfer_news_payload(
             (int) ($request->get_param('limit') ? $request->get_param('limit') : 24)
         ));
+        if (!is_user_logged_in()) {
+            $response->header('Cache-Control', 'public, max-age=60, s-maxage=120, stale-while-revalidate=180');
+        }
+        return $response;
     }
 
     public static function preferences(WP_REST_Request $request) {

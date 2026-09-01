@@ -1939,8 +1939,13 @@ class Rifnote_Search_Football_API {
     }
 
     public static function transfer_news_payload($limit = 24) {
-        $limit = max(1, min(60, (int) $limit));
-        $terms = array('transfer', 'signing', 'joins', 'loan', 'bid', 'contract', 'release clause', 'personal terms');
+        $limit = max(1, min(120, (int) $limit));
+        $cache_generation = max(1, (int) get_option('rifnote_transfer_cache_generation', 1));
+        $cache_key = 'rifnote_transfer_news_' . $cache_generation . '_' . $limit;
+        $cached = get_transient($cache_key);
+        if (is_array($cached)) return $cached;
+
+        $terms = array('transfer', 'signing', 'signed', 'joins', 'loan', 'bid', 'contract', 'release clause', 'personal terms', 'here we go', 'done deal');
         $stories = array();
         $sources = array();
 
@@ -1956,6 +1961,9 @@ class Rifnote_Search_Football_API {
                         continue;
                     }
                     if (class_exists('Rifnote_Search_Transfer_Deadline') && Rifnote_Search_Transfer_Deadline::is_rejected_story($story)) continue;
+                    // This payload is shared with guests, so never cache
+                    // capability-dependent WordPress admin action URLs.
+                    unset($story['admin_edit_url'], $story['admin_delete_url']);
 
                     $stories[$key] = $story;
 
@@ -2016,7 +2024,7 @@ class Rifnote_Search_Football_API {
             return !empty($deal['needs_review']) || empty($deal['player']) || empty($deal['from_club']) || empty($deal['to_club']);
         }));
 
-        return array(
+        $result = array(
             'source' => 'database',
             'configured' => true,
             'stories' => array_slice($stories, 0, $limit),
@@ -2030,6 +2038,14 @@ class Rifnote_Search_Football_API {
             'updated_at' => gmdate(DATE_ATOM),
             'message' => $stories ? '' : __('No transfer stories are indexed yet. Add football sources or run a TheNewsAPI/RSS import with transfer keywords.', 'rifnote-search'),
         );
+        $cache_ttl = max(30, min(600, (int) get_option('rifnote_transfer_cache_ttl', 120)));
+        set_transient($cache_key, $result, $cache_ttl);
+        return $result;
+    }
+
+    public static function invalidate_transfer_cache() {
+        $generation = max(1, (int) get_option('rifnote_transfer_cache_generation', 1));
+        update_option('rifnote_transfer_cache_generation', $generation + 1, false);
     }
 
     public static function transfer_deadline_context() {
@@ -2195,11 +2211,13 @@ class Rifnote_Search_Football_API {
         $confidence = $trusted ? .62 : .45;
         if (preg_match('/\b(deal off|move off|collapsed|collapse|pulls out|withdraws)\b/i', $text)) {
             $status = 'off'; $label = __('Off', 'rifnote-search'); $rank = 5; $confidence = $trusted ? .9 : .7;
+        } elseif (preg_match('/\b(here we go|done deal|deal (?:is )?done|official(?:ly)?(?: announced)?|has signed|have signed|signs|signed|has joined|have joined|joined|completes? (?:the )?(?:transfer|move|signing)|announces? (?:the )?signing|confirmed (?:the )?signing|unveiled)\b/i', $text)) {
+            $status = 'confirmed'; $label = __('Confirmed', 'rifnote-search'); $rank = 6; $confidence = $trusted ? .97 : .9;
         } elseif ($official && preg_match('/\b(signs|signed|signing|joins|joined|complete[sd]?|announc(?:e|es|ed)|confirmed)\b/i', $text)) {
             $status = 'confirmed'; $label = __('Confirmed', 'rifnote-search'); $rank = 6; $confidence = .98;
         } elseif (preg_match('/\bmedical\b/i', $text)) {
             $status = 'medical'; $label = __('Medical', 'rifnote-search'); $rank = 4; $confidence = $trusted ? .84 : .68;
-        } elseif (preg_match('/\b(agreed|agreement|deal agreed|terms agreed|here we go)\b/i', $text)) {
+        } elseif (preg_match('/\b(agreed|agreement|deal agreed|terms agreed)\b/i', $text)) {
             $status = 'agreement'; $label = __('Agreement', 'rifnote-search'); $rank = 3; $confidence = $trusted ? .8 : .62;
         }
 
@@ -2420,7 +2438,7 @@ class Rifnote_Search_Football_API {
         }, (array) ($story['tags'] ?? array())));
         $text = strtolower(trim($headline . ' ' . $excerpt . ' ' . $tags));
 
-        $has_transfer_signal = (bool) preg_match('/\b(transfer|transfers|signs|signed|signing|joins|joined|loan|bid|bids|release clause|free agent|personal terms|medical|deal agreed|agreement|move (?:to|from)|contract (?:with|at|for))\b/i', $text);
+        $has_transfer_signal = (bool) preg_match('/\b(transfer|transfers|signs|signed|signing|joins|joined|loan|bid|bids|release clause|free agent|personal terms|medical|deal agreed|done deal|here we go|agreement|move (?:to|from)|contract (?:with|at|for))\b/i', $text);
 
         if (!$has_transfer_signal) {
             return false;

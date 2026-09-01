@@ -5277,7 +5277,7 @@ function TransferNewsPage() {
   const loadTransfers = useCallback(() => {
     let cancelled = false;
     setStatus((current) => ({ ...current, error: '' }));
-    getFootballTransfers({ limit: 30 })
+    getFootballTransfers({ limit: 100 })
       .then((data) => !cancelled && setPayload(data))
       .catch((error) => !cancelled && setStatus({ loading: false, error: error.message }))
       .finally(() => !cancelled && setStatus((current) => ({ ...current, loading: false })));
