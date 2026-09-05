@@ -5538,83 +5538,24 @@ function TransferDeadlineHomeTakeover({ deadline = {} }) {
 }
 
 function HomeEditorialTakeover({ featuredFootballMatches = [], channels = {} }) {
-  const [trending, setTrending] = useState([]);
-  const [football, setFootball] = useState([]);
-  const [active, setActive] = useState(0);
-  const fixture = featuredFootballMatches[0] || null;
-  const matchContext = fixture ? [fixture.league?.name, fixture.home?.name, fixture.away?.name].filter(Boolean) : [];
-
-  useEffect(() => {
-    let cancelled = false;
-    const requests = [];
-    if (channels.trending) requests.push(getStoryChannel('trending', { limit: 3 }).then((payload) => ({ type: 'trending', stories: payload.stories || [] })));
-    if (channels.football) requests.push(getStoryChannel('football', { limit: 3, context: matchContext }).then((payload) => ({ type: 'football', stories: payload.stories || [] })));
-    Promise.allSettled(requests).then((results) => {
-      if (cancelled) return;
-      results.forEach((result) => {
-        if (result.status !== 'fulfilled') return;
-        if (result.value.type === 'trending') setTrending(result.value.stories);
-        if (result.value.type === 'football') setFootball(result.value.stories);
-      });
-    });
-    return () => { cancelled = true; };
-  }, [channels.football, channels.trending, matchContext.join('|')]);
-
-  const slides = [
-    ...(channels.football && featuredFootballMatches.length ? [{ type: 'match', fixtures: featuredFootballMatches }] : []),
-    ...trending.map((story) => ({ type: 'trending', story })),
-    ...football.map((story) => ({ type: 'football', story })),
-  ];
-
-  useEffect(() => {
-    if (slides.length < 2) return undefined;
-    const timer = window.setInterval(() => setActive((current) => (current + 1) % slides.length), 8500);
-    return () => window.clearInterval(timer);
-  }, [slides.length]);
-
-  useEffect(() => {
-    if (active >= slides.length) setActive(0);
-  }, [active, slides.length]);
-
-  if (!slides.length) {
-    return <div className="rs-home-editorial-takeover is-loading"><span /><strong>Loading today’s stories…</strong></div>;
-  }
-
-  const slide = slides[Math.min(active, slides.length - 1)];
-  if (slide.type === 'match') {
-    return (
-      <section className="rs-home-editorial-takeover is-match">
-        <HomeFeaturedFootballScoreboards fixtures={slide.fixtures} primary compact />
-        <HomeEditorialTakeoverControls slides={slides} active={active} setActive={setActive} />
-      </section>
-    );
-  }
-
-  const story = slide.story || {};
-  const image = story.image || story.image_url || story.thumbnail_url || '';
-  const target = storyReadUrl(story);
+  const image = channels.homeImageUrl || `${window.RIFNOTE_SEARCH?.pluginUrl || ''}public/images/transfer-deadline-hero.jpg`;
   return (
-    <section className={`rs-home-editorial-takeover is-story is-${slide.type} ${image ? 'has-image' : ''}`} style={image ? { '--rs-editorial-image': `url(${image})` } : {}}>
-      <span className="rs-home-editorial-label"><i /> {slide.type === 'football' ? (matchContext.length ? 'Around the featured match' : 'Football Stories') : 'Trending Topic'}</span>
-      <a className="rs-home-editorial-copy" href={target} {...linkPropsForUrl(target)} onClick={() => trackStoryClick(story, 'homepage_channel_takeover', slide.type)}>
-        <small>{decodeText(story.source_name || story.source_domain || 'Rifnote')}</small>
-        <strong>{decodeText(story.headline || 'Latest story')}</strong>
-        <p>{trimWords(story.excerpt || '', 24)}</p>
-        <b>Read story <ArrowRight size={17} /></b>
-      </a>
-      <HomeEditorialTakeoverControls slides={slides} active={active} setActive={setActive} />
+    <section className={`rs-home-editorial-takeover is-channel-hub ${channels.football && featuredFootballMatches.length ? 'has-match' : ''}`} style={{ '--rs-editorial-image': `url(${image})` }}>
+      <div className="rs-home-channel-copy">
+        <span className="rs-home-editorial-label"><i /> {decodeText(channels.homeEyebrow || 'Live story desk')}</span>
+        <strong>{decodeText(channels.homeTitle || 'Follow what is happening now')}</strong>
+        <p>{decodeText(channels.homeSubtitle || 'Trending topics and football coverage, organised from trusted stories as they develop.')}</p>
+        <span className="rs-home-channel-links">
+          {channels.trending ? <a href={appPageUrl('trending-topics')}>Explore trending topics <ArrowRight size={17} /></a> : null}
+          {channels.football ? <a href={appPageUrl('football-stories')}>Open Football Stories <ArrowRight size={17} /></a> : null}
+        </span>
+      </div>
+      {channels.football && featuredFootballMatches.length ? (
+        <div className="rs-home-channel-match">
+          <HomeFeaturedFootballScoreboards fixtures={featuredFootballMatches} primary compact />
+        </div>
+      ) : null}
     </section>
-  );
-}
-
-function HomeEditorialTakeoverControls({ slides = [], active = 0, setActive = () => {} }) {
-  if (slides.length < 2) return null;
-  return (
-    <span className="rs-home-editorial-controls" aria-label="Homepage takeover slides">
-      {slides.map((slide, index) => (
-        <button type="button" className={active === index ? 'active' : ''} onClick={(event) => { event.preventDefault(); event.stopPropagation(); setActive(index); }} aria-label={`Show ${slide.type === 'match' ? 'featured match' : `${slide.type} story`} ${index + 1}`} key={`${slide.type}-${slide.story?.id || index}`} />
-      ))}
-    </span>
   );
 }
 

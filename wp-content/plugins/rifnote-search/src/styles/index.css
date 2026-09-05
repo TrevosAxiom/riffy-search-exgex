@@ -2077,31 +2077,32 @@
   box-shadow: 0 24px 64px rgb(15 23 42 / 16%);
 }
 
-.rs-home-editorial-takeover.is-story {
+.rs-home-editorial-takeover.is-channel-hub {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   align-content: end;
-  justify-items: start;
-  gap: 14px;
-  padding: clamp(24px, 5vw, 58px);
+  gap: 24px;
+  padding: clamp(26px, 5vw, 62px);
   background:
-    linear-gradient(90deg, rgb(6 12 23 / 96%), rgb(7 16 29 / 79%) 54%, rgb(7 16 29 / 30%)),
-    var(--rs-editorial-image, linear-gradient(135deg, #101828, #344054)) center / cover no-repeat;
+    linear-gradient(90deg, rgb(4 9 18 / 97%) 0%, rgb(8 15 27 / 88%) 46%, rgb(8 15 27 / 34%) 78%, rgb(8 15 27 / 54%) 100%),
+    var(--rs-editorial-image) center / cover no-repeat,
+    #0b1220;
   color: #fff;
   text-align: left;
 }
-
-.rs-home-editorial-takeover.is-story:not(.has-image) {
-  background: radial-gradient(circle at 85% 18%, rgb(237 28 36 / 34%), transparent 30%), linear-gradient(135deg, #101828, #344054);
-}
-
-.rs-home-editorial-takeover.is-football { box-shadow: 0 24px 64px rgb(13 148 136 / 17%); }
+.rs-home-editorial-takeover.is-channel-hub::after { position:absolute; inset:0; z-index:-1; content:""; background:radial-gradient(circle at 82% 22%,rgb(237 28 36 / 35%),transparent 30%); pointer-events:none; }
+.rs-home-channel-copy { position:relative; z-index:2; display:grid; max-width:760px; gap:11px; }
+.rs-home-channel-copy > strong { color:#fff; font-size:clamp(2.35rem,5.4vw,5.25rem); font-weight:950; letter-spacing:-.065em; line-height:.92; }
+.rs-home-channel-copy > p { max-width:620px; margin:0; color:#d7dfeb; font-size:clamp(.9rem,1.35vw,1.12rem); font-weight:650; line-height:1.45; }
+.rs-home-channel-links { display:flex; flex-wrap:wrap; gap:10px; margin-top:5px; }
+.rs-home-channel-links a { display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border:1px solid rgb(255 255 255 / 20%); border-radius:999px; background:rgb(5 11 21 / 68%); color:#fff; font-size:.82rem; font-weight:900; text-decoration:none; backdrop-filter:blur(10px); }
+.rs-home-channel-links a:first-child { background:#ed1c24; border-color:#ed1c24; }
+.rs-home-channel-links a:hover svg,.rs-home-channel-links a:focus-visible svg { transform:translateX(3px); }
+.rs-home-channel-links svg { transition:transform .18s ease; }
+.rs-home-channel-match { position:relative; z-index:3; width:100%; margin-top:4px; border-radius:18px; background:#fff; overflow:hidden; }
+.rs-home-channel-match .rs-home-featured-football { width:100%; padding:18px clamp(28px,5vw,74px); }
 .rs-home-editorial-label { position: relative; z-index: 2; display: inline-flex; width: fit-content; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid rgb(255 255 255 / 18%); border-radius: 999px; background: rgb(237 28 36 / 88%); color: #fff; font-size: .68rem; font-weight: 950; letter-spacing: .065em; text-transform: uppercase; }
 .rs-home-editorial-label i { width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: rsHomeLivePulse 1.4s infinite; }
-.rs-home-editorial-copy { position: relative; z-index: 2; display: grid; max-width: 760px; gap: 8px; color: #fff; text-decoration: none; }
-.rs-home-editorial-copy small { color: #fecaca; font-size: .74rem; font-weight: 850; }
-.rs-home-editorial-copy strong { color: #fff; font-size: clamp(2rem, 4.7vw, 4.5rem); font-weight: 950; letter-spacing: -.055em; line-height: .96; }
-.rs-home-editorial-copy p { max-width: 620px; margin: 0; color: #d0d5dd; font-size: clamp(.82rem, 1.2vw, 1rem); font-weight: 620; line-height: 1.45; }
-.rs-home-editorial-copy b { display: inline-flex; width: fit-content; align-items: center; gap: 8px; margin-top: 4px; font-size: .82rem; }
 .rs-home-editorial-takeover.is-match { display: grid; min-height: 120px; align-content: center; padding: 0 clamp(28px, 5vw, 74px); border-radius: 0; background: #fff; box-shadow: none; }
 .rs-home-editorial-takeover.is-match .rs-home-featured-football { width: 100%; padding: 0; }
 .rs-home-featured-football.is-story-channel { grid-template-columns: 84px minmax(0, 1fr); gap: 22px; align-items: center; }
@@ -2121,10 +2122,6 @@
 .rs-home-featured-football.is-story-channel .rs-home-scoreboard:hover .rs-home-scoreboard-score b,
 .rs-home-featured-football.is-story-channel .rs-home-scoreboard:focus-visible .rs-home-scoreboard-score b { background: transparent; color: #df2029; }
 .rs-home-featured-football.is-story-channel .rs-home-scoreboard-score small { display: none; }
-.rs-home-editorial-controls { position: absolute; right: 20px; bottom: 18px; z-index: 4; display: flex; gap: 6px; align-items: center; }
-.rs-home-editorial-controls button { width: 20px; height: 5px; padding: 0; border: 0; border-radius: 999px; background: rgb(255 255 255 / 38%); box-shadow: 0 0 0 1px rgb(15 23 42 / 10%); cursor: pointer; transition: width .18s ease, background .18s ease; }
-.rs-home-editorial-takeover.is-match .rs-home-editorial-controls button { background: #d0d5dd; }
-.rs-home-editorial-controls button.active { width: 36px; background: #ed1c24 !important; }
 .rs-home-editorial-takeover.is-loading { display: grid; place-items: center; align-content: center; gap: 12px; background: linear-gradient(135deg,#101828,#344054); color:#fff; }
 .rs-home-editorial-takeover.is-loading span { width: 34px; height: 34px; border: 3px solid rgb(255 255 255 / 24%); border-top-color:#fff; border-radius:50%; animation:rs-pwa-spin .8s linear infinite; }
 
@@ -3220,9 +3217,11 @@
 
 @media (max-width: 760px) {
   .rs-home-editorial-takeover { width: 100%; min-height: 360px; border-radius: 24px; }
-  .rs-home-editorial-takeover.is-story { padding: 24px 20px 42px; background-position: 62% center; }
-  .rs-home-editorial-copy strong { font-size: clamp(2rem, 10vw, 3rem); }
-  .rs-home-editorial-copy p { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .rs-home-editorial-takeover.is-channel-hub { min-height:390px; padding:24px 20px; background-position:center; }
+  .rs-home-channel-copy > strong { font-size:clamp(2rem,10vw,3rem); }
+  .rs-home-channel-copy > p { display:-webkit-box; overflow:hidden; -webkit-box-orient:vertical; -webkit-line-clamp:2; }
+  .rs-home-channel-links a { padding:9px 12px; font-size:.74rem; }
+  .rs-home-channel-match .rs-home-featured-football { padding:14px 10px; }
   .rs-home-editorial-takeover.is-match { min-height: 108px; padding: 0 12px 18px; }
   .rs-home-featured-football.is-story-channel { grid-template-columns: 38px minmax(0,1fr); gap: 5px; }
   .rs-home-featured-football.is-story-channel .rs-home-scoreboard { gap: 7px; }

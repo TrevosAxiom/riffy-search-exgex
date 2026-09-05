@@ -3,7 +3,7 @@
  * Plugin Name: Rifnote Search
  * Plugin URI: https://rifnote.com/
  * Description: AI-powered news search and publisher discovery plugin for Rifnote.
- * Version: 0.2.48
+ * Version: 0.2.49
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Rifnote
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RIFNOTE_SEARCH_VERSION', '0.2.48');
+define('RIFNOTE_SEARCH_VERSION', '0.2.49');
 define('RIFNOTE_SEARCH_FILE', __FILE__);
 define('RIFNOTE_SEARCH_DIR', plugin_dir_path(__FILE__));
 define('RIFNOTE_SEARCH_URL', plugin_dir_url(__FILE__));
@@ -270,7 +270,7 @@ final class Rifnote_Search_Plugin {
     }
 
     public function enqueue_admin_assets($hook) {
-        $is_rifnote_admin = false !== strpos((string) $hook, 'rifnote-search');
+        $is_rifnote_admin = false !== strpos((string) $hook, 'rifnote-search') || false !== strpos((string) $hook, 'rifnote-story-channels');
         $is_post_editor = in_array((string) $hook, array('post.php', 'post-new.php'), true);
         $screen = function_exists('get_current_screen') ? get_current_screen() : null;
         $is_category_screen = $screen && 'category' === $screen->taxonomy && in_array((string) $hook, array('edit-tags.php', 'term.php'), true);
@@ -532,6 +532,10 @@ JS;
             'storyChannels' => array(
                 'trending' => (bool) get_option('rifnote_channel_trending_enabled', true),
                 'football' => (bool) get_option('rifnote_channel_football_enabled', true),
+                'homeEyebrow' => sanitize_text_field((string) get_option('rifnote_channel_home_eyebrow', 'Live story desk')),
+                'homeTitle' => sanitize_text_field((string) get_option('rifnote_channel_home_title', 'Follow what is happening now')),
+                'homeSubtitle' => sanitize_text_field((string) get_option('rifnote_channel_home_subtitle', 'Trending topics and football coverage, organised from trusted stories as they develop.')),
+                'homeImageUrl' => esc_url_raw((string) get_option('rifnote_channel_home_image_url', '')),
             ),
             'electionTakeover' => class_exists('Rifnote_Search_Election') ? Rifnote_Search_Election::public_payload() : array(),
             'featuredFootballMatches' => class_exists('Rifnote_Search_Football_API') ? Rifnote_Search_Football_API::featured_homepage_matches(8) : array(),
