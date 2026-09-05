@@ -490,6 +490,17 @@ export async function getFootballTransfers({ limit = 24 } = {}) {
   return response.json();
 }
 
+export async function getStoryChannel(channel = 'trending', { limit = 30, context = [] } = {}) {
+  const baseUrl = restBaseUrl();
+  if (!baseUrl) return { channel, enabled: false, stories: [], total: 0, terms: [], categories: [] };
+  const url = new URL(`rifnote/v1/story-channel/${channel === 'football' ? 'football' : 'trending'}`, baseUrl);
+  url.searchParams.set('limit', limit);
+  if (Array.isArray(context) && context.length) url.searchParams.set('context', context.filter(Boolean).join('|'));
+  const response = await fetch(url, { headers: headers() });
+  if (!response.ok) throw new Error(`Rifnote story channel failed: ${response.status}`);
+  return response.json();
+}
+
 export async function getLiveWeather({ force = false, latitude = null, longitude = null, label = '' } = {}) {
   const baseUrl = restBaseUrl();
 

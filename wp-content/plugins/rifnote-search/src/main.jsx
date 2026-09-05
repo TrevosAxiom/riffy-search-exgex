@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { ArrowLeft, ArrowRight, Bookmark, CalendarDays, Clock3, Cloud, CloudRain, CloudSun, DollarSign, ExternalLink, Flame, Globe2, Goal, Home, Landmark, Map as MapIcon, Menu, Newspaper, Pencil, Play, Radio, RotateCcw, Search, Shield, Sun, Trash2, TrendingUp, Trophy, UserRound, Volume2, VolumeX } from 'lucide-react';
-import { getAdInventory, getAdvertiserDashboard, getAnonKey, getDailyBriefing, getFeedDiagnostics, getFootballCompetition, getFootballFinished, getFootballFixtureDetails, getFootballFixtures, getFootballLive, getFootballPlayerProfile, getFootballPlayers, getFootballTeamProfile, getFootballTeams, getFootballTransfers, getFootballUpcoming, getForYou, getHomeLeadStory, getHomeNotes, getLiveMarkets, getLiveWeather, getNotifications, getPublisherStats, getRifnoteAiAnswer, getSocialEmbed, getSourceProfile, getStoryCluster, getSuggestions, getTrendingTopics, getWidget, getWorldWeather, registerDevice, saveAlert, savePreference, searchRifnote, subscribeNewsletter, submitAdvertiserPaymentProof, submitAdvertiserSignup, submitBetaFeedback, submitLegalRequest, submitPublisherSignup, submitPublisherStory, submitSponsorRequest, subscribeNoResult, trackAnalyticsEvent, trackSponsoredClick, trashStory, updateAdvertiserProfile, updateNotification, uploadMedia } from './api.js';
+import { getAdInventory, getAdvertiserDashboard, getAnonKey, getDailyBriefing, getFeedDiagnostics, getFootballCompetition, getFootballFinished, getFootballFixtureDetails, getFootballFixtures, getFootballLive, getFootballPlayerProfile, getFootballPlayers, getFootballTeamProfile, getFootballTeams, getFootballTransfers, getFootballUpcoming, getForYou, getHomeLeadStory, getHomeNotes, getLiveMarkets, getLiveWeather, getNotifications, getPublisherStats, getRifnoteAiAnswer, getSocialEmbed, getSourceProfile, getStoryChannel, getStoryCluster, getSuggestions, getTrendingTopics, getWidget, getWorldWeather, registerDevice, saveAlert, savePreference, searchRifnote, subscribeNewsletter, submitAdvertiserPaymentProof, submitAdvertiserSignup, submitBetaFeedback, submitLegalRequest, submitPublisherSignup, submitPublisherStory, submitSponsorRequest, subscribeNoResult, trackAnalyticsEvent, trackSponsoredClick, trashStory, updateAdvertiserProfile, updateNotification, uploadMedia } from './api.js';
 import { rifnoteCategories, searchTabs } from './data/rifnote.js';
 import './styles/index.css';
 
@@ -799,10 +799,12 @@ function App({ mode }) {
   const activeFeaturedFootballMatches = featuredFootballMatches.filter((fixture) => fixture && !isFootballFixtureFinished(fixture));
   const transferDeadline = window.RIFNOTE_SEARCH?.transferDeadline || null;
   const hasTransferDeadlineTakeover = Boolean(transferDeadline?.enabled);
+  const storyChannels = window.RIFNOTE_SEARCH?.storyChannels || {};
+  const hasEditorialTakeover = Boolean(storyChannels.trending || storyChannels.football);
   const isElectionTakeoverActive = Boolean(window.RIFNOTE_SEARCH?.electionTakeover?.enabled);
   const hasFeaturedFootballTakeover = activeFeaturedFootballMatches.length > 0;
-  const hasAdminHomepageMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl) && !hasTransferDeadlineTakeover && !isElectionTakeoverActive && !hasFeaturedFootballTakeover;
-  const hasHomeSearchMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl || hasTransferDeadlineTakeover || isElectionTakeoverActive || hasFeaturedFootballTakeover);
+  const hasAdminHomepageMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl) && !hasTransferDeadlineTakeover && !isElectionTakeoverActive && !hasEditorialTakeover && !hasFeaturedFootballTakeover;
+  const hasHomeSearchMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl || hasTransferDeadlineTakeover || isElectionTakeoverActive || hasEditorialTakeover || hasFeaturedFootballTakeover);
   const homeLive = window.RIFNOTE_SEARCH?.homeLive || null;
   const showMobileTakeoverLogo = hasHomeSearchMedia && !hasAdminHomepageMedia;
 
@@ -857,6 +859,14 @@ function App({ mode }) {
 
   if (mode === 'transfer-tracker') {
     return withLiveRail(<TransferNewsPage />);
+  }
+
+  if (mode === 'trending-topics-channel') {
+    return withLiveRail(<StoryChannelPage channel="trending" />);
+  }
+
+  if (mode === 'football-stories') {
+    return withLiveRail(<StoryChannelPage channel="football" />);
   }
 
   if (mode === 'weather') {
@@ -954,7 +964,7 @@ function App({ mode }) {
           {hasHomeSearchMedia ? (
             hasTransferDeadlineTakeover
               ? <TransferDeadlineHomeTakeover deadline={transferDeadline} />
-              : <HomeSearchMedia primary featuredFootballMatches={activeFeaturedFootballMatches} />
+              : <HomeSearchMedia primary featuredFootballMatches={activeFeaturedFootballMatches} storyChannels={storyChannels} />
           ) : (
             <div className="rs-orbit-logo" aria-label="Rifnote Search">
               <h1 className="rs-google-logo">
@@ -3426,10 +3436,10 @@ function FootballHub() {
   useEffect(() => {
     let cancelled = false;
 
-    searchRifnote({ query: '', category: 'Football', sort: 'latest', perPage: 6 })
+    getStoryChannel('football', { limit: 6 })
       .then((payload) => {
         if (!cancelled) {
-          setFootballStories(payload.results || []);
+          setFootballStories(payload.stories || []);
         }
       })
       .catch(() => {
@@ -5269,6 +5279,43 @@ function FootballPlayersDirectory() {
   );
 }
 
+function StoryChannelPage({ channel = 'trending' }) {
+  const [payload, setPayload] = useState({ stories: [], terms: [], categories: [], total: 0, enabled: true });
+  const [status, setStatus] = useState({ loading: true, error: '' });
+
+  useEffect(() => {
+    let cancelled = false;
+    getStoryChannel(channel, { limit: 60 })
+      .then((data) => !cancelled && setPayload(data))
+      .catch((error) => !cancelled && setStatus({ loading: false, error: error.message }))
+      .finally(() => !cancelled && setStatus((current) => ({ ...current, loading: false })));
+    return () => { cancelled = true; };
+  }, [channel]);
+
+  const isFootball = channel === 'football';
+  const stories = Array.isArray(payload.stories) ? payload.stories : [];
+  const filters = [...(payload.categories || []), ...(payload.terms || [])].filter(Boolean).slice(0, 18);
+
+  return (
+    <main className={`rs-shell compact-page rs-story-channel-page is-${channel}`}>
+      <section className="rs-story-channel-hero">
+        <Badge tone="danger">{isFootball ? 'Selected football coverage' : 'Editor-curated signals'}</Badge>
+        <h1>{payload.label || (isFootball ? 'Football Stories' : 'Trending Topics')}</h1>
+        <p>{payload.description || (isFootball ? 'Stories matched to selected leagues, clubs and players.' : 'Stories matched to selected topics, tags, categories and keywords.')}</p>
+        <div><strong>{payload.total || stories.length}</strong><span>matched stories</span></div>
+      </section>
+      {filters.length ? <section className="rs-story-channel-filters" aria-label="Active editorial selections">{filters.map((filter) => <span key={filter}>{filter}</span>)}</section> : null}
+      {status.error ? <Card><CardHeader title="Couldn’t load this channel" action={<Badge tone="danger">REST</Badge>} /><p>{status.error}</p></Card> : null}
+      {!payload.enabled && !status.loading ? <Card><CardHeader title="Channel paused" /><p>This editorial channel is currently disabled.</p></Card> : null}
+      <section className="rs-story-channel-grid" aria-live="polite">
+        {stories.map((story) => <StoryCard story={story} query={isFootball ? 'football stories' : 'trending topics'} key={`${story.cluster_id || ''}-${story.id || story.original_url}`} />)}
+      </section>
+      {status.loading ? <div className="rs-story-channel-loading"><span /><span /><span /></div> : null}
+      {!status.loading && payload.enabled && !stories.length ? <Card><CardHeader title="No matching stories yet" /><p>The channel will fill automatically as matching RSS and WordPress stories arrive.</p></Card> : null}
+    </main>
+  );
+}
+
 function TransferNewsPage() {
   const [payload, setPayload] = useState({ stories: [], deals: [], topics: [], sources: 0 });
   const [status, setStatus] = useState({ loading: true, error: '' });
@@ -5490,7 +5537,88 @@ function TransferDeadlineHomeTakeover({ deadline = {} }) {
   );
 }
 
-function HomeSearchMedia({ primary = false, featuredFootballMatches = [] }) {
+function HomeEditorialTakeover({ featuredFootballMatches = [], channels = {} }) {
+  const [trending, setTrending] = useState([]);
+  const [football, setFootball] = useState([]);
+  const [active, setActive] = useState(0);
+  const fixture = featuredFootballMatches[0] || null;
+  const matchContext = fixture ? [fixture.league?.name, fixture.home?.name, fixture.away?.name].filter(Boolean) : [];
+
+  useEffect(() => {
+    let cancelled = false;
+    const requests = [];
+    if (channels.trending) requests.push(getStoryChannel('trending', { limit: 3 }).then((payload) => ({ type: 'trending', stories: payload.stories || [] })));
+    if (channels.football) requests.push(getStoryChannel('football', { limit: 3, context: matchContext }).then((payload) => ({ type: 'football', stories: payload.stories || [] })));
+    Promise.allSettled(requests).then((results) => {
+      if (cancelled) return;
+      results.forEach((result) => {
+        if (result.status !== 'fulfilled') return;
+        if (result.value.type === 'trending') setTrending(result.value.stories);
+        if (result.value.type === 'football') setFootball(result.value.stories);
+      });
+    });
+    return () => { cancelled = true; };
+  }, [channels.football, channels.trending, matchContext.join('|')]);
+
+  const slides = [
+    ...(channels.football && featuredFootballMatches.length ? [{ type: 'match', fixtures: featuredFootballMatches }] : []),
+    ...trending.map((story) => ({ type: 'trending', story })),
+    ...football.map((story) => ({ type: 'football', story })),
+  ];
+
+  useEffect(() => {
+    if (slides.length < 2) return undefined;
+    const timer = window.setInterval(() => setActive((current) => (current + 1) % slides.length), 8500);
+    return () => window.clearInterval(timer);
+  }, [slides.length]);
+
+  useEffect(() => {
+    if (active >= slides.length) setActive(0);
+  }, [active, slides.length]);
+
+  if (!slides.length) {
+    return <div className="rs-home-editorial-takeover is-loading"><span /><strong>Loading today’s stories…</strong></div>;
+  }
+
+  const slide = slides[Math.min(active, slides.length - 1)];
+  if (slide.type === 'match') {
+    return (
+      <section className="rs-home-editorial-takeover is-match">
+        <HomeFeaturedFootballScoreboards fixtures={slide.fixtures} primary compact />
+        <HomeEditorialTakeoverControls slides={slides} active={active} setActive={setActive} />
+      </section>
+    );
+  }
+
+  const story = slide.story || {};
+  const image = story.image || story.image_url || story.thumbnail_url || '';
+  const target = storyReadUrl(story);
+  return (
+    <section className={`rs-home-editorial-takeover is-story is-${slide.type} ${image ? 'has-image' : ''}`} style={image ? { '--rs-editorial-image': `url(${image})` } : {}}>
+      <span className="rs-home-editorial-label"><i /> {slide.type === 'football' ? (matchContext.length ? 'Around the featured match' : 'Football Stories') : 'Trending Topic'}</span>
+      <a className="rs-home-editorial-copy" href={target} {...linkPropsForUrl(target)} onClick={() => trackStoryClick(story, 'homepage_channel_takeover', slide.type)}>
+        <small>{decodeText(story.source_name || story.source_domain || 'Rifnote')}</small>
+        <strong>{decodeText(story.headline || 'Latest story')}</strong>
+        <p>{trimWords(story.excerpt || '', 24)}</p>
+        <b>Read story <ArrowRight size={17} /></b>
+      </a>
+      <HomeEditorialTakeoverControls slides={slides} active={active} setActive={setActive} />
+    </section>
+  );
+}
+
+function HomeEditorialTakeoverControls({ slides = [], active = 0, setActive = () => {} }) {
+  if (slides.length < 2) return null;
+  return (
+    <span className="rs-home-editorial-controls" aria-label="Homepage takeover slides">
+      {slides.map((slide, index) => (
+        <button type="button" className={active === index ? 'active' : ''} onClick={(event) => { event.preventDefault(); event.stopPropagation(); setActive(index); }} aria-label={`Show ${slide.type === 'match' ? 'featured match' : `${slide.type} story`} ${index + 1}`} key={`${slide.type}-${slide.story?.id || index}`} />
+      ))}
+    </span>
+  );
+}
+
+function HomeSearchMedia({ primary = false, featuredFootballMatches = [], storyChannels = {} }) {
   const [takeover, setTakeover] = useState(window.RIFNOTE_SEARCH?.electionTakeover || null);
   const [soundOn, setSoundOn] = useState(false);
   const mediaUrl = window.RIFNOTE_SEARCH?.homeSearchMediaUrl || '';
@@ -5532,6 +5660,10 @@ function HomeSearchMedia({ primary = false, featuredFootballMatches = [] }) {
 
   if (takeover?.enabled) {
     return <ElectionTakeover takeover={takeover} primary={primary} />;
+  }
+
+  if (storyChannels.trending || storyChannels.football) {
+    return <HomeEditorialTakeover featuredFootballMatches={footballFixtures} channels={storyChannels} />;
   }
 
   if (footballFixtures.length) {
@@ -5734,7 +5866,7 @@ function HalftimeStatsMotion({ fixture = {} }) {
   );
 }
 
-function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
+function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false, compact = false }) {
   const cleanFixtures = useFeaturedFootballFixtures(fixtures);
   const [active, setActive] = useState(0);
   const [scoreMemory, setScoreMemory] = useState({});
@@ -5942,7 +6074,7 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
   }
 
   return (
-    <section className={`rs-home-featured-football ${primary ? 'is-primary' : ''} ${isLive ? 'is-live' : ''}`} aria-label="Featured football match">
+    <section className={`rs-home-featured-football ${primary ? 'is-primary' : ''} ${isLive ? 'is-live' : ''} ${compact ? 'is-story-channel' : ''}`} aria-label="Featured football match">
       {goalFlash ? createPortal((
         <a className={`rs-home-goal-flash is-${goalFlash.type || 'goal'} is-${goalFlash.goalType || 'normal'}`} href={matchUrl} role="status" aria-live="polite" aria-label={`${goalFlash.type === 'var' ? 'VAR update' : goalFlash.type === 'red-card' ? 'Red card' : goalTypeLabel(goalFlash.goalType)} for ${goalFlash.team}. Open match details`}>
           <span className="rs-home-goal-post-scene" aria-hidden="true">
@@ -5981,20 +6113,20 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false }) {
         </a>
       ), document.body) : null}
       <div className="rs-home-featured-football-top">
-        <span className="rs-home-football-league">{headline}</span>
+        <span className="rs-home-football-league">{compact ? (isUpcoming ? (clock || 'Next') : (status === 'HT' ? 'HT' : status || clock || 'Live')) : headline}</span>
       </div>
       <a className="rs-home-scoreboard" href={matchUrl} aria-label={`Open ${fixture.home?.name || 'home team'} vs ${fixture.away?.name || 'away team'} match page`}>
-        <HomeScoreboardTeam team={fixture.home} large />
+        <HomeScoreboardTeam team={fixture.home} large={!compact} />
         <div className="rs-home-scoreboard-score">
           <b>{centerValue}</b>
           {isLive && clock ? <small>{clock}</small> : null}
         </div>
-        <HomeScoreboardTeam team={fixture.away} align="right" large />
+        <HomeScoreboardTeam team={fixture.away} align="right" large={!compact} />
       </a>
-      {isHalfTime ? <HalftimeStatsMotion fixture={fixture} /> : null}
-      {goalScorers.length ? <FeaturedGoalScorers goals={goalScorers} /> : null}
-      {venue ? <div className="rs-home-football-venue">Venue: <b>{venue}</b></div> : null}
-      {canTestGoalAnimation ? (
+      {!compact && isHalfTime ? <HalftimeStatsMotion fixture={fixture} /> : null}
+      {!compact && goalScorers.length ? <FeaturedGoalScorers goals={goalScorers} /> : null}
+      {!compact && venue ? <div className="rs-home-football-venue">Venue: <b>{venue}</b></div> : null}
+      {!compact && canTestGoalAnimation ? (
         <div className="rs-home-goal-test-row">
           <button className="rs-home-goal-test" type="button" onClick={testGoalAnimation}>
             Test goal animation

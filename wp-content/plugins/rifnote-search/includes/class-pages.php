@@ -19,6 +19,8 @@ class Rifnote_Search_Pages {
             'teams' => array('title' => __('Teams', 'rifnote-search'), 'mode' => 'team-search', 'shortcode' => 'rifnote_team_search'),
             'players' => array('title' => __('Players', 'rifnote-search'), 'mode' => 'player-search', 'shortcode' => 'rifnote_player_search'),
             'transfers' => array('title' => __('Transfer Tracker', 'rifnote-search'), 'mode' => 'transfer-tracker', 'shortcode' => 'rifnote_transfer_tracker'),
+            'trending-topics' => array('title' => __('Trending Topics', 'rifnote-search'), 'mode' => 'trending-topics-channel', 'shortcode' => 'rifnote_trending_topics_channel'),
+            'football-stories' => array('title' => __('Football Stories', 'rifnote-search'), 'mode' => 'football-stories', 'shortcode' => 'rifnote_football_stories'),
             'weather' => array('title' => __('Weather', 'rifnote-search'), 'mode' => 'weather', 'shortcode' => 'rifnote_weather'),
             'contact-us' => array('title' => __('Contact Us', 'rifnote-search'), 'mode' => 'contact', 'shortcode' => 'rifnote_contact'),
             'publisher-docs' => array('title' => __('Publisher Docs', 'rifnote-search'), 'mode' => 'publisher-docs', 'shortcode' => 'rifnote_publisher_docs'),

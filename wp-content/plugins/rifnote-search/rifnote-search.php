@@ -3,7 +3,7 @@
  * Plugin Name: Rifnote Search
  * Plugin URI: https://rifnote.com/
  * Description: AI-powered news search and publisher discovery plugin for Rifnote.
- * Version: 0.2.47
+ * Version: 0.2.48
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Rifnote
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RIFNOTE_SEARCH_VERSION', '0.2.47');
+define('RIFNOTE_SEARCH_VERSION', '0.2.48');
 define('RIFNOTE_SEARCH_FILE', __FILE__);
 define('RIFNOTE_SEARCH_DIR', plugin_dir_path(__FILE__));
 define('RIFNOTE_SEARCH_URL', plugin_dir_url(__FILE__));
@@ -42,6 +42,7 @@ require_once RIFNOTE_SEARCH_DIR . 'includes/class-launch-readiness.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-release.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-football-api.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-transfer-deadline.php';
+require_once RIFNOTE_SEARCH_DIR . 'includes/class-story-channels.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-live-data.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-news-api.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-social.php';
@@ -85,6 +86,7 @@ final class Rifnote_Search_Plugin {
         add_action('plugins_loaded', array('Rifnote_Search_Election', 'init'));
         add_action('plugins_loaded', array('Rifnote_Search_Football_API', 'maybe_install'));
         add_action('plugins_loaded', array('Rifnote_Search_Transfer_Deadline', 'init'));
+        add_action('plugins_loaded', array('Rifnote_Search_Story_Channels', 'init'));
         add_action('plugins_loaded', array('Rifnote_Search_Live_Data', 'maybe_install'));
         add_action('plugins_loaded', array('Rifnote_Search_Aggregation', 'ensure_categories'));
         add_action('init', array('Rifnote_Search_Aggregation', 'maybe_repair_categories'), 30);
@@ -176,6 +178,8 @@ final class Rifnote_Search_Plugin {
         add_shortcode('rifnote_team_search', array($this, 'render_team_search_shortcode'));
         add_shortcode('rifnote_player_search', array($this, 'render_player_search_shortcode'));
         add_shortcode('rifnote_transfer_tracker', array($this, 'render_transfer_tracker_shortcode'));
+        add_shortcode('rifnote_trending_topics_channel', array($this, 'render_trending_topics_channel_shortcode'));
+        add_shortcode('rifnote_football_stories', array($this, 'render_football_stories_shortcode'));
         add_shortcode('rifnote_weather', array($this, 'render_weather_shortcode'));
         add_shortcode('rifnote_contact', array($this, 'render_contact_shortcode'));
         add_shortcode('rifnote_legal_request', array($this, 'render_legal_request_shortcode'));
@@ -525,6 +529,10 @@ JS;
             'homeSearchPlaceholder' => sanitize_text_field((string) get_option('rifnote_home_search_placeholder', __('Search news and trends', 'rifnote-search'))),
             'homeLive' => $this->homepage_live_context(),
             'transferDeadline' => class_exists('Rifnote_Search_Football_API') ? Rifnote_Search_Football_API::transfer_deadline_context() : array(),
+            'storyChannels' => array(
+                'trending' => (bool) get_option('rifnote_channel_trending_enabled', true),
+                'football' => (bool) get_option('rifnote_channel_football_enabled', true),
+            ),
             'electionTakeover' => class_exists('Rifnote_Search_Election') ? Rifnote_Search_Election::public_payload() : array(),
             'featuredFootballMatches' => class_exists('Rifnote_Search_Football_API') ? Rifnote_Search_Football_API::featured_homepage_matches(8) : array(),
             'featuredFootballUrl' => home_url('/football/'),
@@ -710,6 +718,14 @@ JS;
 
     public function render_transfer_tracker_shortcode() {
         return $this->render_app('transfer-tracker');
+    }
+
+    public function render_trending_topics_channel_shortcode() {
+        return $this->render_app('trending-topics-channel');
+    }
+
+    public function render_football_stories_shortcode() {
+        return $this->render_app('football-stories');
     }
 
     public function render_weather_shortcode() {

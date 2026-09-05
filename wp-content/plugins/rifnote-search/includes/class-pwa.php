@@ -441,6 +441,8 @@ class Rifnote_Search_PWA {
             home_url('/teams/'),
             home_url('/players/'),
             home_url('/transfers/'),
+            home_url('/trending-topics/'),
+            home_url('/football-stories/'),
             home_url('/weather/'),
             home_url('/for-you/'),
             $css ? $css['url'] : '',

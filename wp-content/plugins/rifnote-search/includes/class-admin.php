@@ -4158,7 +4158,8 @@ class Rifnote_Search_Admin {
                                 <tr>
                                     <th scope="row"><?php esc_html_e('Automated Deadline Day', 'rifnote-search'); ?></th>
                                     <td>
-                                        <label><input type="checkbox" name="rifnote_transfer_deadline_enabled" value="1" <?php checked((bool) get_option('rifnote_transfer_deadline_enabled', true)); ?> /> <?php esc_html_e('Show the automatic Deadline Day homepage strip and live dashboard', 'rifnote-search'); ?></label>
+                                        <div id="rifnote-transfer-deadline-settings"></div>
+                                        <label><input type="checkbox" name="rifnote_transfer_deadline_enabled" value="1" <?php checked((bool) get_option('rifnote_transfer_deadline_enabled', true)); ?> /> <?php esc_html_e('Show the automatic Deadline Day homepage takeover and live dashboard', 'rifnote-search'); ?></label>
                                         <p><input type="text" class="regular-text" name="rifnote_transfer_deadline_label" value="<?php echo esc_attr(get_option('rifnote_transfer_deadline_label', 'Transfer Deadline Day')); ?>" placeholder="Transfer Deadline Day" /></p>
                                         <p><input type="datetime-local" name="rifnote_transfer_deadline_at" value="<?php echo esc_attr(str_replace(' ', 'T', substr((string) get_option('rifnote_transfer_deadline_at', '2026-09-01 23:00:00'), 0, 16))); ?>" /> <span class="description"><?php echo esc_html(sprintf(__('Uses the WordPress timezone: %s.', 'rifnote-search'), wp_timezone_string())); ?></span></p>
                                         <details>

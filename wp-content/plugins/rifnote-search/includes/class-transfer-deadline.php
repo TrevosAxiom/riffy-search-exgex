@@ -14,6 +14,7 @@ class Rifnote_Search_Transfer_Deadline {
     public static function init() {
         add_action('init', array(__CLASS__, 'register_post_type'));
         add_action('admin_menu', array(__CLASS__, 'register_menu'), 25);
+        add_action('admin_init', array(__CLASS__, 'redirect_settings_page'));
         add_action('add_meta_boxes_' . self::POST_TYPE, array(__CLASS__, 'add_meta_boxes'));
         add_action('save_post_' . self::POST_TYPE, array(__CLASS__, 'save'), 10, 2);
         add_filter('manage_' . self::POST_TYPE . '_posts_columns', array(__CLASS__, 'columns'));
@@ -55,7 +56,15 @@ class Rifnote_Search_Transfer_Deadline {
         );
         add_submenu_page(self::MENU_SLUG, __('Transfer Overview', 'rifnote-search'), __('Overview', 'rifnote-search'), 'edit_posts', self::MENU_SLUG, array(__CLASS__, 'render_dashboard'));
         add_submenu_page(self::MENU_SLUG, __('Add Transfer Update', 'rifnote-search'), __('Add Manual Update', 'rifnote-search'), 'edit_posts', 'post-new.php?post_type=' . self::POST_TYPE);
-        add_submenu_page(self::MENU_SLUG, __('Deadline Settings', 'rifnote-search'), __('Settings', 'rifnote-search'), 'manage_options', 'rifnote-search-football');
+        add_submenu_page(self::MENU_SLUG, __('Deadline Settings', 'rifnote-search'), __('Settings', 'rifnote-search'), 'manage_options', 'rifnote-transfer-settings', array(__CLASS__, 'render_dashboard'));
+    }
+
+    public static function redirect_settings_page() {
+        if (!is_admin() || !current_user_can('manage_options')) return;
+        $page = isset($_GET['page']) ? sanitize_key(wp_unslash($_GET['page'])) : '';
+        if ('rifnote-transfer-settings' !== $page) return;
+        wp_safe_redirect(admin_url('admin.php?page=rifnote-search-football#rifnote-transfer-deadline-settings'));
+        exit;
     }
 
     public static function render_dashboard() {

@@ -441,6 +441,16 @@ class Rifnote_Search_REST_API {
             ),
         ));
 
+        register_rest_route('rifnote/v1', '/story-channel/(?P<channel>trending|football)', array(
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => array(__CLASS__, 'story_channel'),
+            'permission_callback' => '__return_true',
+            'args' => array(
+                'limit' => array('sanitize_callback' => 'absint'),
+                'context' => array('sanitize_callback' => 'sanitize_text_field'),
+            ),
+        ));
+
         register_rest_route('rifnote/v1', '/football/fixture/(?P<fixture_id>\d+)', array(
             'methods' => WP_REST_Server::READABLE,
             'callback' => array(__CLASS__, 'football_fixture_details'),
@@ -1723,6 +1733,15 @@ class Rifnote_Search_REST_API {
         if (!is_user_logged_in()) {
             $response->header('Cache-Control', 'public, max-age=60, s-maxage=120, stale-while-revalidate=180');
         }
+        return $response;
+    }
+
+    public static function story_channel(WP_REST_Request $request) {
+        $rate = Rifnote_Search_Hardening::rate_limit('story_channel', 120, MINUTE_IN_SECONDS);
+        if (is_wp_error($rate)) return $rate;
+        $context = array_values(array_filter(array_map('sanitize_text_field', explode('|', (string) $request->get_param('context')))));
+        $response = rest_ensure_response(Rifnote_Search_Story_Channels::payload((string) $request->get_param('channel'), (int) $request->get_param('limit'), $context));
+        if (!is_user_logged_in()) $response->header('Cache-Control', 'public, max-age=90, s-maxage=180, stale-while-revalidate=300');
         return $response;
     }
 

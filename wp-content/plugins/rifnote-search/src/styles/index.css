@@ -2065,6 +2065,69 @@
   border-color: transparent;
 }
 
+.rs-home-editorial-takeover {
+  position: relative;
+  z-index: 1;
+  isolation: isolate;
+  width: min(1120px, 94vw);
+  min-height: clamp(250px, 27vw, 390px);
+  margin: 0 auto;
+  overflow: hidden;
+  border-radius: 30px;
+  box-shadow: 0 24px 64px rgb(15 23 42 / 16%);
+}
+
+.rs-home-editorial-takeover.is-story {
+  display: grid;
+  align-content: end;
+  justify-items: start;
+  gap: 14px;
+  padding: clamp(24px, 5vw, 58px);
+  background:
+    linear-gradient(90deg, rgb(6 12 23 / 96%), rgb(7 16 29 / 79%) 54%, rgb(7 16 29 / 30%)),
+    var(--rs-editorial-image, linear-gradient(135deg, #101828, #344054)) center / cover no-repeat;
+  color: #fff;
+  text-align: left;
+}
+
+.rs-home-editorial-takeover.is-story:not(.has-image) {
+  background: radial-gradient(circle at 85% 18%, rgb(237 28 36 / 34%), transparent 30%), linear-gradient(135deg, #101828, #344054);
+}
+
+.rs-home-editorial-takeover.is-football { box-shadow: 0 24px 64px rgb(13 148 136 / 17%); }
+.rs-home-editorial-label { position: relative; z-index: 2; display: inline-flex; width: fit-content; align-items: center; gap: 7px; padding: 7px 10px; border: 1px solid rgb(255 255 255 / 18%); border-radius: 999px; background: rgb(237 28 36 / 88%); color: #fff; font-size: .68rem; font-weight: 950; letter-spacing: .065em; text-transform: uppercase; }
+.rs-home-editorial-label i { width: 7px; height: 7px; border-radius: 50%; background: #fff; animation: rsHomeLivePulse 1.4s infinite; }
+.rs-home-editorial-copy { position: relative; z-index: 2; display: grid; max-width: 760px; gap: 8px; color: #fff; text-decoration: none; }
+.rs-home-editorial-copy small { color: #fecaca; font-size: .74rem; font-weight: 850; }
+.rs-home-editorial-copy strong { color: #fff; font-size: clamp(2rem, 4.7vw, 4.5rem); font-weight: 950; letter-spacing: -.055em; line-height: .96; }
+.rs-home-editorial-copy p { max-width: 620px; margin: 0; color: #d0d5dd; font-size: clamp(.82rem, 1.2vw, 1rem); font-weight: 620; line-height: 1.45; }
+.rs-home-editorial-copy b { display: inline-flex; width: fit-content; align-items: center; gap: 8px; margin-top: 4px; font-size: .82rem; }
+.rs-home-editorial-takeover.is-match { display: grid; min-height: 120px; align-content: center; padding: 0 clamp(28px, 5vw, 74px); border-radius: 0; background: #fff; box-shadow: none; }
+.rs-home-editorial-takeover.is-match .rs-home-featured-football { width: 100%; padding: 0; }
+.rs-home-featured-football.is-story-channel { grid-template-columns: 84px minmax(0, 1fr); gap: 22px; align-items: center; }
+.rs-home-featured-football.is-story-channel::before { display: none; }
+.rs-home-featured-football.is-story-channel .rs-home-featured-football-top { justify-content: flex-start; }
+.rs-home-featured-football.is-story-channel .rs-home-football-league { color: #df2029; font-size: .86rem; font-weight: 950; text-transform: uppercase; }
+.rs-home-featured-football.is-story-channel .rs-home-scoreboard { grid-template-columns: minmax(0,1fr) auto minmax(0,1fr); gap: clamp(18px, 3vw, 42px); padding: 0; }
+.rs-home-featured-football.is-story-channel .rs-home-scoreboard-team { display: flex; justify-content: flex-end; gap: 14px; text-align: right; }
+.rs-home-featured-football.is-story-channel .rs-home-scoreboard-team:not(.is-right) img,
+.rs-home-featured-football.is-story-channel .rs-home-scoreboard-team:not(.is-right) i { order: 2; }
+.rs-home-featured-football.is-story-channel .rs-home-scoreboard-team:not(.is-right) b { order: 1; }
+.rs-home-featured-football.is-story-channel .rs-home-scoreboard-team.is-right { justify-content: flex-start; text-align: left; }
+.rs-home-featured-football.is-story-channel .rs-home-scoreboard-team img,
+.rs-home-featured-football.is-story-channel .rs-home-scoreboard-team i { flex: 0 0 auto; width: 52px; height: 52px; border-radius: 0; background: transparent; box-shadow: none; }
+.rs-home-featured-football.is-story-channel .rs-home-scoreboard-team b { max-width: 18ch; font-size: clamp(1rem, 1.65vw, 1.45rem); font-weight: 760; }
+.rs-home-featured-football.is-story-channel .rs-home-scoreboard-score b { min-width: 0; padding: 0; border-radius: 0; background: transparent; color: #101828; font-size: clamp(1.35rem, 2.4vw, 2rem); white-space: nowrap; }
+.rs-home-featured-football.is-story-channel .rs-home-scoreboard:hover .rs-home-scoreboard-score b,
+.rs-home-featured-football.is-story-channel .rs-home-scoreboard:focus-visible .rs-home-scoreboard-score b { background: transparent; color: #df2029; }
+.rs-home-featured-football.is-story-channel .rs-home-scoreboard-score small { display: none; }
+.rs-home-editorial-controls { position: absolute; right: 20px; bottom: 18px; z-index: 4; display: flex; gap: 6px; align-items: center; }
+.rs-home-editorial-controls button { width: 20px; height: 5px; padding: 0; border: 0; border-radius: 999px; background: rgb(255 255 255 / 38%); box-shadow: 0 0 0 1px rgb(15 23 42 / 10%); cursor: pointer; transition: width .18s ease, background .18s ease; }
+.rs-home-editorial-takeover.is-match .rs-home-editorial-controls button { background: #d0d5dd; }
+.rs-home-editorial-controls button.active { width: 36px; background: #ed1c24 !important; }
+.rs-home-editorial-takeover.is-loading { display: grid; place-items: center; align-content: center; gap: 12px; background: linear-gradient(135deg,#101828,#344054); color:#fff; }
+.rs-home-editorial-takeover.is-loading span { width: 34px; height: 34px; border: 3px solid rgb(255 255 255 / 24%); border-top-color:#fff; border-radius:50%; animation:rs-pwa-spin .8s linear infinite; }
+
 .rs-home-goal-flash {
   position: fixed;
   top: calc(var(--wp-admin--admin-bar--height, 0px) + 24px);
@@ -3156,6 +3219,21 @@
 }
 
 @media (max-width: 760px) {
+  .rs-home-editorial-takeover { width: 100%; min-height: 360px; border-radius: 24px; }
+  .rs-home-editorial-takeover.is-story { padding: 24px 20px 42px; background-position: 62% center; }
+  .rs-home-editorial-copy strong { font-size: clamp(2rem, 10vw, 3rem); }
+  .rs-home-editorial-copy p { display: -webkit-box; overflow: hidden; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .rs-home-editorial-takeover.is-match { min-height: 108px; padding: 0 12px 18px; }
+  .rs-home-featured-football.is-story-channel { grid-template-columns: 38px minmax(0,1fr); gap: 5px; }
+  .rs-home-featured-football.is-story-channel .rs-home-scoreboard { gap: 7px; }
+  .rs-home-featured-football.is-story-channel .rs-home-scoreboard-team { gap: 5px; }
+  .rs-home-featured-football.is-story-channel .rs-home-scoreboard-team img,
+  .rs-home-featured-football.is-story-channel .rs-home-scoreboard-team i { width: 34px; height: 34px; }
+  .rs-home-featured-football.is-story-channel .rs-home-scoreboard-team b { max-width: 8ch; font-size: .72rem; }
+  .rs-home-featured-football.is-story-channel .rs-home-scoreboard-score b { font-size: 1rem; }
+  .rs-home-featured-football.is-story-channel .rs-home-football-league { font-size: .68rem; }
+  .rs-home-editorial-controls { right: 14px; bottom: 13px; }
+
   .rs-home-featured-football {
     width: 100%;
     padding: 2px 0 10px;
@@ -13514,6 +13592,22 @@ body.rifnote-search-plugin-page .rs-plugin-search button {
 .rs-transfer-deadline-strip > b { font-size: 1rem; font-weight: 950; font-variant-numeric: tabular-nums; }
 .rs-transfer-deadline-strip > small { overflow: hidden; color: #667085; font-weight: 760; text-overflow: ellipsis; white-space: nowrap; }
 
+.rs-story-channel-page { display: grid; gap: 18px; }
+.rs-story-channel-hero { position: relative; isolation: isolate; display: grid; grid-template-columns: minmax(0,1fr) auto; gap: 10px 28px; align-items: end; overflow: hidden; padding: clamp(24px,4vw,48px); border-radius: 28px; background: linear-gradient(125deg,#101828,#1d2939 58%,#344054); color:#fff; }
+.rs-story-channel-hero::after { position:absolute; inset:auto -8% -55% auto; z-index:-1; width:420px; aspect-ratio:1; border-radius:50%; background:rgb(237 28 36 / 34%); content:""; filter:blur(8px); }
+.rs-story-channel-hero > .rs-badge { grid-column:1; width:fit-content; }
+.rs-story-channel-hero h1 { grid-column:1; margin:4px 0 0; color:#fff; font-size:clamp(2.15rem,5vw,4.6rem); line-height:.95; letter-spacing:-.055em; }
+.rs-story-channel-hero p { grid-column:1; max-width:720px; margin:0; color:#d0d5dd; font-weight:620; }
+.rs-story-channel-hero > div { grid-column:2; grid-row:1 / span 3; display:grid; min-width:150px; gap:2px; padding:18px; border:1px solid rgb(255 255 255 / 16%); border-radius:20px; background:rgb(255 255 255 / 8%); text-align:center; backdrop-filter:blur(10px); }
+.rs-story-channel-hero > div strong { font-size:2.6rem; line-height:1; }
+.rs-story-channel-hero > div span { color:#d0d5dd; font-size:.7rem; font-weight:850; text-transform:uppercase; }
+.rs-story-channel-filters { display:flex; gap:8px; overflow-x:auto; padding:2px 0 5px; scrollbar-width:none; }
+.rs-story-channel-filters span { flex:0 0 auto; padding:7px 11px; border:1px solid #e4e7ec; border-radius:999px; background:#fff; color:#475467; font-size:.74rem; font-weight:800; }
+.rs-story-channel-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.rs-story-channel-grid .rs-story-card { margin:0; }
+.rs-story-channel-loading { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; }
+.rs-story-channel-loading span { min-height:170px; border-radius:20px; background:linear-gradient(100deg,#f2f4f7 25%,#fff 42%,#f2f4f7 60%); background-size:220% 100%; animation:rsShimmer 1.25s infinite linear; }
+
 .rs-transfer-home-takeover {
   position: relative;
   z-index: 1;
@@ -13670,6 +13764,10 @@ body.rifnote-search-plugin-page .rs-plugin-search button {
 }
 
 @media (max-width: 620px) {
+  .rs-story-channel-hero { grid-template-columns:1fr; border-radius:22px; }
+  .rs-story-channel-hero > div { grid-column:1; grid-row:auto; width:100%; text-align:left; }
+  .rs-story-channel-grid { grid-template-columns:1fr; }
+  .rs-story-channel-loading { grid-template-columns:1fr; }
   .rs-transfer-deadline-strip { grid-template-columns: auto 1fr auto; }
   .rs-transfer-deadline-strip > small { display: none; }
   .rs-transfer-deadline-hero { grid-template-columns: 1fr; }

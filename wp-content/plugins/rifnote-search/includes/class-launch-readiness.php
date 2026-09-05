@@ -1361,7 +1361,7 @@ class Rifnote_Search_Launch_Readiness {
 
     private static function sitemap_urls() {
         $urls = array();
-        $static_paths = array('/search/', '/football/', '/teams/', '/players/', '/transfers/', '/submit-news/', '/publisher-dashboard/', '/daily-briefing/', '/for-you/', '/newsletter/');
+        $static_paths = array('/search/', '/football/', '/teams/', '/players/', '/transfers/', '/trending-topics/', '/football-stories/', '/submit-news/', '/publisher-dashboard/', '/daily-briefing/', '/for-you/', '/newsletter/');
 
         foreach ($static_paths as $path) {
             $urls[] = array('loc' => home_url($path), 'lastmod' => gmdate('c'));
