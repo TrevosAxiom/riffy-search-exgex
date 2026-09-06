@@ -6054,7 +6054,7 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false, compa
         </a>
       ), document.body) : null}
       <div className="rs-home-featured-football-top">
-        <span className="rs-home-football-league">{compact ? (isUpcoming ? (clock || 'Next') : (status === 'HT' ? 'HT' : status || clock || 'Live')) : headline}</span>
+        <span className="rs-home-football-league">{compact ? (isUpcoming ? (clock || 'Next') : (isHalfTime ? 'HT' : (isLive ? (clock || 'Live') : (status || clock || 'TBD')))) : headline}</span>
       </div>
       <a className="rs-home-scoreboard" href={matchUrl} aria-label={`Open ${fixture.home?.name || 'home team'} vs ${fixture.away?.name || 'away team'} match page`}>
         <HomeScoreboardTeam team={fixture.home} large={!compact} />

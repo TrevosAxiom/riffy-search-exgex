@@ -122,7 +122,19 @@ class Rifnote_Search_Story_Channels {
                 $text = strtolower(wp_strip_all_tags(($story['headline'] ?? '') . ' ' . ($story['excerpt'] ?? '') . ' ' . implode(' ', (array) ($story['tags'] ?? array()))));
                 $matches = 0;
                 foreach ($config['terms'] as $term) if (false !== strpos($text, strtolower($term))) $matches++;
-                if ('football' === $channel && $config['terms'] && !$matches) continue;
+                $story_categories = array_filter(array_map('strtolower', array_merge(
+                    array((string) ($story['category'] ?? ''), (string) ($story['category_slug'] ?? '')),
+                    (array) ($story['categories'] ?? array())
+                )));
+                $category_matches = 0;
+                foreach ($config['categories'] as $category) {
+                    $needle = strtolower((string) $category);
+                    foreach ($story_categories as $story_category) {
+                        if ($needle && ($needle === $story_category || sanitize_title($needle) === sanitize_title($story_category))) $category_matches++;
+                    }
+                }
+                $matches += $category_matches;
+                if (($config['terms'] || $config['categories']) && !$matches) continue;
                 unset($story['admin_edit_url'], $story['admin_delete_url']);
                 $identity = (string) ($story['canonical_url'] ?? $story['original_url'] ?? $story['id'] ?? $story['headline']);
                 $key = md5(strtolower($identity));
@@ -130,6 +142,26 @@ class Rifnote_Search_Story_Channels {
                 if (!isset($stories[$key]) || $matches > (int) ($stories[$key]['channel_matches'] ?? 0)) $stories[$key] = $story;
             }
         };
+
+        // Always collect published WordPress posts directly. This ensures stories
+        // written manually by admins participate even without an RSS/external URL.
+        if ($config['enabled'] && class_exists('Rifnote_Search_Engine')) {
+            $manual_posts = get_posts(array(
+                'post_type' => 'post',
+                'post_status' => 'publish',
+                'posts_per_page' => max(100, $limit * 3),
+                'orderby' => 'date',
+                'order' => 'DESC',
+                'date_query' => array(array('after' => '30 days ago')),
+                'no_found_rows' => true,
+            ));
+            $manual_stories = array_filter(array_map(function ($post) {
+                $story = Rifnote_Search_Engine::result_payload($post->ID, array('query' => '', 'category' => '', 'sort' => 'latest', 'date_range' => '30d'));
+                if (is_array($story)) $story['channel_source'] = 'wordpress';
+                return $story;
+            }, $manual_posts));
+            $collect($manual_stories);
+        }
 
         if ($config['enabled'] && class_exists('Rifnote_Search_Engine')) {
             foreach ($config['categories'] as $category) {
