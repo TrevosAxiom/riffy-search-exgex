@@ -204,6 +204,7 @@ class Rifnote_Search_Pages {
             array('label' => __('Publishers', 'rifnote-search'), 'url' => home_url('/publisher-signup/')),
             array('label' => __('Submit News', 'rifnote-search'), 'url' => home_url('/submit-news/')),
             array('label' => __('Advertise', 'rifnote-search'), 'url' => home_url('/advertise/')),
+            array('label' => __('Contact Us', 'rifnote-search'), 'url' => home_url('/contact-us/')),
         );
     }
 
@@ -216,7 +217,6 @@ class Rifnote_Search_Pages {
                     array('label' => __('Weather', 'rifnote-search'), 'url' => home_url('/weather/')),
                     array('label' => __('Daily Drop', 'rifnote-search'), 'url' => home_url('/daily-briefing/')),
                     array('label' => __('My Feed', 'rifnote-search'), 'url' => home_url('/for-you/')),
-                    array('label' => __('Contact Us', 'rifnote-search'), 'url' => home_url('/contact-us/')),
                 ),
             ),
             array(

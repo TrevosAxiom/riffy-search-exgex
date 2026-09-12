@@ -247,8 +247,10 @@ function SourceLogo({ story, size = 'default' }) {
   const initials = decodeText(story.source_initials || story.source_name || story.source_domain || 'R').slice(0, 2).toUpperCase();
   const logoMap = window.RIFNOTE_SEARCH?.sourceLogoMap || {};
   const domain = String(story.source_domain || domainFromUrl(story.source_url || story.original_url || story.read_full_story_url || '') || '').toLowerCase().replace(/^www\./, '');
-  const guaranteedFallback = sourceInitialsImage(initials);
-  const logoUrl = story.source_logo_url
+  const sourceName = String(story.source_name || '').trim().toLowerCase();
+  const isXSource = domain === 'x.com' || domain.endsWith('.x.com') || sourceName === 'x' || sourceName === 'x.com';
+  const guaranteedFallback = isXSource ? xBrandImage() : sourceInitialsImage(initials);
+  const logoUrl = isXSource ? guaranteedFallback : story.source_logo_url
     || (domain && logoMap[domain] ? logoMap[domain] : '')
     || (domain ? `https://${domain}/favicon.ico` : '')
     || window.RIFNOTE_SEARCH?.siteIconUrl
@@ -264,6 +266,11 @@ function SourceLogo({ story, size = 'default' }) {
       <b>{initials}</b>
     </span>
   );
+}
+
+function xBrandImage() {
+  const svg = '<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><rect width="128" height="128" rx="26" fill="#000"/><path fill="#fff" d="M26 25h22.6l19.8 26.4L91.5 25H102L73.3 57.8 104 103H81.4L60.7 75.4 36.5 103H26l29.8-34.1L26 25Zm18.1 8.3 41.5 61.4h11.2L55.3 33.3H44.1Z"/></svg>';
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
 function sourceInitialsImage(initials = 'R') {

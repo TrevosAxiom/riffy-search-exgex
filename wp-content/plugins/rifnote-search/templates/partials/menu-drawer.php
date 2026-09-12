@@ -61,6 +61,10 @@ $rifnote_menu_icon = static function ($label) use ($rifnote_category_icon) {
         return '<svg viewBox="0 0 24 24" fill="none"><path d="M4 5h16v11H8l-4 4z"/><path d="M8 9h8M8 13h5"/></svg>';
     }
 
+    if (false !== strpos($key, 'contact')) {
+        return '<svg viewBox="0 0 24 24" fill="none"><path d="M4 5h16v14H4z"/><path d="m4 7 8 6 8-6"/></svg>';
+    }
+
     if (false !== strpos($key, 'legal') || false !== strpos($key, 'dmca') || false !== strpos($key, 'privacy')) {
         return '<svg viewBox="0 0 24 24" fill="none"><path d="M12 3 5 6v6c0 4.5 3 7.5 7 9 4-1.5 7-4.5 7-9V6z"/></svg>';
     }
@@ -101,6 +105,10 @@ $rifnote_menu_group_ids = array();
                 <a class="rs-menu-row" href="<?php echo esc_url(home_url('/football/')); ?>">
                     <span class="rs-menu-row-icon" aria-hidden="true"><?php echo $rifnote_menu_icon('Football'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
                     <b><?php esc_html_e('Football', 'rifnote-search'); ?></b>
+                </a>
+                <a class="rs-menu-row" href="<?php echo esc_url(home_url('/contact-us/')); ?>">
+                    <span class="rs-menu-row-icon" aria-hidden="true"><?php echo $rifnote_menu_icon('Contact'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+                    <b><?php esc_html_e('Contact Us', 'rifnote-search'); ?></b>
                 </a>
                 <?php foreach ($rifnote_menu_groups as $index => $group) : ?>
                     <?php
