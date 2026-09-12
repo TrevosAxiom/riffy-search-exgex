@@ -250,18 +250,23 @@ function SourceLogo({ story, size = 'default' }) {
   const sourceName = String(story.source_name || '').trim().toLowerCase();
   const isXSource = domain === 'x.com' || domain.endsWith('.x.com') || sourceName === 'x' || sourceName === 'x.com';
   const guaranteedFallback = isXSource ? xBrandImage() : sourceInitialsImage(initials);
-  const logoUrl = isXSource ? guaranteedFallback : story.source_logo_url
-    || (domain && logoMap[domain] ? logoMap[domain] : '')
-    || (domain ? `https://${domain}/favicon.ico` : '')
-    || window.RIFNOTE_SEARCH?.siteIconUrl
-    || guaranteedFallback;
+  const validDomain = /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domain) ? domain : '';
+  const logoCandidates = isXSource ? [guaranteedFallback] : Array.from(new Set([
+    story.source_logo_url,
+    validDomain && logoMap[validDomain],
+    validDomain && `https://${validDomain}/favicon.ico`,
+    validDomain && `https://www.google.com/s2/favicons?domain=${encodeURIComponent(validDomain)}&sz=128`,
+    guaranteedFallback,
+  ].filter(Boolean)));
 
   return (
     <span className={`rs-source-logo ${size === 'small' ? 'is-small' : ''} ${size === 'large' ? 'is-large' : ''}`}>
-      <img src={logoUrl} alt="" loading="lazy" onError={(event) => {
+      <img key={logoCandidates.join('|')} src={logoCandidates[0]} alt="" loading="lazy" onError={(event) => {
         const image = event.currentTarget;
-        image.onerror = null;
-        image.src = guaranteedFallback;
+        const nextIndex = Number(image.dataset.logoCandidate || 0) + 1;
+        if (nextIndex >= logoCandidates.length) return;
+        image.dataset.logoCandidate = String(nextIndex);
+        image.src = logoCandidates[nextIndex];
       }} />
       <b>{initials}</b>
     </span>
