@@ -6148,6 +6148,7 @@ html.rs-pwa-compact .rs-football-hero {
   font: inherit;
   font-size: 1rem;
   text-align: left;
+  text-decoration: none;
   cursor: pointer;
 }
 
@@ -18722,15 +18723,48 @@ body.rifnote-search-plugin-page .rs-plugin-page {
   text-decoration: none;
 }
 
+.rs-contact-methods { display:grid; gap:8px; margin-top:5px; }
+.rs-contact-methods a { display:inline-flex; width:fit-content; max-width:100%; align-items:center; gap:8px; padding:8px 11px; border:1px solid #ffd5d7; border-radius:999px; background:#fff7f7; color:#9f171c; font-size:.86rem; line-height:1; }
+.rs-contact-methods a span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.rs-contact-methods a svg { flex:0 0 auto; }
+.rs-contact-methods a:hover,.rs-contact-methods a:focus-visible { border-color:var(--rs-brand); background:#fff1f1; text-decoration:none; }
+
 .rs-contact-grid a:hover,
 .rs-contact-grid a:focus-visible {
   text-decoration: underline;
 }
 
+.rs-contact-form-section {
+  display: grid;
+  grid-template-columns: minmax(240px, .75fr) minmax(0, 1.25fr);
+  gap: clamp(26px, 6vw, 80px);
+  align-items: start;
+  padding: clamp(28px, 5vw, 58px);
+  border: 1px solid var(--rs-border);
+  border-radius: 28px;
+  background: linear-gradient(145deg, #fff, #f8fafc);
+  box-shadow: 0 18px 52px rgb(15 23 42 / 8%);
+}
+
+.rs-contact-form-section h2 { margin:16px 0 10px; color:var(--rs-text); font-family:var(--rs-font-heading); font-size:clamp(2rem,4vw,3.4rem); letter-spacing:-.045em; line-height:1; }
+.rs-contact-form-section > div > p { max-width:440px; margin:0; color:var(--rs-text-muted); line-height:1.55; }
+.rs-contact-form { display:grid; gap:16px; }
+.rs-contact-form-row { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14px; }
+.rs-contact-form label { display:grid; gap:7px; color:var(--rs-text); font-size:.86rem; font-weight:780; }
+.rs-contact-form input,.rs-contact-form select,.rs-contact-form textarea { width:100%; padding:12px 14px; border:1px solid #d0d5dd; border-radius:13px; background:#fff; color:var(--rs-text); font:inherit; font-weight:500; outline:none; }
+.rs-contact-form textarea { resize:vertical; line-height:1.5; }
+.rs-contact-form input:focus,.rs-contact-form select:focus,.rs-contact-form textarea:focus { border-color:var(--rs-brand); box-shadow:0 0 0 4px rgb(237 28 36 / 10%); }
+.rs-contact-form button { display:inline-flex; width:fit-content; align-items:center; gap:8px; padding:12px 17px; border:0; border-radius:999px; background:var(--rs-brand); color:#fff; cursor:pointer; font:inherit; font-weight:850; }
+.rs-contact-form button:disabled { cursor:wait; opacity:.65; }
+.rs-contact-form > small { color:var(--rs-text-muted); font-size:.72rem; }
+.rs-contact-honeypot { position:absolute !important; width:1px !important; height:1px !important; overflow:hidden !important; clip:rect(0 0 0 0) !important; white-space:nowrap !important; }
+.rs-form-success { margin:0; padding:11px 13px; border-radius:12px; background:#ecfdf3; color:#067647; font-weight:750; }
+
 @media (max-width: 900px) {
   .rs-contact-grid {
     grid-template-columns: 1fr;
   }
+  .rs-contact-form-section { grid-template-columns:1fr; }
 }
 
 @media (max-width: 720px) {
@@ -18746,6 +18780,9 @@ body.rifnote-search-plugin-page .rs-plugin-page {
   .rs-contact-hero {
     padding-top: 28px;
   }
+
+  .rs-contact-form-section { padding:22px 18px; border-radius:22px; }
+  .rs-contact-form-row { grid-template-columns:1fr; }
 
   .rs-pitchside-inline-room .rs-match-tabs {
     position: static !important;

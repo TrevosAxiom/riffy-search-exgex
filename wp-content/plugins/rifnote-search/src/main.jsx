@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
-import { ArrowLeft, ArrowRight, Bookmark, CalendarDays, Clock3, Cloud, CloudRain, CloudSun, DollarSign, ExternalLink, Flame, Globe2, Goal, Home, Landmark, Map as MapIcon, Menu, Newspaper, Pencil, Play, Radio, RotateCcw, Search, Shield, Sun, Trash2, TrendingUp, Trophy, UserRound, Volume2, VolumeX } from 'lucide-react';
-import { getAdInventory, getAdvertiserDashboard, getAnonKey, getDailyBriefing, getFeedDiagnostics, getFootballCompetition, getFootballFinished, getFootballFixtureDetails, getFootballFixtures, getFootballLive, getFootballPlayerProfile, getFootballPlayers, getFootballTeamProfile, getFootballTeams, getFootballTransfers, getFootballUpcoming, getForYou, getHomeLeadStory, getHomeNotes, getLiveMarkets, getLiveWeather, getNotifications, getPublisherStats, getRifnoteAiAnswer, getSocialEmbed, getSourceProfile, getStoryChannel, getStoryCluster, getSuggestions, getTrendingTopics, getWidget, getWorldWeather, registerDevice, saveAlert, savePreference, searchRifnote, subscribeNewsletter, submitAdvertiserPaymentProof, submitAdvertiserSignup, submitBetaFeedback, submitLegalRequest, submitPublisherSignup, submitPublisherStory, submitSponsorRequest, subscribeNoResult, trackAnalyticsEvent, trackSponsoredClick, trashStory, updateAdvertiserProfile, updateNotification, uploadMedia } from './api.js';
+import { ArrowLeft, ArrowRight, Bookmark, CalendarDays, Clock3, Cloud, CloudRain, CloudSun, DollarSign, ExternalLink, Flame, Globe2, Goal, Home, Landmark, Mail, Map as MapIcon, Menu, Newspaper, Pencil, Phone, Play, Radio, RotateCcw, Search, Shield, Sun, Trash2, TrendingUp, Trophy, UserRound, Volume2, VolumeX } from 'lucide-react';
+import { getAdInventory, getAdvertiserDashboard, getAnonKey, getDailyBriefing, getFeedDiagnostics, getFootballCompetition, getFootballFinished, getFootballFixtureDetails, getFootballFixtures, getFootballLive, getFootballPlayerProfile, getFootballPlayers, getFootballTeamProfile, getFootballTeams, getFootballTransfers, getFootballUpcoming, getForYou, getHomeLeadStory, getHomeNotes, getLiveMarkets, getLiveWeather, getNotifications, getPublisherStats, getRifnoteAiAnswer, getSocialEmbed, getSourceProfile, getStoryChannel, getStoryCluster, getSuggestions, getTrendingTopics, getWidget, getWorldWeather, registerDevice, saveAlert, savePreference, searchRifnote, subscribeNewsletter, submitAdvertiserPaymentProof, submitAdvertiserSignup, submitBetaFeedback, submitContactMessage, submitLegalRequest, submitPublisherSignup, submitPublisherStory, submitSponsorRequest, subscribeNoResult, trackAnalyticsEvent, trackSponsoredClick, trashStory, updateAdvertiserProfile, updateNotification, uploadMedia } from './api.js';
 import { rifnoteCategories, searchTabs } from './data/rifnote.js';
 import './styles/index.css';
 
@@ -247,14 +247,29 @@ function SourceLogo({ story, size = 'default' }) {
   const initials = decodeText(story.source_initials || story.source_name || story.source_domain || 'R').slice(0, 2).toUpperCase();
   const logoMap = window.RIFNOTE_SEARCH?.sourceLogoMap || {};
   const domain = String(story.source_domain || domainFromUrl(story.source_url || story.original_url || story.read_full_story_url || '') || '').toLowerCase().replace(/^www\./, '');
-  const logoUrl = story.source_logo_url || (domain && logoMap[domain] ? logoMap[domain] : '');
+  const guaranteedFallback = sourceInitialsImage(initials);
+  const logoUrl = story.source_logo_url
+    || (domain && logoMap[domain] ? logoMap[domain] : '')
+    || (domain ? `https://${domain}/favicon.ico` : '')
+    || window.RIFNOTE_SEARCH?.siteIconUrl
+    || guaranteedFallback;
 
   return (
     <span className={`rs-source-logo ${size === 'small' ? 'is-small' : ''} ${size === 'large' ? 'is-large' : ''}`}>
-      {logoUrl ? <img src={logoUrl} alt="" loading="lazy" onError={(event) => { event.currentTarget.style.display = 'none'; }} /> : null}
+      <img src={logoUrl} alt="" loading="lazy" onError={(event) => {
+        const image = event.currentTarget;
+        image.onerror = null;
+        image.src = guaranteedFallback;
+      }} />
       <b>{initials}</b>
     </span>
   );
+}
+
+function sourceInitialsImage(initials = 'R') {
+  const label = String(initials || 'R').slice(0, 2).toUpperCase().replace(/[^A-Z0-9]/g, '') || 'R';
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128"><rect width="128" height="128" rx="28" fill="#fff1f1"/><text x="64" y="72" text-anchor="middle" dominant-baseline="middle" fill="#b51218" font-family="Arial,sans-serif" font-size="48" font-weight="800">${label}</text></svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
 function domainFromUrl(url = '') {
@@ -1674,6 +1689,25 @@ function LegalRequestPanel({ mode = 'legal-request' }) {
 }
 
 function ContactPage() {
+  const [form, setForm] = useState({ name: '', email: '', topic: 'General enquiry', message: '', website: '' });
+  const [status, setStatus] = useState({ loading: false, error: '', success: '' });
+
+  async function submit(event) {
+    event.preventDefault();
+    setStatus({ loading: true, error: '', success: '' });
+    try {
+      const result = await submitContactMessage(form);
+      setForm({ name: '', email: '', topic: 'General enquiry', message: '', website: '' });
+      setStatus({ loading: false, error: '', success: result.message || 'Your message has been sent.' });
+    } catch (error) {
+      setStatus({ loading: false, error: error.message || 'Your message could not be sent.', success: '' });
+    }
+  }
+
+  function update(field, value) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
   return (
     <main className="rs-shell compact-page rs-contact-page">
       <section className="rs-contact-hero">
@@ -1685,8 +1719,12 @@ function ContactPage() {
       <section className="rs-contact-grid" aria-label="Rifnote contact details">
         <article>
           <span><MapIcon size={22} /></span>
-          <small>Office address</small>
-          <strong>3 Mercy Seat Close, Beckley Estate Lagos.</strong>
+          <small>Visit or contact us</small>
+          <strong>3 Mercy Seat Close, Beckley Estate Zone 2 U Turn, Abule Egba, Lagos.</strong>
+          <div className="rs-contact-methods">
+            <a href="tel:+2348069327381"><Phone size={16} aria-hidden="true" /><span>0806 932 7381</span></a>
+            <a href="mailto:hello@rifnote.com"><Mail size={16} aria-hidden="true" /><span>hello@rifnote.com</span></a>
+          </div>
         </article>
         <article>
           <span><Newspaper size={22} /></span>
@@ -1700,6 +1738,26 @@ function ContactPage() {
           <strong>Build campaigns for search, stories, football, live updates, and high-intent audiences.</strong>
           <a href={appPageUrl('advertise')}>Build Campaign</a>
         </article>
+      </section>
+      <section className="rs-contact-form-section">
+        <div>
+          <Badge tone="danger">Send a message</Badge>
+          <h2>How can we help?</h2>
+          <p>Send your enquiry securely to the Rifnote team. We’ll reply to the email address you provide.</p>
+        </div>
+        <form className="rs-contact-form" onSubmit={submit}>
+          <div className="rs-contact-form-row">
+            <label>Your name<input required minLength="2" maxLength="120" autoComplete="name" value={form.name} onChange={(event) => update('name', event.target.value)} /></label>
+            <label>Email address<input required type="email" autoComplete="email" value={form.email} onChange={(event) => update('email', event.target.value)} /></label>
+          </div>
+          <label>What is this about?<select value={form.topic} onChange={(event) => update('topic', event.target.value)}><option>General enquiry</option><option>Story or correction</option><option>Publisher support</option><option>Advertising</option><option>Partnership</option><option>Technical support</option></select></label>
+          <label>Your message<textarea required minLength="10" maxLength="5000" rows="7" value={form.message} onChange={(event) => update('message', event.target.value)} /></label>
+          <label className="rs-contact-honeypot" aria-hidden="true">Website<input tabIndex="-1" autoComplete="off" value={form.website} onChange={(event) => update('website', event.target.value)} /></label>
+          {status.error ? <p className="rs-form-error" role="alert">{status.error}</p> : null}
+          {status.success ? <p className="rs-form-success" role="status">{status.success}</p> : null}
+          <button type="submit" disabled={status.loading}>{status.loading ? 'Sending…' : 'Send message'} <ArrowRight size={17} /></button>
+          <small>Protected by request verification, spam filtering and submission limits.</small>
+        </form>
       </section>
     </main>
   );
@@ -6812,7 +6870,6 @@ function HomeHighlights({ activePill = 'Notes', activeCategory = 'Notes', archiv
   const isFeaturedTab = activeCategory === '__featured__' || activeCategory === 'Featured';
   const isNotes = activePill === 'Notes' && !isFeaturedTab;
   const noteStories = useMemo(() => (Array.isArray(notes) ? notes.slice(0, 5) : []), [notes]);
-  const [openNoteId, setOpenNoteId] = useState('');
   const title = isNotes ? 'Live Notes' : activePill;
   const archiveLabel = isNotes ? 'See All Notes' : `See All ${activePill}`;
   const archiveHref = archiveUrl || `${window.RIFNOTE_SEARCH?.homeUrl || '/'}category/${slugify(activeCategory || activePill)}/`;
@@ -6820,33 +6877,6 @@ function HomeHighlights({ activePill = 'Notes', activeCategory = 'Notes', archiv
   const emptyCopy = activePill === 'Notes'
     ? 'The editorial team will pin five quick story summaries here from the backend.'
     : `No hand-picked ${activePill.toLowerCase()} headlines yet. Assign posts to this pill from the post editor or the Posts list.`;
-
-  useEffect(() => {
-    if (!noteStories.length) {
-      setOpenNoteId('');
-      return undefined;
-    }
-
-    const syncFromHash = () => {
-      const hash = window.location.hash.replace('#', '');
-      const hashMatch = noteStories.some((story) => `home-pill-${slugify(activeCategory || activePill)}-${story.id}` === hash);
-      setOpenNoteId(hashMatch ? hash : '');
-    };
-
-    syncFromHash();
-    window.addEventListener('hashchange', syncFromHash);
-    return () => window.removeEventListener('hashchange', syncFromHash);
-  }, [activeCategory, activePill, noteStories]);
-
-  function toggleNote(noteId) {
-    setOpenNoteId((current) => {
-      const next = current === noteId ? '' : noteId;
-      if (next) {
-        window.history.replaceState(null, '', `#${next}`);
-      }
-      return next;
-    });
-  }
 
   if (loading) {
     return <LoadingGrid />;
@@ -6857,45 +6887,20 @@ function HomeHighlights({ activePill = 'Notes', activeCategory = 'Notes', archiv
       <CardHeader title={title} />
       <div className="rs-notes-list">
         {noteStories.length ? noteStories.map((story) => {
-          const hasStoryHub = Boolean(story.has_story_hub && story.story_url);
-          const storyUrl = hasStoryHub ? story.story_url : (story.read_full_story_url || story.original_url || '#');
+          const storyUrl = story.permalink || story.story_url || story.read_full_story_url || story.original_url || '#';
           const source = decodeText(story.source_name || story.source_domain || 'Rifnote');
-          const excerpt = decodeText(story.excerpt || story.summary || 'A quick source-backed note is ready for this story.');
-          const fullContent = story.full_content || story.content || story.body || '';
-          const plainContent = decodeText(story.raw_content || story.text || '');
           const noteId = `home-pill-${slugify(activeCategory || activePill)}-${story.id}`;
-          const isOpen = openNoteId === noteId;
           return (
-          <article className={`rs-live-note-accordion ${isOpen ? 'is-open' : ''}`} id={noteId} key={`${story.cluster_id}-${story.id}`}>
+          <article className="rs-live-note-accordion" id={noteId} key={`${story.cluster_id}-${story.id}`}>
             <div className="rs-live-note-main">
-              <button className="rs-live-note-trigger" type="button" aria-expanded={isOpen} aria-controls={`${noteId}-panel`} onClick={() => toggleNote(noteId)}>
+              <a className="rs-live-note-trigger" href={storyUrl} {...linkPropsForUrl(storyUrl)} onClick={() => trackStoryClick(story, 'homepage_pill_story_click', activeCategory || activePill)}>
                 <SourceLogo story={story} />
                 <span>
                   <small>{source} · {story.published_at_human || formatDate(story.published_at)}</small>
                   <b>{decodeText(story.headline)}</b>
                 </span>
-              </button>
+              </a>
               <AdminStoryActions story={story} compact />
-              <div className="rs-live-note-panel" id={`${noteId}-panel`} hidden={!isOpen}>
-                {isOpen ? (
-                  <>
-                    <HomeStoryEmbed story={story} activePill={activePill} />
-                    {fullContent ? (
-                      <div className="rs-home-pill-full-content" dangerouslySetInnerHTML={{ __html: fullContent }} />
-                    ) : plainContent ? (
-                      <p>{plainContent}</p>
-                    ) : (
-                      <p>{excerpt}</p>
-                    )}
-                    {hasStoryHub ? (
-                      <footer>
-                        <a className="rs-note-breakdown-link" href={storyUrl} onClick={() => trackStoryClick(story, 'full_coverage_click', '')}>Breakdown <ArrowRight size={13} /></a>
-                      </footer>
-                    ) : null}
-                    <HomeStoryShare story={story} noteId={noteId} />
-                  </>
-                ) : null}
-              </div>
             </div>
           </article>
         );

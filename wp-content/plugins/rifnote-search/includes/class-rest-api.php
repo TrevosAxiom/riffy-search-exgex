@@ -86,6 +86,12 @@ class Rifnote_Search_REST_API {
             'permission_callback' => '__return_true',
         ));
 
+        register_rest_route('rifnote/v1', '/contact', array(
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => array(__CLASS__, 'contact'),
+            'permission_callback' => '__return_true',
+        ));
+
         register_rest_route('rifnote/v1', '/story/(?P<cluster_id>[^/]+)', array(
             'methods' => WP_REST_Server::READABLE,
             'callback' => array(__CLASS__, 'story_cluster'),
@@ -947,6 +953,47 @@ class Rifnote_Search_REST_API {
         }
 
         return rest_ensure_response($submission);
+    }
+
+    public static function contact(WP_REST_Request $request) {
+        $nonce = sanitize_text_field((string) $request->get_header('X-WP-Nonce'));
+        if (!$nonce || !wp_verify_nonce($nonce, 'wp_rest')) {
+            return new WP_Error('rifnote_invalid_contact_nonce', __('Please refresh the page and try again.', 'rifnote-search'), array('status' => 403));
+        }
+
+        $rate = Rifnote_Search_Hardening::rate_limit('contact', 5, HOUR_IN_SECONDS);
+        if (is_wp_error($rate)) return $rate;
+
+        $data = $request->get_json_params();
+        if (!is_array($data) || !$data) $data = $request->get_body_params();
+        $data = is_array($data) ? $data : array();
+
+        if (!empty($data['website'])) {
+            Rifnote_Search_Launch_Readiness::log_suspicious('honeypot', 'Contact form honeypot filled.', array('endpoint' => 'contact'));
+            return new WP_Error('rifnote_suspicious_contact', __('Your message could not be accepted.', 'rifnote-search'), array('status' => 400));
+        }
+
+        $name = sanitize_text_field((string) ($data['name'] ?? ''));
+        $email = sanitize_email((string) ($data['email'] ?? ''));
+        $topic = sanitize_text_field((string) ($data['topic'] ?? 'General enquiry'));
+        $message = sanitize_textarea_field((string) ($data['message'] ?? ''));
+
+        if (strlen($name) < 2 || strlen($name) > 120 || !is_email($email) || strlen($topic) > 100 || strlen($message) < 10 || strlen($message) > 5000) {
+            return new WP_Error('rifnote_invalid_contact', __('Enter a valid name, email address and message between 10 and 5,000 characters.', 'rifnote-search'), array('status' => 400));
+        }
+
+        $destination = sanitize_email((string) get_option('admin_email'));
+        $site_name = wp_specialchars_decode(get_bloginfo('name'), ENT_QUOTES);
+        $subject = sprintf('[%s Contact] %s', $site_name, $topic ?: 'General enquiry');
+        $body = "Name: {$name}\nEmail: {$email}\nTopic: {$topic}\n\nMessage:\n{$message}";
+        $headers = array('Content-Type: text/plain; charset=UTF-8', 'Reply-To: ' . $name . ' <' . $email . '>');
+
+        if (!$destination || !wp_mail($destination, $subject, $body, $headers)) {
+            Rifnote_Search_Hardening::log_error('contact', 'WordPress could not deliver a contact form message.', array('topic' => $topic), 'warning');
+            return new WP_Error('rifnote_contact_delivery_failed', __('Your message could not be delivered right now. Please call us instead.', 'rifnote-search'), array('status' => 500));
+        }
+
+        return rest_ensure_response(array('ok' => true, 'message' => __('Thanks—your message has been sent to the Rifnote team.', 'rifnote-search')));
     }
 
     public static function publisher_signup(WP_REST_Request $request) {

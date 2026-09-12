@@ -607,6 +607,19 @@ export async function submitPublisherStory(payload) {
   return data;
 }
 
+export async function submitContactMessage(payload) {
+  const baseUrl = restBaseUrl();
+  if (!baseUrl) throw new Error('Contact service is unavailable.');
+  const response = await fetch(new URL('rifnote/v1/contact', baseUrl), {
+    method: 'POST',
+    headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.message || 'Your message could not be sent.');
+  return result;
+}
+
 export async function submitPublisherSignup(payload) {
   const baseUrl = restBaseUrl();
 
