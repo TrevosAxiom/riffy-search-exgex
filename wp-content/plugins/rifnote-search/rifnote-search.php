@@ -3,7 +3,7 @@
  * Plugin Name: Rifnote Search
  * Plugin URI: https://rifnote.com/
  * Description: AI-powered news search and publisher discovery plugin for Rifnote.
- * Version: 0.2.53
+ * Version: 0.2.54
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Rifnote
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RIFNOTE_SEARCH_VERSION', '0.2.53');
+define('RIFNOTE_SEARCH_VERSION', '0.2.54');
 define('RIFNOTE_SEARCH_FILE', __FILE__);
 define('RIFNOTE_SEARCH_DIR', plugin_dir_path(__FILE__));
 define('RIFNOTE_SEARCH_URL', plugin_dir_url(__FILE__));
@@ -71,6 +71,7 @@ final class Rifnote_Search_Plugin {
 
     private function __construct() {
         add_action('plugins_loaded', array($this, 'load_textdomain'));
+        add_action('plugins_loaded', array($this, 'migrate_typography_defaults'), 20);
         add_action('plugins_loaded', array('Rifnote_Search_Trending', 'maybe_install'));
         add_action('plugins_loaded', array('Rifnote_Search_Publishers', 'maybe_install'));
         add_action('plugins_loaded', array('Rifnote_Search_Analytics', 'maybe_install'));
@@ -312,9 +313,10 @@ final class Rifnote_Search_Plugin {
 
     public function enqueue_google_fonts() {
         $fonts = array_unique(array_filter(array(
-            get_option('rifnote_typography_heading_font', 'Google Sans'),
-            get_option('rifnote_typography_body_font', 'Roboto'),
-            'Roboto',
+            get_option('rifnote_typography_heading_font', 'Outfit'),
+            get_option('rifnote_typography_body_font', 'Montserrat'),
+            'Outfit',
+            'Montserrat',
         )));
         $families = array();
 
@@ -329,7 +331,7 @@ final class Rifnote_Search_Plugin {
         }
 
         if (!$families) {
-            $families[] = 'family=Roboto:ital,wght@0,300..900;1,300..900';
+            $families[] = 'family=Montserrat:ital,wght@0,300..900;1,300..900&family=Outfit:wght@300..900';
         }
 
         wp_enqueue_style(
@@ -341,16 +343,26 @@ final class Rifnote_Search_Plugin {
     }
 
     private function typography_inline_css() {
-        $heading_font = sanitize_text_field((string) get_option('rifnote_typography_heading_font', 'Google Sans'));
-        $body_font = sanitize_text_field((string) get_option('rifnote_typography_body_font', 'Roboto'));
+        $heading_font = sanitize_text_field((string) get_option('rifnote_typography_heading_font', 'Outfit'));
+        $body_font = sanitize_text_field((string) get_option('rifnote_typography_body_font', 'Montserrat'));
         $title_size = Rifnote_Search_Admin::sanitize_css_size(get_option('rifnote_typography_story_title_size', 'clamp(1.95rem, 3.45vw, 3.25rem)'));
         $body_size = Rifnote_Search_Admin::sanitize_css_size(get_option('rifnote_typography_body_size', 'clamp(1.02rem, 1vw, 1.1rem)'));
         $title_weight = Rifnote_Search_Admin::sanitize_font_weight(get_option('rifnote_typography_story_title_weight', 840));
         $body_weight = Rifnote_Search_Admin::sanitize_font_weight(get_option('rifnote_typography_body_weight', 430));
-        $heading_stack = '"' . esc_attr($heading_font) . '", "Product Sans", Roboto, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
-        $body_stack = '"' . esc_attr($body_font) . '", Roboto, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+        $heading_stack = '"' . esc_attr($heading_font) . '", Outfit, Montserrat, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+        $body_stack = '"' . esc_attr($body_font) . '", Montserrat, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
 
-        return ':root,.rifnote-search-root{--rs-font-heading:' . $heading_stack . ';--rs-font-reading:' . $body_stack . ';--rs-font-ui:' . $body_stack . ';--rs-story-title-size:' . esc_html($title_size) . ';--rs-story-title-weight:' . absint($title_weight) . ';--rs-body-size:' . esc_html($body_size) . ';--rs-body-weight:' . absint($body_weight) . '}';
+        return ':root,.rifnote-search-root{--rs-font-heading:' . $heading_stack . ';--rs-font-reading:' . $body_stack . ';--rs-font-body:' . $body_stack . ';--rs-font-ui:' . $body_stack . ';--rs-story-title-size:' . esc_html($title_size) . ';--rs-story-title-weight:' . absint($title_weight) . ';--rs-body-size:' . esc_html($body_size) . ';--rs-body-weight:' . absint($body_weight) . '}';
+    }
+
+    public function migrate_typography_defaults() {
+        if (get_option('rifnote_typography_outfit_montserrat_v1', false)) return;
+
+        $heading = (string) get_option('rifnote_typography_heading_font', '');
+        $body = (string) get_option('rifnote_typography_body_font', '');
+        if ('' === $heading || 'Google Sans' === $heading) update_option('rifnote_typography_heading_font', 'Outfit', false);
+        if ('' === $body || 'Roboto' === $body) update_option('rifnote_typography_body_font', 'Montserrat', false);
+        update_option('rifnote_typography_outfit_montserrat_v1', 1, false);
     }
 
     public function print_social_card_tags() {
@@ -473,11 +485,11 @@ final class Rifnote_Search_Plugin {
         $brand_image = $logo_url ? $logo_url : $icon_url;
 
         return '
-body.login.rifnote-login-page{min-height:100vh;background:radial-gradient(circle at 12% 0%,rgba(215,25,32,.12),transparent 34%),radial-gradient(circle at 88% 18%,rgba(22,163,74,.12),transparent 34%),#f6f8fb;color:#101828;font-family:Roboto,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body.login.rifnote-login-page{min-height:100vh;background:radial-gradient(circle at 12% 0%,rgba(215,25,32,.12),transparent 34%),radial-gradient(circle at 88% 18%,rgba(22,163,74,.12),transparent 34%),#f6f8fb;color:#101828;font-family:Montserrat,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
 body.login.rifnote-login-page:before{content:"";position:fixed;inset:0;background-image:linear-gradient(rgba(16,24,40,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(16,24,40,.035) 1px,transparent 1px);background-size:34px 34px;pointer-events:none}
 body.login.rifnote-login-page #login{position:relative;width:min(440px,calc(100vw - 32px));padding:8vh 0 32px}
 body.login.rifnote-login-page h1 a{width:100%;height:82px;margin:0 auto 22px;background-image:url("' . esc_url($brand_image) . '");background-size:contain;background-position:center;background-repeat:no-repeat;text-indent:-9999px;filter:drop-shadow(0 16px 32px rgba(16,24,40,.12))}
-body.login.rifnote-login-page h1:after{content:"Your Rifnote account";display:block;margin:-8px 0 20px;color:#667085;font-family:"Google Sans","Product Sans",Roboto,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:15px;font-weight:750;text-align:center}
+body.login.rifnote-login-page h1:after{content:"Your Rifnote account";display:block;margin:-8px 0 20px;color:#667085;font-family:Outfit,Montserrat,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:15px;font-weight:750;text-align:center}
 body.login.rifnote-login-page form{border:1px solid #e1e7ef;border-radius:28px;background:rgba(255,255,255,.94);box-shadow:0 24px 70px rgba(16,24,40,.12);padding:28px}
 body.login.rifnote-login-page label{color:#344054;font-size:13px;font-weight:800}
 body.login.rifnote-login-page input.input{min-height:52px;border:1px solid #dbe3ee;border-radius:18px;background:#f8fafc;color:#101828;font-size:18px;font-weight:650;padding:10px 14px;box-shadow:none}

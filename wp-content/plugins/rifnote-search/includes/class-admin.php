@@ -2506,6 +2506,7 @@ class Rifnote_Search_Admin {
 
     public static function google_font_choices() {
         return array(
+            'Outfit' => __('Outfit', 'rifnote-search'),
             'Google Sans' => __('Google Sans / Product Sans stack', 'rifnote-search'),
             'Roboto' => __('Roboto', 'rifnote-search'),
             'Inter' => __('Inter', 'rifnote-search'),
@@ -2524,7 +2525,7 @@ class Rifnote_Search_Admin {
         $value = sanitize_text_field((string) $value);
         $choices = array_keys(self::google_font_choices());
 
-        return in_array($value, $choices, true) ? $value : 'Roboto';
+        return in_array($value, $choices, true) ? $value : 'Montserrat';
     }
 
     public static function sanitize_font_weight($value) {
@@ -3095,8 +3096,8 @@ class Rifnote_Search_Admin {
         register_setting('rifnote_search_settings', 'rifnote_site_logo_width_desktop', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_logo_width'), 'default' => 220));
         register_setting('rifnote_search_settings', 'rifnote_home_takeover_logo_size_mobile', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_mobile_logo_size'), 'default' => 40));
         register_setting('rifnote_search_settings', 'rifnote_default_story_image_url', array('type' => 'string', 'sanitize_callback' => 'esc_url_raw', 'default' => ''));
-        register_setting('rifnote_search_settings', 'rifnote_typography_heading_font', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_google_font'), 'default' => 'Google Sans'));
-        register_setting('rifnote_search_settings', 'rifnote_typography_body_font', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_google_font'), 'default' => 'Roboto'));
+        register_setting('rifnote_search_settings', 'rifnote_typography_heading_font', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_google_font'), 'default' => 'Outfit'));
+        register_setting('rifnote_search_settings', 'rifnote_typography_body_font', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_google_font'), 'default' => 'Montserrat'));
         register_setting('rifnote_search_settings', 'rifnote_typography_story_title_size', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_css_size'), 'default' => 'clamp(1.95rem, 3.45vw, 3.25rem)'));
         register_setting('rifnote_search_settings', 'rifnote_typography_story_title_weight', array('type' => 'integer', 'sanitize_callback' => array(__CLASS__, 'sanitize_font_weight'), 'default' => 840));
         register_setting('rifnote_search_settings', 'rifnote_typography_body_size', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_css_size'), 'default' => 'clamp(1.02rem, 1vw, 1.1rem)'));
@@ -3578,7 +3579,7 @@ class Rifnote_Search_Admin {
                 </table>
 
                 <h2><?php esc_html_e('Typography', 'rifnote-search'); ?></h2>
-                <p><?php esc_html_e('Tune the platform font stack and story reading sizes from one place. Normal Google Fonts load automatically; Google Sans uses a Google-style stack fallback.', 'rifnote-search'); ?></p>
+                <p><?php esc_html_e('Tune the platform font stack and story reading sizes from one place. Outfit is the default for headings and Montserrat is the default for body copy.', 'rifnote-search'); ?></p>
                 <table class="form-table" role="presentation">
                     <tbody>
                         <tr>
@@ -3586,7 +3587,7 @@ class Rifnote_Search_Admin {
                             <td>
                                 <select id="rifnote_typography_heading_font" name="rifnote_typography_heading_font">
                                     <?php foreach (self::google_font_choices() as $font => $label) : ?>
-                                        <option value="<?php echo esc_attr($font); ?>" <?php selected(get_option('rifnote_typography_heading_font', 'Google Sans'), $font); ?>><?php echo esc_html($label); ?></option>
+                                        <option value="<?php echo esc_attr($font); ?>" <?php selected(get_option('rifnote_typography_heading_font', 'Outfit'), $font); ?>><?php echo esc_html($label); ?></option>
                                     <?php endforeach; ?>
                                 </select>
                                 <p class="description"><?php esc_html_e('Used for headers, story titles, navigation labels and key UI headings.', 'rifnote-search'); ?></p>
@@ -3597,7 +3598,7 @@ class Rifnote_Search_Admin {
                             <td>
                                 <select id="rifnote_typography_body_font" name="rifnote_typography_body_font">
                                     <?php foreach (self::google_font_choices() as $font => $label) : ?>
-                                        <option value="<?php echo esc_attr($font); ?>" <?php selected(get_option('rifnote_typography_body_font', 'Roboto'), $font); ?>><?php echo esc_html($label); ?></option>
+                                        <option value="<?php echo esc_attr($font); ?>" <?php selected(get_option('rifnote_typography_body_font', 'Montserrat'), $font); ?>><?php echo esc_html($label); ?></option>
                                     <?php endforeach; ?>
                                 </select>
                                 <p class="description"><?php esc_html_e('Used for article body copy, captions, forms and general reading.', 'rifnote-search'); ?></p>

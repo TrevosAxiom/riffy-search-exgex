@@ -613,8 +613,8 @@ self.addEventListener('fetch', (event) => {
     <meta name="theme-color" content="#ed1c24" />
     <title>Rifnote Search Offline</title>
     <style>
-        body{margin:0;background:#f7f8fb;color:#111827;font-family:Roboto,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
-        h1{font-family:"Google Sans","Product Sans",Roboto,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+        body{margin:0;background:#f7f8fb;color:#111827;font-family:Montserrat,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+        h1{font-family:Outfit,Montserrat,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
         main{display:grid;min-height:100vh;place-items:center;padding:24px}
         section{max-width:560px;border:1px solid #dfe4ec;border-radius:24px;background:#fff;box-shadow:0 12px 34px rgb(17 24 39 / 10%);padding:32px}
         span{display:inline-flex;border-radius:999px;background:#f3f5f8;color:#ed1c24;font-weight:800;padding:8px 12px}
