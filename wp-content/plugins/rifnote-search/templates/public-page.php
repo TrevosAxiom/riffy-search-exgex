@@ -345,7 +345,7 @@ if (is_singular()) {
 <head>
     <meta charset="<?php bloginfo('charset'); ?>" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <script>
+    <script data-cfasync="false">
         window.RIFNOTE_SEARCH = <?php echo wp_json_encode($plugin->runtime_context()); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>;
     </script>
     <?php wp_head(); ?>
