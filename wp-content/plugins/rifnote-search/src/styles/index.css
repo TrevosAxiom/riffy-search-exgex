@@ -15190,6 +15190,7 @@ body.category-notes .rs-public-hero h1 {
 .rs-public-story .rs-public-standfirst,
 .rs-public-story .rs-public-body,
 .rs-public-story .rs-public-source-cta,
+.rs-public-story .rs-whatsapp-connect,
 .rs-public-story .rs-public-news-now,
 .rs-public-story .rs-public-pages,
 .rs-public-story .rs-public-prevnext {
@@ -15220,6 +15221,158 @@ body.category-notes .rs-public-hero h1 {
   font-size: 1.04rem;
   font-style: italic;
   font-weight: 760;
+}
+
+.rs-whatsapp-connect {
+  max-width: 920px;
+  margin-top: 44px;
+}
+
+.rs-whatsapp-connect > header {
+  display: grid;
+  gap: 5px;
+  margin-bottom: 15px;
+}
+
+.rs-whatsapp-connect > header span {
+  color: #128c4b;
+  font-size: .72rem;
+  font-weight: 900;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.rs-whatsapp-connect > header h2 {
+  margin: 0;
+  color: #101828;
+  font-family: var(--rs-font-heading);
+  font-size: clamp(1.25rem, 2vw, 1.7rem);
+  letter-spacing: -.025em;
+}
+
+.rs-whatsapp-connect-list {
+  display: grid;
+  gap: 14px;
+}
+
+.rs-whatsapp-card {
+  position: relative;
+  display: grid;
+  aspect-ratio: 4 / 1;
+  min-height: 170px;
+  overflow: hidden;
+  border: 1px solid rgb(255 255 255 / 20%);
+  border-radius: 24px;
+  background: #073d2c;
+  color: #fff;
+  isolation: isolate;
+  text-decoration: none !important;
+  box-shadow: 0 20px 48px rgb(8 45 32 / 16%);
+  transition: transform .2s ease, box-shadow .2s ease;
+}
+
+.rs-whatsapp-card:hover,
+.rs-whatsapp-card:focus-visible {
+  color: #fff;
+  transform: translateY(-3px);
+  box-shadow: 0 26px 58px rgb(8 45 32 / 24%);
+}
+
+.rs-whatsapp-card > img,
+.rs-whatsapp-card-shade {
+  position: absolute;
+  inset: 0;
+  z-index: -2;
+  width: 100%;
+  height: 100%;
+}
+
+.rs-whatsapp-card > img {
+  object-fit: cover;
+  object-position: center;
+  transition: transform .5s ease;
+}
+
+.rs-whatsapp-card:hover > img {
+  transform: scale(1.025);
+}
+
+.rs-whatsapp-card-shade {
+  z-index: -1;
+  background: linear-gradient(90deg, rgb(1 23 17 / 93%) 0%, rgb(3 45 31 / 78%) 55%, rgb(3 45 31 / 10%) 100%);
+}
+
+.rs-whatsapp-card.is-community .rs-whatsapp-card-shade {
+  background: linear-gradient(90deg, rgb(6 20 31 / 94%) 0%, rgb(7 57 47 / 76%) 55%, rgb(7 57 47 / 8%) 100%);
+}
+
+.rs-whatsapp-card-copy {
+  display: grid;
+  align-content: center;
+  justify-items: start;
+  gap: 8px;
+  max-width: 70%;
+  padding: clamp(20px, 3vw, 34px);
+}
+
+.rs-whatsapp-card-copy small {
+  color: #8ff0b6;
+  font-size: .7rem;
+  font-style: normal;
+  font-weight: 900;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+
+.rs-whatsapp-card-copy strong {
+  color: #fff;
+  font-family: var(--rs-font-heading);
+  font-size: clamp(1.15rem, 2.1vw, 1.75rem);
+  line-height: 1.08;
+  letter-spacing: -.025em;
+}
+
+.rs-whatsapp-card-copy em {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 3px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  background: #25d366;
+  color: #062819;
+  font-size: .75rem;
+  font-style: normal;
+  font-weight: 900;
+}
+
+.rs-whatsapp-card-copy em b {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.rs-whatsapp-card-mark {
+  position: absolute;
+  top: 50%;
+  right: clamp(22px, 5vw, 54px);
+  display: grid;
+  width: clamp(58px, 8vw, 86px);
+  aspect-ratio: 1;
+  place-items: center;
+  border: 1px solid rgb(255 255 255 / 22%);
+  border-radius: 50%;
+  background: rgb(37 211 102 / 92%);
+  box-shadow: 0 18px 42px rgb(0 0 0 / 25%);
+  transform: translateY(-50%);
+}
+
+.rs-whatsapp-card-mark svg {
+  width: 58%;
+  fill: none;
+  stroke: #fff;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 1.6;
 }
 
 .rs-public-news-now {
@@ -15985,6 +16138,7 @@ body.category-notes .rs-public-hero h1 {
   .rs-public-story .rs-public-standfirst,
   .rs-public-story .rs-public-body,
   .rs-public-story .rs-public-source-cta,
+  .rs-public-story .rs-whatsapp-connect,
   .rs-public-story .rs-public-news-now,
   .rs-public-story .rs-public-pages,
   .rs-public-story .rs-public-prevnext,
@@ -15999,6 +16153,24 @@ body.category-notes .rs-public-hero h1 {
 
   .rs-public-story .rs-public-body {
     font-size: min(var(--rs-body-size, 1rem), 1.05rem);
+  }
+
+  .rs-whatsapp-card {
+    aspect-ratio: auto;
+    min-height: 220px;
+    border-radius: 20px;
+  }
+
+  .rs-whatsapp-card-copy {
+    max-width: calc(100% - 72px);
+    padding: 22px 18px;
+  }
+
+  .rs-whatsapp-card-mark {
+    top: 18px;
+    right: 16px;
+    width: 48px;
+    transform: none;
   }
 
   .rs-public-latest-sidebar {

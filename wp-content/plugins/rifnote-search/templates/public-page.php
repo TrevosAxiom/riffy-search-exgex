@@ -457,6 +457,36 @@ if (is_singular()) {
                             <div class="rs-public-body">
                                 <?php the_content(); ?>
                             </div>
+                            <?php if ('post' === get_post_type()) : ?>
+                                <aside class="rs-whatsapp-connect" aria-labelledby="rs-whatsapp-connect-title">
+                                    <header>
+                                        <span><?php esc_html_e('Stay close to the story', 'rifnote-search'); ?></span>
+                                        <h2 id="rs-whatsapp-connect-title"><?php esc_html_e('Get Rifnote updates on WhatsApp', 'rifnote-search'); ?></h2>
+                                    </header>
+                                    <div class="rs-whatsapp-connect-list">
+                                        <a class="rs-whatsapp-card is-channel" href="https://whatsapp.com/channel/0029VbCf6KRCHDycynZUmQ06" target="_blank" rel="noopener noreferrer">
+                                            <img src="<?php echo esc_url(RIFNOTE_SEARCH_URL . 'assets/whatsapp-editorial-banner.png'); ?>" alt="" loading="lazy" />
+                                            <span class="rs-whatsapp-card-shade" aria-hidden="true"></span>
+                                            <span class="rs-whatsapp-card-copy">
+                                                <small><?php esc_html_e('Rifnote Channel', 'rifnote-search'); ?></small>
+                                                <strong><?php esc_html_e('Breaking stories, without the noise.', 'rifnote-search'); ?></strong>
+                                                <em><?php esc_html_e('Follow channel', 'rifnote-search'); ?><b aria-hidden="true">→</b></em>
+                                            </span>
+                                            <span class="rs-whatsapp-card-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 11.7a8 8 0 0 1-11.8 7L4 20l1.3-4A8 8 0 1 1 20 11.7Z"/><path d="M8.6 8.1c.2-.4.4-.4.7-.4h.4c.2 0 .4 0 .5.4l.8 1.8c.1.3.1.5-.1.7l-.6.7c-.2.2-.1.4 0 .6.7 1.2 1.6 2.1 2.8 2.7.3.2.5.1.7-.1l.8-1c.2-.2.4-.3.7-.2l1.9.9c.3.1.4.3.4.5 0 .3-.1 1.4-.9 2-.7.6-1.6.8-2.6.5-1.2-.3-2.8-1-4.5-2.5-1.4-1.3-2.5-2.9-3-4.2-.5-1.3 0-2 .3-2.4Z"/></svg></span>
+                                        </a>
+                                        <a class="rs-whatsapp-card is-community" href="https://chat.whatsapp.com/ILDZFJOFnyaLOSEyPo7Rqt" target="_blank" rel="noopener noreferrer">
+                                            <img src="<?php echo esc_url(RIFNOTE_SEARCH_URL . 'assets/whatsapp-editorial-banner.png'); ?>" alt="" loading="lazy" />
+                                            <span class="rs-whatsapp-card-shade" aria-hidden="true"></span>
+                                            <span class="rs-whatsapp-card-copy">
+                                                <small><?php esc_html_e('Rifnote Community', 'rifnote-search'); ?></small>
+                                                <strong><?php esc_html_e('Join the conversation around the news.', 'rifnote-search'); ?></strong>
+                                                <em><?php esc_html_e('Join community', 'rifnote-search'); ?><b aria-hidden="true">→</b></em>
+                                            </span>
+                                            <span class="rs-whatsapp-card-mark" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M20 11.7a8 8 0 0 1-11.8 7L4 20l1.3-4A8 8 0 1 1 20 11.7Z"/><path d="M8.6 8.1c.2-.4.4-.4.7-.4h.4c.2 0 .4 0 .5.4l.8 1.8c.1.3.1.5-.1.7l-.6.7c-.2.2-.1.4 0 .6.7 1.2 1.6 2.1 2.8 2.7.3.2.5.1.7-.1l.8-1c.2-.2.4-.3.7-.2l1.9.9c.3.1.4.3.4.5 0 .3-.1 1.4-.9 2-.7.6-1.6.8-2.6.5-1.2-.3-2.8-1-4.5-2.5-1.4-1.3-2.5-2.9-3-4.2-.5-1.3 0-2 .3-2.4Z"/></svg></span>
+                                        </a>
+                                    </div>
+                                </aside>
+                            <?php endif; ?>
                             <?php if ('post' === get_post_type() && ($news_now_posts || current_user_can('manage_options'))) : ?>
                                 <section class="rs-public-news-now" aria-label="<?php esc_attr_e('Trending now', 'rifnote-search'); ?>" data-rs-trending-now>
                                     <div class="rs-public-trending-head">
