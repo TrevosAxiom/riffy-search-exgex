@@ -208,6 +208,22 @@ export async function getTrendingTopics({ limit = 10 } = {}) {
   return response.json();
 }
 
+export async function updateLiveTrending(payload = {}) {
+  const baseUrl = restBaseUrl();
+  if (!baseUrl) throw new Error('Rifnote REST is not available yet.');
+
+  const url = new URL('rifnote/v1/admin/live-trending', baseUrl);
+  const response = await fetch(url, {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Could not update live Trending topics.');
+  return data;
+}
+
 export async function getSuggestions({ query = '', limit = 8 } = {}) {
   const baseUrl = restBaseUrl();
 

@@ -640,6 +640,18 @@ class Rifnote_Search_REST_API {
             'callback' => array(__CLASS__, 'reindex_search'),
             'permission_callback' => array(__CLASS__, 'manage_options_permission'),
         ));
+
+        register_rest_route('rifnote/v1', '/admin/trending-now', array(
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => array(__CLASS__, 'update_trending_now'),
+            'permission_callback' => array(__CLASS__, 'manage_options_permission'),
+        ));
+
+        register_rest_route('rifnote/v1', '/admin/live-trending', array(
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => array(__CLASS__, 'update_live_trending'),
+            'permission_callback' => array(__CLASS__, 'manage_options_permission'),
+        ));
     }
 
     public static function manage_options_permission() {
@@ -2181,6 +2193,86 @@ class Rifnote_Search_REST_API {
             'success' => true,
             'indexed' => Rifnote_Search_Index::reindex_all(),
             'health' => Rifnote_Search_Index::health(),
+        ));
+    }
+
+    public static function update_trending_now(WP_REST_Request $request) {
+        $data = $request->get_json_params();
+        $data = is_array($data) ? $data : array();
+        $action = sanitize_key((string) ($data['action'] ?? ''));
+
+        if ('wpp' === $action) {
+            update_option('rifnote_trending_now_mode', 'wpp', false);
+            delete_option('rifnote_trending_now_override_ids');
+            return rest_ensure_response(array('success' => true, 'mode' => 'wpp', 'ids' => array()));
+        }
+
+        if (!in_array($action, array('add', 'remove'), true)) {
+            return new WP_Error('rifnote_invalid_trending_action', __('Choose a valid Trending Now action.', 'rifnote-search'), array('status' => 400));
+        }
+
+        $mode = sanitize_key((string) get_option('rifnote_trending_now_mode', 'wpp'));
+        $ids = 'manual' === $mode
+            ? (array) get_option('rifnote_trending_now_override_ids', array())
+            : (array) ($data['visible_ids'] ?? array());
+        $ids = array_values(array_unique(array_filter(array_map('absint', $ids))));
+        $post_id = absint($data['post_id'] ?? 0);
+
+        if ('add' === $action) {
+            if (!$post_id || 'post' !== get_post_type($post_id) || 'publish' !== get_post_status($post_id)) {
+                return new WP_Error('rifnote_invalid_trending_post', __('Choose a published post.', 'rifnote-search'), array('status' => 400));
+            }
+            $ids = array_values(array_unique(array_merge(array($post_id), $ids)));
+        } else {
+            $ids = array_values(array_diff($ids, array($post_id)));
+        }
+
+        $ids = array_slice($ids, 0, 12);
+        update_option('rifnote_trending_now_mode', 'manual', false);
+        update_option('rifnote_trending_now_override_ids', $ids, false);
+
+        return rest_ensure_response(array('success' => true, 'mode' => 'manual', 'ids' => $ids));
+    }
+
+    public static function update_live_trending(WP_REST_Request $request) {
+        $data = $request->get_json_params();
+        $data = is_array($data) ? $data : array();
+        $action = sanitize_key((string) ($data['action'] ?? 'save'));
+
+        if ('automatic' === $action) {
+            delete_option('rifnote_live_trending_override_topics');
+            delete_option('rifnote_live_trending_override_expires_at');
+            return rest_ensure_response(array('success' => true, 'mode' => 'automatic'));
+        }
+
+        if ('save' !== $action) {
+            return new WP_Error('rifnote_invalid_live_trending_action', __('Choose a valid live Trending action.', 'rifnote-search'), array('status' => 400));
+        }
+
+        $raw_topics = is_array($data['topics'] ?? null) ? $data['topics'] : array();
+        $topics = array();
+        foreach ($raw_topics as $topic) {
+            $topic = trim(sanitize_text_field((string) $topic));
+            if (!$topic || strlen($topic) > 54) continue;
+            $key = sanitize_title($topic);
+            if ($key && !isset($topics[$key])) $topics[$key] = $topic;
+        }
+
+        $topics = array_slice(array_values($topics), 0, 20);
+        if (!$topics) {
+            return new WP_Error('rifnote_empty_live_trending', __('Add at least one search topic for the manual override.', 'rifnote-search'), array('status' => 400));
+        }
+
+        $hours = max(1, min(720, absint($data['expires_in_hours'] ?? 24)));
+        $expires_at = time() + ($hours * HOUR_IN_SECONDS);
+        update_option('rifnote_live_trending_override_topics', $topics, false);
+        update_option('rifnote_live_trending_override_expires_at', $expires_at, false);
+
+        return rest_ensure_response(array(
+            'success' => true,
+            'mode' => 'manual',
+            'topics' => $topics,
+            'expires_at' => gmdate(DATE_ATOM, $expires_at),
         ));
     }
 }

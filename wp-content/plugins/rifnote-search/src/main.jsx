@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { ArrowLeft, ArrowRight, Bookmark, CalendarDays, Clock3, Cloud, CloudRain, CloudSun, DollarSign, ExternalLink, Flame, Globe2, Goal, Home, Landmark, Mail, Map as MapIcon, Menu, Newspaper, Pencil, Phone, Play, Radio, RotateCcw, Search, Shield, Sun, Trash2, TrendingUp, Trophy, UserRound, Volume2, VolumeX } from 'lucide-react';
-import { getAdInventory, getAdvertiserDashboard, getAnonKey, getDailyBriefing, getFeedDiagnostics, getFootballCompetition, getFootballFinished, getFootballFixtureDetails, getFootballFixtures, getFootballLive, getFootballPlayerProfile, getFootballPlayers, getFootballTeamProfile, getFootballTeams, getFootballTransfers, getFootballUpcoming, getForYou, getHomeLeadStory, getHomeNotes, getLiveMarkets, getLiveWeather, getNotifications, getPublisherStats, getRifnoteAiAnswer, getSocialEmbed, getSourceProfile, getStoryChannel, getStoryCluster, getSuggestions, getTrendingTopics, getWidget, getWorldWeather, registerDevice, saveAlert, savePreference, searchRifnote, subscribeNewsletter, submitAdvertiserPaymentProof, submitAdvertiserSignup, submitBetaFeedback, submitContactMessage, submitLegalRequest, submitPublisherSignup, submitPublisherStory, submitSponsorRequest, subscribeNoResult, trackAnalyticsEvent, trackSponsoredClick, trashStory, updateAdvertiserProfile, updateNotification, uploadMedia } from './api.js';
+import { getAdInventory, getAdvertiserDashboard, getAnonKey, getDailyBriefing, getFeedDiagnostics, getFootballCompetition, getFootballFinished, getFootballFixtureDetails, getFootballFixtures, getFootballLive, getFootballPlayerProfile, getFootballPlayers, getFootballTeamProfile, getFootballTeams, getFootballTransfers, getFootballUpcoming, getForYou, getHomeLeadStory, getHomeNotes, getLiveMarkets, getLiveWeather, getNotifications, getPublisherStats, getRifnoteAiAnswer, getSocialEmbed, getSourceProfile, getStoryChannel, getStoryCluster, getSuggestions, getTrendingTopics, getWidget, getWorldWeather, registerDevice, saveAlert, savePreference, searchRifnote, subscribeNewsletter, submitAdvertiserPaymentProof, submitAdvertiserSignup, submitBetaFeedback, submitContactMessage, submitLegalRequest, submitPublisherSignup, submitPublisherStory, submitSponsorRequest, subscribeNoResult, trackAnalyticsEvent, trackSponsoredClick, trashStory, updateAdvertiserProfile, updateLiveTrending, updateNotification, uploadMedia } from './api.js';
 import { rifnoteCategories, searchTabs } from './data/rifnote.js';
 import './styles/index.css';
 
@@ -7858,14 +7858,23 @@ function BottomNav({ state, onLiveOpen = () => {} }) {
 
 function TrendingTopics({ state, live = false }) {
   const [topics, setTopics] = useState([]);
+  const [mode, setMode] = useState('automatic');
+  const [expiresAt, setExpiresAt] = useState('');
   const [updatedAt, setUpdatedAt] = useState(new Date());
   const [loading, setLoading] = useState(true);
+  const [topicInput, setTopicInput] = useState('');
+  const [expiryHours, setExpiryHours] = useState(24);
+  const [saving, setSaving] = useState(false);
+  const [adminMessage, setAdminMessage] = useState('');
+  const canManage = live && Boolean(window.RIFNOTE_SEARCH?.canManageOptions);
 
   const refreshTopics = useCallback(() => {
     setLoading(true);
     getTrendingTopics({ limit: 10 })
       .then((payload) => {
         setTopics(payload.topics ?? []);
+        setMode(payload.mode || 'automatic');
+        setExpiresAt(payload.override_expires_at || '');
         setUpdatedAt(new Date());
       })
       .catch(() => {
@@ -7877,13 +7886,57 @@ function TrendingTopics({ state, live = false }) {
 
   useLiveInterval(refreshTopics, 900000);
 
+  const saveOverride = (nextTopics) => {
+    if (!nextTopics.length) {
+      restoreAutomatic();
+      return;
+    }
+    setSaving(true);
+    setAdminMessage('Saving…');
+    updateLiveTrending({ action: 'save', topics: nextTopics.map((topic) => topic.topic), expires_in_hours: expiryHours })
+      .then(() => {
+        setAdminMessage('Saved');
+        setTopicInput('');
+        refreshTopics();
+      })
+      .catch((error) => setAdminMessage(error.message))
+      .finally(() => setSaving(false));
+  };
+
+  const addTopic = () => {
+    const value = topicInput.trim();
+    if (!value) return setAdminMessage('Enter a search topic first.');
+    saveOverride([{ topic: value }, ...topics.filter((topic) => topic.topic.toLowerCase() !== value.toLowerCase())]);
+  };
+
+  const restoreAutomatic = () => {
+    setSaving(true);
+    setAdminMessage('Restoring…');
+    updateLiveTrending({ action: 'automatic' })
+      .then(() => {
+        setAdminMessage('Automatic topics restored');
+        refreshTopics();
+      })
+      .catch((error) => setAdminMessage(error.message))
+      .finally(() => setSaving(false));
+  };
+
   return (
     <Card className={live ? 'rs-live-card' : ''}>
       <CardHeader title="Trending" action={<LiveBadge label={live ? 'Live' : 'Hot'} date={updatedAt} />} />
       <div className="rs-pills">
-        {topics.map((topic) => <button key={topic.slug || topic.topic} type="button" onClick={() => state?.setQuery?.(topic.topic)}>{topic.topic}</button>)}
+        {topics.map((topic) => <span className="rs-live-trending-pill" key={topic.slug || topic.topic}><button type="button" onClick={() => state?.setQuery?.(topic.topic)}>{topic.topic}</button>{canManage ? <button className="rs-live-trending-remove" type="button" disabled={saving} onClick={() => saveOverride(topics.filter((item) => item.topic !== topic.topic))} aria-label={`Remove ${topic.topic}`}>×</button> : null}</span>)}
         {!topics.length ? <span className="rs-empty-mini">{loading ? 'Checking the latest keywords...' : 'No trending keywords saved yet.'}</span> : null}
       </div>
+      {canManage ? <div className="rs-live-trending-admin">
+        <div className="rs-live-trending-mode"><strong>{mode === 'manual' ? 'Manual override' : 'Automatic search trends'}</strong>{mode === 'manual' && expiresAt ? <span>Expires {new Date(expiresAt).toLocaleString()}</span> : null}</div>
+        <label><span>Search topic</span><input type="text" maxLength="54" value={topicInput} onChange={(event) => setTopicInput(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') { event.preventDefault(); addTopic(); } }} placeholder="e.g. Arsenal transfer" /></label>
+        <label className="is-hours"><span>Expires in</span><input type="number" min="1" max="720" value={expiryHours} onChange={(event) => setExpiryHours(Math.max(1, Math.min(720, Number(event.target.value) || 1)))} /><small>hours</small></label>
+        <button type="button" disabled={saving} onClick={addTopic}>Add topic</button>
+        {mode === 'manual' ? <button className="is-secondary" type="button" disabled={saving} onClick={() => saveOverride(topics)}>Update expiry</button> : null}
+        <button className="is-secondary" type="button" disabled={saving} onClick={restoreAutomatic}>Use automatic</button>
+        <small className="rs-live-trending-status" aria-live="polite">{adminMessage}</small>
+      </div> : null}
     </Card>
   );
 }

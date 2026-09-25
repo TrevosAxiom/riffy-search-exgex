@@ -168,6 +168,77 @@ $latest_sidebar_posts = static function ($exclude = 0) {
 
     return $posts;
 };
+$trending_now_posts = static function ($exclude = 0) use ($latest_sidebar_posts) {
+    global $wpdb;
+
+    $exclude = absint($exclude);
+    $published_posts = static function ($ids) {
+        return array_values(array_filter(array_map('get_post', array_map('absint', (array) $ids)), static function ($post) {
+            return $post instanceof WP_Post
+                && 'post' === $post->post_type
+                && 'publish' === $post->post_status
+                && '' === $post->post_password;
+        }));
+    };
+
+    if ('manual' === get_option('rifnote_trending_now_mode', 'wpp')) {
+        $manual_ids = array_values(array_unique(array_filter(array_map('absint', (array) get_option('rifnote_trending_now_override_ids', array())))));
+        if ($exclude) $manual_ids = array_values(array_diff($manual_ids, array($exclude)));
+        return $published_posts($manual_ids);
+    }
+
+    $cache_key = 'rifnote_public_wpp_trending_' . $exclude;
+    $cached_ids = get_transient($cache_key);
+
+    if (is_array($cached_ids)) {
+        $cached_posts = $published_posts($cached_ids);
+        if ($cached_posts) return $cached_posts;
+    }
+
+    $ids = array();
+    $summary_table = $wpdb->prefix . 'popularpostssummary';
+    $data_table = $wpdb->prefix . 'popularpostsdata';
+    $summary_exists = $summary_table === $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($summary_table)));
+    $data_exists = $data_table === $wpdb->get_var($wpdb->prepare('SHOW TABLES LIKE %s', $wpdb->esc_like($data_table)));
+
+    if ($summary_exists) {
+        $exclude_sql = $exclude ? $wpdb->prepare(' AND p.ID != %d', $exclude) : '';
+        $since = gmdate('Y-m-d H:i:s', time() - (7 * DAY_IN_SECONDS));
+        $ids = $wpdb->get_col($wpdb->prepare(
+            "SELECT p.ID
+             FROM {$wpdb->posts} p
+             INNER JOIN {$summary_table} wpp ON wpp.postid = p.ID
+             WHERE p.post_type = 'post'
+               AND p.post_status = 'publish'
+               AND p.post_password = ''
+               AND wpp.view_datetime >= %s{$exclude_sql}
+             GROUP BY p.ID
+             ORDER BY SUM(wpp.pageviews) DESC, MAX(wpp.view_datetime) DESC
+             LIMIT 6",
+            $since
+        ));
+    }
+
+    if (!$ids && $data_exists) {
+        $exclude_sql = $exclude ? $wpdb->prepare(' AND p.ID != %d', $exclude) : '';
+        $ids = $wpdb->get_col(
+            "SELECT p.ID
+             FROM {$wpdb->posts} p
+             INNER JOIN {$data_table} wpp ON wpp.postid = p.ID
+             WHERE p.post_type = 'post'
+               AND p.post_status = 'publish'
+               AND p.post_password = ''{$exclude_sql}
+             ORDER BY wpp.pageviews DESC, wpp.last_viewed DESC
+             LIMIT 6"
+        );
+    }
+
+    $posts = $published_posts($ids);
+    if (!$posts) $posts = $latest_sidebar_posts($exclude);
+
+    set_transient($cache_key, wp_list_pluck($posts, 'ID'), 10 * MINUTE_IN_SECONDS);
+    return $posts;
+};
 $manual_adjacent_posts = static function ($post_id) {
     global $wpdb;
 
@@ -353,8 +424,17 @@ if (is_singular()) {
                         $current_source = $get_source_payload(get_the_ID());
                         $is_external_story = !empty($current_source['has_external_source']);
                         $story_image_url = 'post' === get_post_type() ? $story_image_for_post(get_the_ID()) : '';
-                        $news_now_posts = $latest_sidebar_posts(get_the_ID());
-                        $current_latest_posts = $news_now_posts;
+                        $news_now_posts = $trending_now_posts(get_the_ID());
+                        $current_latest_posts = $latest_sidebar_posts(get_the_ID());
+                        $trending_now_mode = sanitize_key((string) get_option('rifnote_trending_now_mode', 'wpp'));
+                        $trending_admin_candidates = current_user_can('manage_options') ? get_posts(array(
+                            'post_type' => 'post',
+                            'post_status' => 'publish',
+                            'posts_per_page' => 100,
+                            'orderby' => 'date',
+                            'order' => 'DESC',
+                            'post__not_in' => array(get_the_ID()),
+                        )) : array();
                         ?>
                         <article <?php post_class(('post' === get_post_type() ? 'rs-public-story ' : 'rs-public-article ') . ($is_external_story ? 'is-external-source' : 'is-rifnote-original')); ?>>
                             <?php if ('post' === get_post_type()) : ?>
@@ -377,12 +457,23 @@ if (is_singular()) {
                             <div class="rs-public-body">
                                 <?php the_content(); ?>
                             </div>
-                            <?php if ('post' === get_post_type() && $news_now_posts) : ?>
-                                <section class="rs-public-news-now" aria-label="<?php esc_attr_e('News now', 'rifnote-search'); ?>">
-                                    <h2><?php esc_html_e('More News:', 'rifnote-search'); ?></h2>
+                            <?php if ('post' === get_post_type() && ($news_now_posts || current_user_can('manage_options'))) : ?>
+                                <section class="rs-public-news-now" aria-label="<?php esc_attr_e('Trending now', 'rifnote-search'); ?>" data-rs-trending-now>
+                                    <div class="rs-public-trending-head">
+                                        <h2><?php esc_html_e('TRENDING NOW', 'rifnote-search'); ?></h2>
+                                        <?php if (current_user_can('manage_options')) : ?><span><?php echo 'manual' === $trending_now_mode ? esc_html__('Admin override', 'rifnote-search') : esc_html__('WordPress Popular Posts', 'rifnote-search'); ?></span><?php endif; ?>
+                                    </div>
+                                    <?php if (current_user_can('manage_options')) : ?>
+                                        <div class="rs-public-trending-admin">
+                                            <label><span><?php esc_html_e('Add a post', 'rifnote-search'); ?></span><select data-rs-trending-select><option value=""><?php esc_html_e('Choose a published post…', 'rifnote-search'); ?></option><?php foreach ($trending_admin_candidates as $candidate) : ?><option value="<?php echo esc_attr($candidate->ID); ?>"><?php echo esc_html(get_the_title($candidate)); ?></option><?php endforeach; ?></select></label>
+                                            <button type="button" data-rs-trending-add><?php esc_html_e('Add post', 'rifnote-search'); ?></button>
+                                            <button class="is-secondary" type="button" data-rs-trending-wpp><?php esc_html_e('Use WPP rankings', 'rifnote-search'); ?></button>
+                                            <small data-rs-trending-status aria-live="polite"></small>
+                                        </div>
+                                    <?php endif; ?>
                                     <ul>
                                         <?php foreach (array_slice($news_now_posts, 0, 4) as $news_post) : ?>
-                                            <li><a href="<?php echo esc_url(get_permalink($news_post)); ?>"><?php echo esc_html(get_the_title($news_post)); ?></a></li>
+                                            <li data-rs-trending-post="<?php echo esc_attr($news_post->ID); ?>"><a href="<?php echo esc_url(get_permalink($news_post)); ?>"><?php echo esc_html(get_the_title($news_post)); ?></a><?php if (current_user_can('manage_options')) : ?><button type="button" data-rs-trending-remove="<?php echo esc_attr($news_post->ID); ?>" aria-label="<?php echo esc_attr(sprintf(__('Remove %s from Trending Now', 'rifnote-search'), get_the_title($news_post))); ?>">×</button><?php endif; ?></li>
                                         <?php endforeach; ?>
                                     </ul>
                                 </section>
@@ -498,6 +589,64 @@ if (is_singular()) {
         </button>
     </nav>
     <script>
+        (function() {
+            var section = document.querySelector('[data-rs-trending-now]');
+            if (!section || !section.querySelector('[data-rs-trending-add]')) return;
+
+            var restBase = (window.RIFNOTE_SEARCH && window.RIFNOTE_SEARCH.restUrl) || '/wp-json/';
+            var endpoint = restBase.replace(/\/$/, '') + '/rifnote/v1/admin/trending-now';
+            var nonce = (window.RIFNOTE_SEARCH && window.RIFNOTE_SEARCH.nonce) || '';
+            var status = section.querySelector('[data-rs-trending-status]');
+
+            function visibleIds() {
+                return Array.prototype.map.call(section.querySelectorAll('[data-rs-trending-post]'), function(item) {
+                    return Number(item.getAttribute('data-rs-trending-post') || 0);
+                }).filter(Boolean);
+            }
+
+            function update(payload) {
+                section.querySelectorAll('button').forEach(function(button) { button.disabled = true; });
+                if (status) status.textContent = '<?php echo esc_js(__('Saving…', 'rifnote-search')); ?>';
+
+                fetch(endpoint, {
+                    method: 'POST',
+                    credentials: 'same-origin',
+                    headers: { 'Content-Type': 'application/json', 'X-WP-Nonce': nonce },
+                    body: JSON.stringify(Object.assign({ visible_ids: visibleIds() }, payload))
+                }).then(function(response) {
+                    return response.json().then(function(data) {
+                        if (!response.ok) throw new Error(data.message || '<?php echo esc_js(__('Could not update Trending Now.', 'rifnote-search')); ?>');
+                        return data;
+                    });
+                }).then(function() {
+                    window.location.reload();
+                }).catch(function(error) {
+                    section.querySelectorAll('button').forEach(function(button) { button.disabled = false; });
+                    if (status) status.textContent = error.message;
+                });
+            }
+
+            section.querySelector('[data-rs-trending-add]').addEventListener('click', function() {
+                var select = section.querySelector('[data-rs-trending-select]');
+                var postId = Number(select && select.value || 0);
+                if (!postId) {
+                    if (status) status.textContent = '<?php echo esc_js(__('Choose a post first.', 'rifnote-search')); ?>';
+                    return;
+                }
+                update({ action: 'add', post_id: postId });
+            });
+
+            section.querySelector('[data-rs-trending-wpp]').addEventListener('click', function() {
+                update({ action: 'wpp' });
+            });
+
+            section.addEventListener('click', function(event) {
+                var remove = event.target.closest('[data-rs-trending-remove]');
+                if (!remove) return;
+                update({ action: 'remove', post_id: Number(remove.getAttribute('data-rs-trending-remove') || 0) });
+            });
+        })();
+
         document.addEventListener('click', function(event) {
             var opener = event.target.closest('[data-rs-live-open]');
             if (!opener) return;

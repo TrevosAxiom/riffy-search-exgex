@@ -1062,6 +1062,29 @@ class Rifnote_Search_Trending {
     }
 
     public static function rest_payload($limit = 10) {
+        $override_topics = array_values(array_filter(array_map('sanitize_text_field', (array) get_option('rifnote_live_trending_override_topics', array()))));
+        $override_expires_at = absint(get_option('rifnote_live_trending_override_expires_at', 0));
+        $override_active = $override_topics && $override_expires_at > time();
+
+        if (!$override_active && ($override_topics || $override_expires_at)) {
+            delete_option('rifnote_live_trending_override_topics');
+            delete_option('rifnote_live_trending_override_expires_at');
+        }
+
+        $topics = $override_active
+            ? array_map(function ($topic) {
+                return array(
+                    'topic' => $topic,
+                    'slug' => sanitize_title($topic),
+                    'score' => 0,
+                    'is_pinned' => true,
+                    'gpt_assisted' => false,
+                    'scope' => 'manual',
+                    'source' => 'manual_override',
+                );
+            }, array_slice($override_topics, 0, max(1, min(30, (int) $limit))))
+            : self::topics($limit);
+
         return array(
             'topics' => array_map(function ($topic) {
                 return array(
@@ -1073,8 +1096,10 @@ class Rifnote_Search_Trending {
                     'scope' => $topic['scope'] ?? '',
                     'source' => $topic['source'],
                 );
-            }, self::topics($limit)),
+            }, $topics),
             'generated_at' => gmdate(DATE_ATOM),
+            'mode' => $override_active ? 'manual' : 'automatic',
+            'override_expires_at' => $override_active ? gmdate(DATE_ATOM, $override_expires_at) : '',
         );
     }
 }
