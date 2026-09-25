@@ -4012,6 +4012,13 @@ function getLiveSourceLabel(value = 'Live') {
   return /api/i.test(label) ? 'Live' : label;
 }
 
+function footballEntityLabel(value, fallback = '') {
+  if (value === null || value === undefined) return fallback;
+  if (typeof value === 'string' || typeof value === 'number') return decodeText(value) || fallback;
+  if (typeof value === 'object') return decodeText(value.name || value.label || value.title || '') || fallback;
+  return fallback;
+}
+
 function normalizeGoalType(value = '') {
   const text = String(value || '').toLowerCase();
   if (text.includes('own')) return 'own-goal';
@@ -4407,7 +4414,7 @@ function FootballPitchsideDetail({ fixture, loading = false, configured = false,
       <AggregateChip fixture={detailedFixture} />
       <div className="rs-pitchside-detail-meta">
         <span><CalendarDays size={15} />{formatDate(fixture.date)}</span>
-        <span><Shield size={15} />{fixture.referee || 'Referee TBC'}</span>
+        <span><Shield size={15} />{footballEntityLabel(fixture.referee, 'Referee TBC')}</span>
       </div>
       {fixture.league?.id && fixture.league?.season ? (
         <a className="rs-competition-room-link" href={footballCompetitionUrl(fixture.league.id, fixture.league.season)}>
@@ -4619,7 +4626,7 @@ function LiveMatchCard({ fixture, onSelect }) {
       <AggregateChip fixture={fixture} compact />
       <div className="rs-live-match-details">
         <span>{venue || formatDate(fixture.date)}</span>
-        {fixture.referee ? <span>Ref: {fixture.referee}</span> : null}
+        {fixture.referee ? <span>Ref: {footballEntityLabel(fixture.referee, 'Not assigned')}</span> : null}
         {fixture.league?.country ? <span>{fixture.league.country}</span> : null}
         <button className="rs-match-details-button" type="button" onClick={() => onSelect?.(fixture)}>Match details</button>
       </div>
@@ -4727,7 +4734,7 @@ function MatchDetailsModal({ fixture, onClose }) {
           <span><b>Status</b>{status}</span>
           <span><b>Kickoff</b>{formatDate(fixture.date)}</span>
           <span><b>Venue</b>{venue || 'Venue TBC'}</span>
-          <span><b>Referee</b>{fixture.referee || 'Not assigned'}</span>
+          <span><b>Referee</b>{footballEntityLabel(fixture.referee, 'Not assigned')}</span>
         </div>
 
         {scoreRows.length ? (
@@ -8120,40 +8127,40 @@ function SignalCard({ title, icon, items = [], live = false, type = 'signal' }) 
   useLiveInterval(refreshSignals, live ? pollMs : 180000);
 
   useEffect(() => {
-    if (type !== 'weather' || visitorWeather || !navigator.geolocation) {
+    if (type !== 'weather' || visitorWeather || !navigator.geolocation || !navigator.permissions?.query) {
       return undefined;
     }
 
     let cancelled = false;
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        if (cancelled) {
-          return;
-        }
+    navigator.permissions.query({ name: 'geolocation' }).then((permission) => {
+      if (cancelled || permission.state !== 'granted') return;
 
-        const nextLocation = {
-          latitude: Number(position.coords.latitude.toFixed(3)),
-          longitude: Number(position.coords.longitude.toFixed(3)),
-          label: 'Near you',
-        };
-        setVisitorWeather(nextLocation);
-        setLoading(true);
-        getLiveWeather(nextLocation)
-          .then((payload) => {
-            if (cancelled) {
-              return;
-            }
-            setRows(normalizeSignalItems(payload?.items));
-            setSourceLabel(getLiveSourceLabel(payload?.source_label || payload?.provider || 'Live'));
-            setUpdatedAt(payload?.updated_at ? new Date(payload.updated_at) : new Date());
-            setPollMs(Math.max(300000, Math.min(1800000, Number(payload?.poll_after || 900) * 1000)));
-          })
-          .catch(() => {})
-          .finally(() => !cancelled && setLoading(false));
-      },
-      () => {},
-      { enableHighAccuracy: false, maximumAge: 900000, timeout: 3500 }
-    );
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          if (cancelled) return;
+
+          const nextLocation = {
+            latitude: Number(position.coords.latitude.toFixed(3)),
+            longitude: Number(position.coords.longitude.toFixed(3)),
+            label: 'Near you',
+          };
+          setVisitorWeather(nextLocation);
+          setLoading(true);
+          getLiveWeather(nextLocation)
+            .then((payload) => {
+              if (cancelled) return;
+              setRows(normalizeSignalItems(payload?.items));
+              setSourceLabel(getLiveSourceLabel(payload?.source_label || payload?.provider || 'Live'));
+              setUpdatedAt(payload?.updated_at ? new Date(payload.updated_at) : new Date());
+              setPollMs(Math.max(300000, Math.min(1800000, Number(payload?.poll_after || 900) * 1000)));
+            })
+            .catch(() => {})
+            .finally(() => !cancelled && setLoading(false));
+        },
+        () => {},
+        { enableHighAccuracy: false, maximumAge: 900000, timeout: 3500 }
+      );
+    }).catch(() => {});
 
     return () => {
       cancelled = true;

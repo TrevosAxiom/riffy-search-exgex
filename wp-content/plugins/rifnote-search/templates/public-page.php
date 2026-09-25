@@ -460,7 +460,7 @@ if (is_singular()) {
                             <?php if ('post' === get_post_type() && ($news_now_posts || current_user_can('manage_options'))) : ?>
                                 <section class="rs-public-news-now" aria-label="<?php esc_attr_e('Trending now', 'rifnote-search'); ?>" data-rs-trending-now>
                                     <div class="rs-public-trending-head">
-                                        <h2><?php esc_html_e('TRENDING NOW', 'rifnote-search'); ?></h2>
+                                        <h2><?php esc_html_e('POPULAR', 'rifnote-search'); ?></h2>
                                         <?php if (current_user_can('manage_options')) : ?><span><?php echo 'manual' === $trending_now_mode ? esc_html__('Admin override', 'rifnote-search') : esc_html__('WordPress Popular Posts', 'rifnote-search'); ?></span><?php endif; ?>
                                     </div>
                                     <?php if (current_user_can('manage_options')) : ?>

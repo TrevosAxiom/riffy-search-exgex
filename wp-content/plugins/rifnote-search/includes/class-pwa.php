@@ -50,6 +50,7 @@ class Rifnote_Search_PWA {
 
         echo '<link rel="manifest" href="' . esc_url(self::manifest_url()) . '">' . "\n";
         echo '<meta name="theme-color" content="#ed1c24">' . "\n";
+        echo '<meta name="mobile-web-app-capable" content="yes">' . "\n";
         echo '<meta name="apple-mobile-web-app-capable" content="yes">' . "\n";
         echo '<meta name="apple-mobile-web-app-title" content="Rifnote Search">' . "\n";
         echo '<link rel="apple-touch-icon" href="' . esc_url(self::app_icon_url()) . '">' . "\n";
@@ -416,6 +417,7 @@ class Rifnote_Search_PWA {
             'share_target' => array(
                 'action' => home_url('/submit-news/'),
                 'method' => 'GET',
+                'enctype' => 'application/x-www-form-urlencoded',
                 'params' => array(
                     'title' => 'title',
                     'text' => 'text',

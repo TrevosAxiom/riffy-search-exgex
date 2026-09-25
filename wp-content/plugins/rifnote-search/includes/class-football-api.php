@@ -3121,6 +3121,12 @@ class Rifnote_Search_Football_API {
             return array();
         }
 
+        if (is_array($fixture['referee'] ?? null)) {
+            $fixture['referee'] = sanitize_text_field($fixture['referee']['name'] ?? '');
+        } elseif (!is_scalar($fixture['referee'] ?? '')) {
+            $fixture['referee'] = '';
+        }
+
         $round = (string) ($fixture['league']['round'] ?? $fixture['round'] ?? '');
         $fixture['league']['round_clean'] = self::clean_round_label($round);
         $fixture['period_marker'] = self::status_marker($fixture);
@@ -3610,7 +3616,7 @@ class Rifnote_Search_Football_API {
 
         return array(
             'id' => (int) ($fixture['id'] ?? 0),
-            'referee' => sanitize_text_field($fixture['referee'] ?? ''),
+            'referee' => sanitize_text_field(is_array($fixture['referee'] ?? null) ? ($fixture['referee']['name'] ?? '') : ($fixture['referee'] ?? '')),
             'date' => sanitize_text_field($fixture['date'] ?? ''),
             'timestamp' => (int) ($fixture['timestamp'] ?? 0),
             'timezone' => sanitize_text_field($fixture['timezone'] ?? ''),
