@@ -41,6 +41,10 @@ $rifnote_menu_icon = static function ($label) use ($rifnote_category_icon) {
         return '<svg viewBox="0 0 24 24" fill="none"><circle cx="11" cy="11" r="7"/><path d="m16 16 4 4"/></svg>';
     }
 
+    if (false !== strpos($key, 'weblist')) {
+        return '<svg viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c3 3.5 3 14 0 18M12 3c-3 3.5-3 14 0 18"/></svg>';
+    }
+
     if (false !== strpos($key, 'publisher') || false !== strpos($key, 'story') || false !== strpos($key, 'article')) {
         return '<svg viewBox="0 0 24 24" fill="none"><path d="M6 4h12v16H6z"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>';
     }
@@ -102,6 +106,10 @@ $rifnote_menu_group_ids = array();
                     <b><?php esc_html_e('Categories', 'rifnote-search'); ?></b>
                     <i aria-hidden="true">›</i>
                 </button>
+                <a class="rs-menu-row" href="<?php echo esc_url(home_url('/weblist/')); ?>">
+                    <span class="rs-menu-row-icon" aria-hidden="true"><?php echo $rifnote_menu_icon('Weblist'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
+                    <b><?php esc_html_e('Weblist', 'rifnote-search'); ?></b>
+                </a>
                 <a class="rs-menu-row" href="<?php echo esc_url(home_url('/football/')); ?>">
                     <span class="rs-menu-row-icon" aria-hidden="true"><?php echo $rifnote_menu_icon('Football'); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?></span>
                     <b><?php esc_html_e('Football', 'rifnote-search'); ?></b>
