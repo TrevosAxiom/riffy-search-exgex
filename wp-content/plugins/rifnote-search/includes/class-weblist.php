@@ -75,6 +75,10 @@ class Rifnote_Search_Weblist {
                 $name = sanitize_text_field((string) ($source['name'] ?? ''));
                 $url = esc_url_raw((string) ($source['url'] ?? ''));
                 $query = sanitize_text_field((string) ($source['query'] ?? ''));
+                if ('topics' === $slug) {
+                    $url = '';
+                    $query = $name;
+                }
                 if (!$name || (!$url && !$query)) continue;
                 $sources[] = array(
                     'id' => sanitize_key((string) ($source['id'] ?? $slug . '-' . (sanitize_title($name) ? sanitize_title($name) : $source_index))),

@@ -1718,10 +1718,12 @@ function WeblistFavicon({ source = {} }) {
 function WeblistPage() {
   const [groups, setGroups] = useState([]);
   const [query, setQuery] = useState('');
+  const [searchOpen, setSearchOpen] = useState(false);
   const [activeGroup, setActiveGroup] = useState('all');
   const [canManage, setCanManage] = useState(Boolean(window.RIFNOTE_SEARCH?.canManageOptions));
   const [status, setStatus] = useState({ loading: true, saving: false, error: '', message: '' });
   const [editor, setEditor] = useState(null);
+  const [draggedGroup, setDraggedGroup] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1734,12 +1736,12 @@ function WeblistPage() {
     return () => { cancelled = true; };
   }, []);
 
-  const sourceTotal = groups.reduce((total, group) => total + (group.sources?.length || 0), 0);
   const normalizedQuery = query.trim().toLowerCase();
   const visibleGroups = groups.map((group) => ({
     ...group,
     sources: (group.sources || []).filter((source) => !normalizedQuery || `${source.name} ${source.url} ${source.query}`.toLowerCase().includes(normalizedQuery)),
   })).filter((group) => (activeGroup === 'all' || group.id === activeGroup) && group.sources.length);
+  const editorIsTopic = editor?.type === 'source' && groups[editor.groupIndex]?.slug === 'topics';
 
   function persist(nextGroups, message) {
     const previousGroups = groups;
@@ -1791,15 +1793,23 @@ function WeblistPage() {
     persist(groups.map((group, index) => index !== groupIndex ? group : { ...group, sources: group.sources.filter((_, itemIndex) => itemIndex !== sourceIndex) }), 'Source removed.');
   }
 
+  function reorderGroup(targetIndex) {
+    if (draggedGroup === null || draggedGroup === targetIndex) return;
+    const next = [...groups];
+    const [moved] = next.splice(draggedGroup, 1);
+    next.splice(targetIndex, 0, moved);
+    setDraggedGroup(null);
+    persist(next, 'Group order updated.');
+  }
+
   return (
     <main className="rs-weblist-page">
       <header className="rs-weblist-hero">
-        <div><span>Curated by Rifnote</span><h1>Your web, neatly sorted.</h1><p>A focused collection of Nigerian media, global reporting, analysis, technology, sports, and useful corners of the internet.</p></div>
-        <aside><strong>{sourceTotal}</strong><span>sources</span></aside>
+        <div><span>Curated by Rifnote</span><h1>Your web, neatly sorted.</h1></div>
       </header>
 
       <section className="rs-weblist-toolbar" role="search">
-        <label><Search size={20} /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search publications or topics…" />{query ? <button type="button" onClick={() => setQuery('')} aria-label="Clear search">×</button> : null}</label>
+        <div className={`rs-weblist-search ${searchOpen ? 'is-open' : ''}`}><button type="button" aria-label={searchOpen ? 'Close source search' : 'Search sources'} onClick={() => { setSearchOpen((open) => !open); if (searchOpen) setQuery(''); }}><Search size={20} /></button>{searchOpen ? <label><input autoFocus type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search publications or topics…" />{query ? <button type="button" onClick={() => setQuery('')} aria-label="Clear search">×</button> : null}</label> : null}</div>
         <div><button className={activeGroup === 'all' ? 'active' : ''} type="button" onClick={() => setActiveGroup('all')}>All</button>{groups.map((group) => <button className={activeGroup === group.id ? 'active' : ''} type="button" key={group.id} onClick={() => setActiveGroup(group.id)}>{group.title}</button>)}</div>
       </section>
 
@@ -1810,19 +1820,19 @@ function WeblistPage() {
       <div className="rs-weblist-groups">
         {status.loading ? [0, 1, 2].map((item) => <section className="rs-weblist-group is-loading" key={item} />) : visibleGroups.map((group) => {
           const groupIndex = groups.findIndex((item) => item.id === group.id);
-          return <section className={`rs-weblist-group is-${group.slug}`} key={group.id}>
-            <header><div><span><Globe2 size={19} /></span><h2>{group.title}</h2><small>{group.sources.length} {group.sources.length === 1 ? 'item' : 'items'}</small></div>{canManage ? <nav><button type="button" onClick={() => setEditor({ type: 'source', groupIndex, sourceIndex: -1, data: { name: '', url: '', query: '', favicon_url: '' } })}>+ Source</button><button type="button" onClick={() => setEditor({ type: 'group', groupIndex, data: { ...groups[groupIndex] } })}><Pencil size={15} /> Edit</button><button className="danger" type="button" onClick={() => removeGroup(groupIndex)}><Trash2 size={15} /> Remove</button></nav> : null}</header>
+          return <section className={`rs-weblist-group is-${group.slug} ${draggedGroup === groupIndex ? 'is-dragging' : ''}`} key={group.id} draggable={canManage} onDragStart={() => setDraggedGroup(groupIndex)} onDragEnd={() => setDraggedGroup(null)} onDragOver={(event) => canManage && event.preventDefault()} onDrop={() => reorderGroup(groupIndex)}>
+            <header><div>{canManage ? <button className="rs-weblist-drag" type="button" aria-label={`Drag ${group.title} to reorder`} title="Drag to reorder">⋮⋮</button> : null}<span><Globe2 size={19} /></span><h2>{group.title}</h2><small>{group.sources.length} {group.sources.length === 1 ? 'item' : 'items'}</small></div>{canManage ? <nav><button type="button" onClick={() => setEditor({ type: 'source', groupIndex, sourceIndex: -1, data: { name: '', url: '', query: '', favicon_url: '' } })}>+ {group.slug === 'topics' ? 'Topic' : 'Source'}</button><button type="button" onClick={() => setEditor({ type: 'group', groupIndex, data: { ...groups[groupIndex] } })}><Pencil size={15} /> Edit</button><button className="danger" type="button" onClick={() => removeGroup(groupIndex)}><Trash2 size={15} /> Remove</button></nav> : null}</header>
             <div className="rs-weblist-sources">{group.sources.map((source) => {
               const sourceIndex = groups[groupIndex].sources.findIndex((item) => item.id === source.id);
               const body = <><WeblistFavicon source={source} /><span><strong>{source.name}</strong>{source.url ? <small>{source.url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]}</small> : <small>Saved topic</small>}</span>{source.url ? <ExternalLink size={15} /> : <Search size={15} />}</>;
-              return <article className="rs-weblist-source" key={source.id}>{source.url ? <a href={source.url} target="_blank" rel="noopener noreferrer">{body}</a> : <a href={searchUrl(source.query || source.name)}>{body}</a>}{canManage ? <div><button type="button" aria-label={`Edit ${source.name}`} onClick={() => setEditor({ type: 'source', groupIndex, sourceIndex, data: { ...source } })}><Pencil size={14} /></button><button type="button" aria-label={`Remove ${source.name}`} onClick={() => removeSource(groupIndex, sourceIndex)}><Trash2 size={14} /></button></div> : null}</article>;
+              return <article className="rs-weblist-source" key={source.id}>{source.url ? <a href={source.url} target="_blank" rel="noopener noreferrer">{body}</a> : <a href={searchUrl(source.name)}>{body}</a>}{canManage ? <div><button type="button" aria-label={`Edit ${source.name}`} onClick={() => setEditor({ type: 'source', groupIndex, sourceIndex, data: { ...source } })}><Pencil size={14} /></button><button type="button" aria-label={`Remove ${source.name}`} onClick={() => removeSource(groupIndex, sourceIndex)}><Trash2 size={14} /></button></div> : null}</article>;
             })}</div>
           </section>;
         })}
         {!status.loading && !visibleGroups.length ? <div className="rs-weblist-empty">No sources match that search. Try a shorter name or another group.</div> : null}
       </div>
 
-      {editor ? <div className="rs-weblist-editor-backdrop" role="presentation" onClick={() => setEditor(null)}><form className="rs-weblist-editor" onSubmit={saveEditor} onClick={(event) => event.stopPropagation()}><header><div><span>{editor.type === 'group' ? 'Weblist group' : 'Weblist source'}</span><h2>{editor.type === 'group' ? (editor.groupIndex < 0 ? 'Add new' : 'Edit details') : (editor.sourceIndex < 0 ? 'Add new' : 'Edit details')}</h2></div><button type="button" onClick={() => setEditor(null)}>×</button></header>{editor.type === 'group' ? <><label>Group name<input required value={editor.data.title} onChange={(event) => setEditor({ ...editor, data: { ...editor.data, title: event.target.value } })} placeholder="Technology" /></label><label>Group slug<input value={editor.data.slug || ''} onChange={(event) => setEditor({ ...editor, data: { ...editor.data, slug: event.target.value } })} placeholder="technology" /></label></> : <><label>Source name<input required value={editor.data.name} onChange={(event) => setEditor({ ...editor, data: { ...editor.data, name: event.target.value } })} placeholder="Publisher name" /></label><label>Website URL<input type="url" value={editor.data.url || ''} onChange={(event) => setEditor({ ...editor, data: { ...editor.data, url: event.target.value } })} placeholder="https://example.com" /></label><label>Search prompt<input value={editor.data.query || ''} onChange={(event) => setEditor({ ...editor, data: { ...editor.data, query: event.target.value } })} placeholder="Use instead of a website URL" /></label><label>Custom favicon URL<input type="url" value={editor.data.favicon_url || ''} onChange={(event) => setEditor({ ...editor, data: { ...editor.data, favicon_url: event.target.value } })} placeholder="Optional — detected automatically" /></label></>}<footer><button type="button" onClick={() => setEditor(null)}>Cancel</button><button className="primary" type="submit">Save changes</button></footer></form></div> : null}
+      {editor ? <div className="rs-weblist-editor-backdrop" role="presentation" onClick={() => setEditor(null)}><form className="rs-weblist-editor" onSubmit={saveEditor} onClick={(event) => event.stopPropagation()}><header><div><span>{editor.type === 'group' ? 'Weblist group' : editorIsTopic ? 'Saved topic' : 'Weblist source'}</span><h2>{editor.type === 'group' ? (editor.groupIndex < 0 ? 'Add new' : 'Edit details') : (editor.sourceIndex < 0 ? 'Add new' : 'Edit details')}</h2></div><button type="button" onClick={() => setEditor(null)}>×</button></header>{editor.type === 'group' ? <><label>Group name<input required value={editor.data.title} onChange={(event) => setEditor({ ...editor, data: { ...editor.data, title: event.target.value } })} placeholder="Technology" /></label><label>Group slug<input value={editor.data.slug || ''} onChange={(event) => setEditor({ ...editor, data: { ...editor.data, slug: event.target.value } })} placeholder="technology" /></label></> : editorIsTopic ? <label>Topic keyword<input required value={editor.data.name} onChange={(event) => setEditor({ ...editor, data: { ...editor.data, name: event.target.value, query: event.target.value, url: '' } })} placeholder="Messi" /></label> : <><label>Source name<input required value={editor.data.name} onChange={(event) => setEditor({ ...editor, data: { ...editor.data, name: event.target.value } })} placeholder="Publisher name" /></label><label>Website URL<input required type="url" value={editor.data.url || ''} onChange={(event) => setEditor({ ...editor, data: { ...editor.data, url: event.target.value } })} placeholder="https://example.com" /></label><label>Custom favicon URL<input type="url" value={editor.data.favicon_url || ''} onChange={(event) => setEditor({ ...editor, data: { ...editor.data, favicon_url: event.target.value } })} placeholder="Optional — detected automatically" /></label></>}<footer><button type="button" onClick={() => setEditor(null)}>Cancel</button><button className="primary" type="submit">Save changes</button></footer></form></div> : null}
       <footer className="rs-weblist-footer">A calmer starting point for the daily scroll.</footer>
     </main>
   );

@@ -202,6 +202,7 @@ class Rifnote_Search_Pages {
         return array(
             array('label' => __('Search', 'rifnote-search'), 'url' => home_url('/search/')),
             array('label' => __('Football', 'rifnote-search'), 'url' => home_url('/football/')),
+            array('label' => __('Weblist', 'rifnote-search'), 'url' => home_url('/weblist/')),
             array('label' => __('Publishers', 'rifnote-search'), 'url' => home_url('/publisher-signup/')),
             array('label' => __('Submit News', 'rifnote-search'), 'url' => home_url('/submit-news/')),
             array('label' => __('Advertise', 'rifnote-search'), 'url' => home_url('/advertise/')),
