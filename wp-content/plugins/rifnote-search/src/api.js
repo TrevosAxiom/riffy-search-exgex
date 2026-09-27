@@ -224,6 +224,28 @@ export async function updateLiveTrending(payload = {}) {
   return data;
 }
 
+export async function getWeblist() {
+  const baseUrl = restBaseUrl();
+  if (!baseUrl) return { groups: [], can_manage: false };
+  const response = await fetch(new URL('rifnote/v1/weblist', baseUrl), { headers: headers() });
+  if (!response.ok) throw new Error(`Rifnote Weblist failed: ${response.status}`);
+  return response.json();
+}
+
+export async function updateWeblist(groups = []) {
+  const baseUrl = restBaseUrl();
+  if (!baseUrl) throw new Error('Rifnote REST is not available yet.');
+  const response = await fetch(new URL('rifnote/v1/weblist', baseUrl), {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify({ groups }),
+  });
+  const data = await response.json();
+  if (!response.ok) throw new Error(data.message || 'Could not save Weblist.');
+  return data;
+}
+
 export async function getSuggestions({ query = '', limit = 8 } = {}) {
   const baseUrl = restBaseUrl();
 

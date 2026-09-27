@@ -1,8 +1,8 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { Component, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { ArrowLeft, ArrowRight, Bookmark, CalendarDays, Clock3, Cloud, CloudRain, CloudSun, DollarSign, ExternalLink, Flame, Globe2, Goal, Home, Landmark, Mail, Map as MapIcon, Menu, Newspaper, Pencil, Phone, Play, Radio, RotateCcw, Search, Shield, Sun, Trash2, TrendingUp, Trophy, UserRound, Volume2, VolumeX } from 'lucide-react';
-import { getAdInventory, getAdvertiserDashboard, getAnonKey, getDailyBriefing, getFeedDiagnostics, getFootballCompetition, getFootballFinished, getFootballFixtureDetails, getFootballFixtures, getFootballLive, getFootballPlayerProfile, getFootballPlayers, getFootballTeamProfile, getFootballTeams, getFootballTransfers, getFootballUpcoming, getForYou, getHomeLeadStory, getHomeNotes, getLiveMarkets, getLiveWeather, getNotifications, getPublisherStats, getRifnoteAiAnswer, getSocialEmbed, getSourceProfile, getStoryChannel, getStoryCluster, getSuggestions, getTrendingTopics, getWidget, getWorldWeather, registerDevice, saveAlert, savePreference, searchRifnote, subscribeNewsletter, submitAdvertiserPaymentProof, submitAdvertiserSignup, submitBetaFeedback, submitContactMessage, submitLegalRequest, submitPublisherSignup, submitPublisherStory, submitSponsorRequest, subscribeNoResult, trackAnalyticsEvent, trackSponsoredClick, trashStory, updateAdvertiserProfile, updateLiveTrending, updateNotification, uploadMedia } from './api.js';
+import { getAdInventory, getAdvertiserDashboard, getAnonKey, getDailyBriefing, getFeedDiagnostics, getFootballCompetition, getFootballFinished, getFootballFixtureDetails, getFootballFixtures, getFootballLive, getFootballPlayerProfile, getFootballPlayers, getFootballTeamProfile, getFootballTeams, getFootballTransfers, getFootballUpcoming, getForYou, getHomeLeadStory, getHomeNotes, getLiveMarkets, getLiveWeather, getNotifications, getPublisherStats, getRifnoteAiAnswer, getSocialEmbed, getSourceProfile, getStoryChannel, getStoryCluster, getSuggestions, getTrendingTopics, getWeblist, getWidget, getWorldWeather, registerDevice, saveAlert, savePreference, searchRifnote, subscribeNewsletter, submitAdvertiserPaymentProof, submitAdvertiserSignup, submitBetaFeedback, submitContactMessage, submitLegalRequest, submitPublisherSignup, submitPublisherStory, submitSponsorRequest, subscribeNoResult, trackAnalyticsEvent, trackSponsoredClick, trashStory, updateAdvertiserProfile, updateLiveTrending, updateNotification, updateWeblist, uploadMedia } from './api.js';
 import { rifnoteCategories, searchTabs } from './data/rifnote.js';
 import './styles/index.css';
 
@@ -904,6 +904,10 @@ function App({ mode }) {
     return withLiveRail(<ContactPage />);
   }
 
+  if (mode === 'weblist') {
+    return <WeblistPage />;
+  }
+
   if (mode === 'ai-answer') {
     return withLiveRail((
       <main className="rs-shell compact-page">
@@ -1696,6 +1700,130 @@ function LegalRequestPanel({ mode = 'legal-request' }) {
           <button className="rs-button primary" type="submit" disabled={status.loading}>{status.loading ? 'Sending...' : 'Send request'}</button>
         </form>
       </Card>
+    </main>
+  );
+}
+
+function WeblistFavicon({ source = {} }) {
+  const [failed, setFailed] = useState(false);
+  if (!source.url || failed) return <span className="rs-weblist-favicon is-fallback">{String(source.name || '?').slice(0, 1).toUpperCase()}</span>;
+  let domain = '';
+  try { domain = new URL(source.url).hostname; } catch (_) { domain = ''; }
+  const favicon = source.favicon_url || (domain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=64` : '');
+  return favicon
+    ? <span className="rs-weblist-favicon"><img src={favicon} alt="" loading="lazy" onError={() => setFailed(true)} /></span>
+    : <span className="rs-weblist-favicon is-fallback">{String(source.name || '?').slice(0, 1).toUpperCase()}</span>;
+}
+
+function WeblistPage() {
+  const [groups, setGroups] = useState([]);
+  const [query, setQuery] = useState('');
+  const [activeGroup, setActiveGroup] = useState('all');
+  const [canManage, setCanManage] = useState(Boolean(window.RIFNOTE_SEARCH?.canManageOptions));
+  const [status, setStatus] = useState({ loading: true, saving: false, error: '', message: '' });
+  const [editor, setEditor] = useState(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getWeblist().then((payload) => {
+      if (cancelled) return;
+      setGroups(Array.isArray(payload.groups) ? payload.groups : []);
+      setCanManage(Boolean(payload.can_manage));
+      setStatus({ loading: false, saving: false, error: '', message: '' });
+    }).catch((error) => !cancelled && setStatus({ loading: false, saving: false, error: error.message, message: '' }));
+    return () => { cancelled = true; };
+  }, []);
+
+  const sourceTotal = groups.reduce((total, group) => total + (group.sources?.length || 0), 0);
+  const normalizedQuery = query.trim().toLowerCase();
+  const visibleGroups = groups.map((group) => ({
+    ...group,
+    sources: (group.sources || []).filter((source) => !normalizedQuery || `${source.name} ${source.url} ${source.query}`.toLowerCase().includes(normalizedQuery)),
+  })).filter((group) => (activeGroup === 'all' || group.id === activeGroup) && group.sources.length);
+
+  function persist(nextGroups, message) {
+    const previousGroups = groups;
+    setGroups(nextGroups);
+    setStatus((current) => ({ ...current, saving: true, error: '', message: '' }));
+    updateWeblist(nextGroups).then((payload) => {
+      setGroups(payload.groups || nextGroups);
+      setStatus({ loading: false, saving: false, error: '', message });
+    }).catch((error) => {
+      setGroups(previousGroups);
+      setStatus((current) => ({ ...current, saving: false, error: error.message, message: '' }));
+    });
+  }
+
+  function saveEditor(event) {
+    event.preventDefault();
+    if (!editor) return;
+    const data = editor.data;
+    if (editor.type === 'group') {
+      const nextGroup = { ...data, id: data.id || `group-${Date.now()}`, slug: data.slug || data.title.toLowerCase().replace(/[^a-z0-9]+/g, '-'), sources: data.sources || [] };
+      const next = editor.groupIndex < 0 ? [...groups, nextGroup] : groups.map((group, index) => index === editor.groupIndex ? nextGroup : group);
+      persist(next, editor.groupIndex < 0 ? 'Group added.' : 'Group updated.');
+    } else {
+      if (!String(data.url || '').trim() && !String(data.query || '').trim()) {
+        setStatus((current) => ({ ...current, error: 'Add a website URL or a search prompt for this source.', message: '' }));
+        return;
+      }
+      const nextSource = { ...data, id: data.id || `source-${Date.now()}` };
+      const next = groups.map((group, groupIndex) => groupIndex !== editor.groupIndex ? group : {
+        ...group,
+        sources: editor.sourceIndex < 0 ? [...(group.sources || []), nextSource] : (group.sources || []).map((source, index) => index === editor.sourceIndex ? nextSource : source),
+      });
+      persist(next, editor.sourceIndex < 0 ? 'Source added.' : 'Source updated.');
+    }
+    setEditor(null);
+  }
+
+  function removeGroup(groupIndex) {
+    if (groups.length <= 1) {
+      setStatus((current) => ({ ...current, error: 'Weblist must keep at least one group.', message: '' }));
+      return;
+    }
+    if (!window.confirm(`Remove “${groups[groupIndex].title}” and all its sources?`)) return;
+    persist(groups.filter((_, index) => index !== groupIndex), 'Group removed.');
+  }
+
+  function removeSource(groupIndex, sourceIndex) {
+    if (!window.confirm(`Remove “${groups[groupIndex].sources[sourceIndex].name}”?`)) return;
+    persist(groups.map((group, index) => index !== groupIndex ? group : { ...group, sources: group.sources.filter((_, itemIndex) => itemIndex !== sourceIndex) }), 'Source removed.');
+  }
+
+  return (
+    <main className="rs-weblist-page">
+      <header className="rs-weblist-hero">
+        <div><span>Curated by Rifnote</span><h1>Your web, neatly sorted.</h1><p>A focused collection of Nigerian media, global reporting, analysis, technology, sports, and useful corners of the internet.</p></div>
+        <aside><strong>{sourceTotal}</strong><span>sources</span></aside>
+      </header>
+
+      <section className="rs-weblist-toolbar" role="search">
+        <label><Search size={20} /><input type="search" value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search publications or topics…" />{query ? <button type="button" onClick={() => setQuery('')} aria-label="Clear search">×</button> : null}</label>
+        <div><button className={activeGroup === 'all' ? 'active' : ''} type="button" onClick={() => setActiveGroup('all')}>All</button>{groups.map((group) => <button className={activeGroup === group.id ? 'active' : ''} type="button" key={group.id} onClick={() => setActiveGroup(group.id)}>{group.title}</button>)}</div>
+      </section>
+
+      {canManage ? <section className="rs-weblist-adminbar"><div><strong>Weblist editor</strong><span>Add, edit, or remove groups and sources here. Changes save immediately.</span></div><button type="button" onClick={() => setEditor({ type: 'group', groupIndex: -1, data: { title: '', slug: '', sources: [] } })}>+ Add group</button></section> : null}
+      {status.error ? <p className="rs-weblist-notice is-error">{status.error}</p> : null}
+      {status.saving ? <p className="rs-weblist-notice">Saving changes…</p> : status.message ? <p className="rs-weblist-notice is-success">{status.message}</p> : null}
+
+      <div className="rs-weblist-groups">
+        {status.loading ? [0, 1, 2].map((item) => <section className="rs-weblist-group is-loading" key={item} />) : visibleGroups.map((group) => {
+          const groupIndex = groups.findIndex((item) => item.id === group.id);
+          return <section className={`rs-weblist-group is-${group.slug}`} key={group.id}>
+            <header><div><span><Globe2 size={19} /></span><h2>{group.title}</h2><small>{group.sources.length} {group.sources.length === 1 ? 'item' : 'items'}</small></div>{canManage ? <nav><button type="button" onClick={() => setEditor({ type: 'source', groupIndex, sourceIndex: -1, data: { name: '', url: '', query: '', favicon_url: '' } })}>+ Source</button><button type="button" onClick={() => setEditor({ type: 'group', groupIndex, data: { ...groups[groupIndex] } })}><Pencil size={15} /> Edit</button><button className="danger" type="button" onClick={() => removeGroup(groupIndex)}><Trash2 size={15} /> Remove</button></nav> : null}</header>
+            <div className="rs-weblist-sources">{group.sources.map((source) => {
+              const sourceIndex = groups[groupIndex].sources.findIndex((item) => item.id === source.id);
+              const body = <><WeblistFavicon source={source} /><span><strong>{source.name}</strong>{source.url ? <small>{source.url.replace(/^https?:\/\/(www\.)?/, '').split('/')[0]}</small> : <small>Saved topic</small>}</span>{source.url ? <ExternalLink size={15} /> : <Search size={15} />}</>;
+              return <article className="rs-weblist-source" key={source.id}>{source.url ? <a href={source.url} target="_blank" rel="noopener noreferrer">{body}</a> : <a href={searchUrl(source.query || source.name)}>{body}</a>}{canManage ? <div><button type="button" aria-label={`Edit ${source.name}`} onClick={() => setEditor({ type: 'source', groupIndex, sourceIndex, data: { ...source } })}><Pencil size={14} /></button><button type="button" aria-label={`Remove ${source.name}`} onClick={() => removeSource(groupIndex, sourceIndex)}><Trash2 size={14} /></button></div> : null}</article>;
+            })}</div>
+          </section>;
+        })}
+        {!status.loading && !visibleGroups.length ? <div className="rs-weblist-empty">No sources match that search. Try a shorter name or another group.</div> : null}
+      </div>
+
+      {editor ? <div className="rs-weblist-editor-backdrop" role="presentation" onClick={() => setEditor(null)}><form className="rs-weblist-editor" onSubmit={saveEditor} onClick={(event) => event.stopPropagation()}><header><div><span>{editor.type === 'group' ? 'Weblist group' : 'Weblist source'}</span><h2>{editor.type === 'group' ? (editor.groupIndex < 0 ? 'Add new' : 'Edit details') : (editor.sourceIndex < 0 ? 'Add new' : 'Edit details')}</h2></div><button type="button" onClick={() => setEditor(null)}>×</button></header>{editor.type === 'group' ? <><label>Group name<input required value={editor.data.title} onChange={(event) => setEditor({ ...editor, data: { ...editor.data, title: event.target.value } })} placeholder="Technology" /></label><label>Group slug<input value={editor.data.slug || ''} onChange={(event) => setEditor({ ...editor, data: { ...editor.data, slug: event.target.value } })} placeholder="technology" /></label></> : <><label>Source name<input required value={editor.data.name} onChange={(event) => setEditor({ ...editor, data: { ...editor.data, name: event.target.value } })} placeholder="Publisher name" /></label><label>Website URL<input type="url" value={editor.data.url || ''} onChange={(event) => setEditor({ ...editor, data: { ...editor.data, url: event.target.value } })} placeholder="https://example.com" /></label><label>Search prompt<input value={editor.data.query || ''} onChange={(event) => setEditor({ ...editor, data: { ...editor.data, query: event.target.value } })} placeholder="Use instead of a website URL" /></label><label>Custom favicon URL<input type="url" value={editor.data.favicon_url || ''} onChange={(event) => setEditor({ ...editor, data: { ...editor.data, favicon_url: event.target.value } })} placeholder="Optional — detected automatically" /></label></>}<footer><button type="button" onClick={() => setEditor(null)}>Cancel</button><button className="primary" type="submit">Save changes</button></footer></form></div> : null}
+      <footer className="rs-weblist-footer">A calmer starting point for the daily scroll.</footer>
     </main>
   );
 }
@@ -3453,6 +3581,35 @@ function FootballDateNav({ selectedDate, onChange }) {
   );
 }
 
+class FootballRenderBoundary extends Component {
+  constructor(props) {
+    super(props);
+    this.state = { failed: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidCatch(error) {
+    console.error('Rifnote football panel render failed.', error);
+  }
+
+  render() {
+    if (this.state.failed) {
+      return (
+        <section className="rs-pitchside-detail empty" aria-label="Match details unavailable">
+          <Goal size={42} />
+          <h2>Match details are refreshing.</h2>
+          <p>The match list is still available. Select another match or tap Sync to try again.</p>
+        </section>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
 function FootballHub() {
   const [livePayload, setLivePayload] = useState({ fixtures: [], provider: 'database', configured: false, updated_at: '', poll_after: 30 });
   const [upcomingPayload, setUpcomingPayload] = useState({ fixtures: [], provider: 'database', configured: false, updated_at: '', poll_after: 300 });
@@ -3611,7 +3768,10 @@ function FootballHub() {
     || allFixtures[0]
     || null;
   const footballConfigured = !!(datePayload.configured || livePayload.configured || upcomingPayload.configured || finishedPayload.configured);
-  const footballStatusMessage = scoreStatus.error || datePayload.message || livePayload.message || upcomingPayload.message || (footballConfigured ? 'Saved fixtures' : 'Setup needed');
+  const footballStatusMessage = footballDisplayText(
+    scoreStatus.error || datePayload.message || livePayload.message || upcomingPayload.message,
+    footballConfigured ? 'Saved fixtures' : 'Setup needed',
+  );
   const totalLive = liveFixtures.length;
   const totalUpcoming = upcomingFixtures.length;
   const totalFinished = finishedFixtures.length;
@@ -3658,7 +3818,9 @@ function FootballHub() {
               focusedFixture={focusedFixture}
               onFocus={handleFixtureFocus}
             />
-            <FootballPitchsideDetail fixture={focusedFixture} loading={scoreStatus.loading} configured={footballConfigured} onBack={() => setMatchDetailOpen(false)} />
+            <FootballRenderBoundary key={getFixtureKey(focusedFixture) || 'empty-match'}>
+              <FootballPitchsideDetail fixture={focusedFixture} loading={scoreStatus.loading} configured={footballConfigured} onBack={() => setMatchDetailOpen(false)} />
+            </FootballRenderBoundary>
           </div>
         ) : (
           <FootballPitchsideNoMatches
@@ -3964,14 +4126,14 @@ function getCompetitionKey(fixture = {}) {
 }
 
 function getFootballRoundLabel(fixture = {}) {
-  const clean = String(fixture?.league?.round_clean || fixture?.round_clean || '').trim();
+  const clean = footballDisplayText(fixture?.league?.round_clean || fixture?.round_clean, '').trim();
 
   if (clean) {
     return clean;
   }
 
-  let round = String(fixture?.league?.round || fixture?.round || '').trim();
-  const league = String(fixture?.league?.name || fixture?.watchlist_label || '').trim();
+  let round = footballDisplayText(fixture?.league?.round || fixture?.round, '').trim();
+  const league = footballDisplayText(fixture?.league?.name || fixture?.watchlist_label, '').trim();
 
   if (league) {
     round = round.replace(new RegExp(`^${escapeRegExp(league)}\\s*[-–—]\\s*`, 'i'), '').trim();
@@ -3990,7 +4152,7 @@ function escapeRegExp(value = '') {
 
 function getFootballCompetitionLabel(fixture = {}, options = {}) {
   const includeRound = options.includeRound !== false;
-  const league = fixture?.league?.name || fixture?.watchlist_label || 'Football';
+  const league = footballDisplayText(fixture?.league?.name || fixture?.watchlist_label, 'Football');
   const round = includeRound ? getFootballRoundLabel(fixture) : '';
 
   return [league, round].filter(Boolean).join(' · ');
@@ -4016,6 +4178,15 @@ function footballEntityLabel(value, fallback = '') {
   if (value === null || value === undefined) return fallback;
   if (typeof value === 'string' || typeof value === 'number') return decodeText(value) || fallback;
   if (typeof value === 'object') return decodeText(value.name || value.label || value.title || '') || fallback;
+  return fallback;
+}
+
+function footballDisplayText(value, fallback = '') {
+  if (value === null || value === undefined || value === '') return fallback;
+  if (typeof value === 'string' || typeof value === 'number') return decodeText(String(value)) || fallback;
+  if (typeof value === 'object') {
+    return footballDisplayText(value.name ?? value.label ?? value.title ?? value.message ?? '', fallback);
+  }
   return fallback;
 }
 
@@ -4048,11 +4219,11 @@ function getFixtureMarkers(fixture = {}, details = {}) {
   return rows
     .map((row) => ({
       kind: String(row.kind || row.type || 'marker').toLowerCase(),
-      label: String(row.label || row.detail || row.type || '').trim(),
+      label: footballDisplayText(row.label || row.detail || row.type, '').trim(),
       minute: row.minute ?? row.elapsed ?? '',
       extra: row.extra ?? '',
-      team: row.team?.name || row.team || '',
-      player: row.player?.name || row.player || '',
+      team: footballDisplayText(row.team, ''),
+      player: footballDisplayText(row.player, ''),
       goalType: String(row.kind || row.type || '').toLowerCase() === 'goal'
         ? normalizeGoalType(row.goal_type || row.goalType || row.detail || row.label)
         : 'normal',
@@ -4113,8 +4284,8 @@ function MatchMarkers({ fixture = {}, details = {}, compact = false }) {
 
 function AggregateChip({ fixture = {}, compact = false }) {
   const aggregate = fixture.aggregate || {};
-  const label = aggregate.label || (aggregate.home !== undefined && aggregate.away !== undefined ? `Agg ${aggregate.home}-${aggregate.away}` : '');
-  const leg = fixture.leg_label || '';
+  const label = footballDisplayText(aggregate.label, '') || (aggregate.home !== undefined && aggregate.away !== undefined ? `Agg ${aggregate.home}-${aggregate.away}` : '');
+  const leg = footballDisplayText(fixture.leg_label, '');
 
   if (!label && !leg) {
     return null;
@@ -4183,7 +4354,7 @@ function getFixtureKey(fixture = {}) {
 }
 
 function getFixtureClock(fixture = {}) {
-  const status = fixture.status_short || '';
+  const status = footballDisplayText(fixture.status_short, '');
 
   if (fixture.elapsed) {
     return `${fixture.elapsed}${fixture.extra ? `+${fixture.extra}` : ''}'`;
@@ -4312,11 +4483,12 @@ function FootballPitchsideRow({ fixture, focused = false, onFocus }) {
 }
 
 function FootballPitchsideTeam({ team = {}, goals = '-', dim = false }) {
+  const teamName = footballDisplayText(team.name || team, 'Team');
   return (
     <span className={`rs-pitchside-team ${dim ? 'is-dim' : ''}`}>
-      {team.logo ? <img src={team.logo} alt="" loading="lazy" /> : <i>{shortTeamName(team.name || 'Team').slice(0, 2).toUpperCase()}</i>}
-      <b>{team.name || 'Team'}</b>
-      <strong>{goals ?? '-'}</strong>
+      {team.logo ? <img src={team.logo} alt="" loading="lazy" /> : <i>{shortTeamName(teamName).slice(0, 2).toUpperCase()}</i>}
+      <b>{teamName}</b>
+      <strong>{footballDisplayText(goals, '-')}</strong>
     </span>
   );
 }
@@ -4384,7 +4556,7 @@ function FootballPitchsideDetail({ fixture, loading = false, configured = false,
   const live = isFixtureLiveNow(fixture);
   const clock = getFixtureClock(fixture);
   const progress = getFixtureProgress(fixture);
-  const venue = [fixture.venue?.name, fixture.venue?.city].filter(Boolean).join(' · ');
+  const venue = [footballDisplayText(fixture.venue?.name), footballDisplayText(fixture.venue?.city)].filter(Boolean).join(' · ');
   const detailedFixture = detailsPayload?.fixture || fixture;
   const details = detailsPayload?.details || {};
 
@@ -4426,7 +4598,7 @@ function FootballPitchsideDetail({ fixture, loading = false, configured = false,
         <MatchDetailsSections
           activeTab={activeTab}
           details={details}
-          error={detailsStatus.error || detailsPayload?.message || ''}
+          error={footballDisplayText(detailsStatus.error || detailsPayload?.message, '')}
           fixture={detailedFixture}
           loading={detailsStatus.loading}
           onTabChange={setActiveTab}
@@ -4438,10 +4610,11 @@ function FootballPitchsideDetail({ fixture, loading = false, configured = false,
 }
 
 function FootballPitchsideSide({ team = {} }) {
+  const teamName = footballDisplayText(team.name || team, 'Team');
   return (
     <div className="rs-pitchside-side">
-      {team.logo ? <img src={team.logo} alt="" loading="lazy" /> : <i>{shortTeamName(team.name || 'Team').slice(0, 2).toUpperCase()}</i>}
-      <strong>{team.name || 'Team'}</strong>
+      {team.logo ? <img src={team.logo} alt="" loading="lazy" /> : <i>{shortTeamName(teamName).slice(0, 2).toUpperCase()}</i>}
+      <strong>{teamName}</strong>
     </div>
   );
 }
@@ -4811,11 +4984,11 @@ function MatchDetailsTab({ activeTab, details = {}, fixture = {}, stories = [], 
       <div className="rs-match-tab-panel rs-match-summary-panel">
         <article>
           <Flame size={18} />
-          <div><strong>Match state</strong><span>{fixture.status_long || fixture.status_short || 'Scheduled'} · {fixture.league?.name || 'Football'}</span></div>
+          <div><strong>Match state</strong><span>{footballDisplayText(fixture.status_long || fixture.status_short, 'Scheduled')} · {footballDisplayText(fixture.league?.name, 'Football')}</span></div>
         </article>
         <article>
           <MapIcon size={18} />
-          <div><strong>Venue</strong><span>{[fixture.venue?.name, fixture.venue?.city].filter(Boolean).join(' · ') || 'Venue TBC'}</span></div>
+          <div><strong>Venue</strong><span>{[footballDisplayText(fixture.venue?.name), footballDisplayText(fixture.venue?.city)].filter(Boolean).join(' · ') || 'Venue TBC'}</span></div>
         </article>
         <article>
           <Newspaper size={18} />
@@ -4883,16 +5056,18 @@ function MatchNewsPanel({ stories = [], fixture = {} }) {
 
 function EventRow({ event }) {
   const minute = event.elapsed ? `${event.elapsed}${event.extra ? `+${event.extra}` : ''}'` : '—';
-  const isGoal = String(event.type || '').toLowerCase() === 'goal';
+  const eventType = footballDisplayText(event.type, 'Match event');
+  const eventDetail = footballDisplayText(event.detail, '');
+  const isGoal = eventType.toLowerCase() === 'goal';
   const goalType = isGoal ? normalizeGoalType(event.detail) : 'normal';
 
   return (
     <article className={`rs-event-row ${isGoal ? `is-${goalType}` : ''}`}>
-      <Badge tone={event.type === 'Goal' ? 'danger' : ''}>{minute}</Badge>
+      <Badge tone={eventType === 'Goal' ? 'danger' : ''}>{minute}</Badge>
       {event.team?.logo ? <img src={event.team.logo} alt="" loading="lazy" /> : <span className="rs-team-dot" />}
       <div>
-        <strong>{event.player?.name || event.type || 'Match event'}</strong>
-        <span>{event.type}{event.detail ? ` · ${event.detail}` : ''}{isGoal && goalType !== 'normal' ? <em className={`rs-goal-type-badge is-${goalType}`}>{goalTypeLabel(goalType)}</em> : null}{event.assist?.name ? ` · Assist: ${event.assist.name}` : ''}</span>
+        <strong>{footballDisplayText(event.player, eventType)}</strong>
+        <span>{eventType}{eventDetail ? ` · ${eventDetail}` : ''}{isGoal && goalType !== 'normal' ? <em className={`rs-goal-type-badge is-${goalType}`}>{goalTypeLabel(goalType)}</em> : null}{footballDisplayText(event.assist) ? ` · Assist: ${footballDisplayText(event.assist)}` : ''}</span>
       </div>
     </article>
   );
@@ -4910,8 +5085,8 @@ function StatsPanel({ statistics = [] }) {
       {statTypes.map((type) => (
         <article key={type}>
           <span>{type}</span>
-          <strong>{statistics[0]?.statistics?.find((stat) => stat.type === type)?.value || '—'}</strong>
-          <b>{statistics[1]?.statistics?.find((stat) => stat.type === type)?.value || '—'}</b>
+          <strong>{footballDisplayText(statistics[0]?.statistics?.find((stat) => stat.type === type)?.value, '—')}</strong>
+          <b>{footballDisplayText(statistics[1]?.statistics?.find((stat) => stat.type === type)?.value, '—')}</b>
         </article>
       ))}
     </div>
@@ -8573,6 +8748,7 @@ function modeFromPath() {
     weather: 'weather',
     contact: 'contact',
     'contact-us': 'contact',
+    weblist: 'weblist',
     teams: 'team-search',
     players: 'player-search',
     transfers: 'transfer-tracker',

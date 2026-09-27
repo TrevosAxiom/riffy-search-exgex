@@ -35,6 +35,15 @@ services:
       timeout: 5s
       retries: 6
 
+networks:
+  default:
+    name: rifnote-data-engine_default
+    ipam:
+      config:
+        # Avoid the VPS host route on 172.18.0.0/16, which otherwise makes
+        # published container ports unreachable from Apache and localhost.
+        - subnet: 172.30.0.0/16
+
 volumes:
   rifnote_postgres_data:
   rifnote_redis_data:

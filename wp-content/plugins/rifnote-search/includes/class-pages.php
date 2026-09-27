@@ -23,6 +23,7 @@ class Rifnote_Search_Pages {
             'football-stories' => array('title' => __('Football Stories', 'rifnote-search'), 'mode' => 'football-stories', 'shortcode' => 'rifnote_football_stories'),
             'weather' => array('title' => __('Weather', 'rifnote-search'), 'mode' => 'weather', 'shortcode' => 'rifnote_weather'),
             'contact-us' => array('title' => __('Contact Us', 'rifnote-search'), 'mode' => 'contact', 'shortcode' => 'rifnote_contact'),
+            'weblist' => array('title' => __('Weblist', 'rifnote-search'), 'mode' => 'weblist', 'shortcode' => 'rifnote_weblist'),
             'publisher-docs' => array('title' => __('Publisher Docs', 'rifnote-search'), 'mode' => 'publisher-docs', 'shortcode' => 'rifnote_publisher_docs'),
             'dmca' => array('title' => __('DMCA Removal Request', 'rifnote-search'), 'mode' => 'legal-dmca', 'shortcode' => 'rifnote_dmca_request'),
             'publisher-opt-out' => array('title' => __('Publisher Opt-Out', 'rifnote-search'), 'mode' => 'legal-opt-out', 'shortcode' => 'rifnote_publisher_opt_out'),
@@ -217,6 +218,7 @@ class Rifnote_Search_Pages {
                     array('label' => __('Weather', 'rifnote-search'), 'url' => home_url('/weather/')),
                     array('label' => __('Daily Drop', 'rifnote-search'), 'url' => home_url('/daily-briefing/')),
                     array('label' => __('My Feed', 'rifnote-search'), 'url' => home_url('/for-you/')),
+                    array('label' => __('Weblist', 'rifnote-search'), 'url' => home_url('/weblist/')),
                 ),
             ),
             array(

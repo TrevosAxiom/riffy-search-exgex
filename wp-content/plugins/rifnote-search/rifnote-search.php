@@ -3,7 +3,7 @@
  * Plugin Name: Rifnote Search
  * Plugin URI: https://rifnote.com/
  * Description: AI-powered news search and publisher discovery plugin for Rifnote.
- * Version: 0.2.59
+ * Version: 0.2.60
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Rifnote
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RIFNOTE_SEARCH_VERSION', '0.2.59');
+define('RIFNOTE_SEARCH_VERSION', '0.2.60');
 define('RIFNOTE_SEARCH_FILE', __FILE__);
 define('RIFNOTE_SEARCH_DIR', plugin_dir_path(__FILE__));
 define('RIFNOTE_SEARCH_URL', plugin_dir_url(__FILE__));
@@ -56,6 +56,7 @@ require_once RIFNOTE_SEARCH_DIR . 'includes/class-ai.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-rest-api.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-admin.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-pages.php';
+require_once RIFNOTE_SEARCH_DIR . 'includes/class-weblist.php';
 require_once RIFNOTE_SEARCH_DIR . 'includes/class-pwa.php';
 
 final class Rifnote_Search_Plugin {
@@ -139,6 +140,7 @@ final class Rifnote_Search_Plugin {
         add_action('created_category', array('Rifnote_Search_Admin', 'save_category_default_image'));
         add_action('edited_category', array('Rifnote_Search_Admin', 'save_category_default_image'));
         add_action('rest_api_init', array('Rifnote_Search_REST_API', 'register_routes'));
+        add_action('rest_api_init', array('Rifnote_Search_Weblist', 'register_routes'));
         add_action('admin_menu', array('Rifnote_Search_Admin', 'register_menu'));
         add_action('admin_menu', array('Rifnote_Search_RSS_Warehouse', 'register_menu'));
         add_action('admin_init', array('Rifnote_Search_Admin', 'maybe_install_performance_indexes'), 5);
@@ -183,6 +185,7 @@ final class Rifnote_Search_Plugin {
         add_shortcode('rifnote_football_stories', array($this, 'render_football_stories_shortcode'));
         add_shortcode('rifnote_weather', array($this, 'render_weather_shortcode'));
         add_shortcode('rifnote_contact', array($this, 'render_contact_shortcode'));
+        add_shortcode('rifnote_weblist', array($this, 'render_weblist_shortcode'));
         add_shortcode('rifnote_legal_request', array($this, 'render_legal_request_shortcode'));
         add_shortcode('rifnote_dmca_request', array($this, 'render_dmca_request_shortcode'));
         add_shortcode('rifnote_publisher_opt_out', array($this, 'render_opt_out_shortcode'));
@@ -750,6 +753,10 @@ JS;
 
     public function render_contact_shortcode() {
         return $this->render_app('contact');
+    }
+
+    public function render_weblist_shortcode() {
+        return $this->render_app('weblist');
     }
 
     public function render_legal_request_shortcode() {
