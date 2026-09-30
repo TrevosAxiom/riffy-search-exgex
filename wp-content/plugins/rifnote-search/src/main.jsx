@@ -1004,6 +1004,7 @@ function App({ mode }) {
     <main className="rs-shell rs-search-page">
       {isHome ? (
         <section className="rs-google-home rs-home-editorial-layout">
+          <HomeEditorialLogo />
           {hasTransferDeadlineTakeover ? (
             <TransferDeadlineHomeTakeover deadline={transferDeadline} />
           ) : isElectionTakeoverActive ? (
@@ -1030,8 +1031,8 @@ function App({ mode }) {
               ))}
             </div>
           )}
-          {liveFeaturedFootballMatches.length ? <HomeLiveMatchStrip fixture={liveFeaturedFootballMatches[0]} /> : <HomeUtilityStrip state={state} />}
           <SearchPanel state={state} onSubmit={submitSearch} compact="home" />
+          {liveFeaturedFootballMatches.length ? <HomeLiveMatchStrip fixture={liveFeaturedFootballMatches[0]} /> : <HomeUtilityStrip state={state} />}
           <HomeQuickLinks activePill={homePill} items={homepagePills} onSelect={updateHomePill} showCategories={Boolean(siteCategories.length)} categoriesActive={showHomeCategories} onCategoriesToggle={toggleHomeCategories} />
         </section>
       ) : null}
@@ -5837,6 +5838,15 @@ function HomeEditorialTakeover({ featuredFootballMatches = [], channels = {} }) 
   );
 }
 
+function HomeEditorialLogo() {
+  const logo = window.RIFNOTE_SEARCH?.siteLogoUrl || window.RIFNOTE_SEARCH?.siteIconUrl || '';
+  return (
+    <a className="rs-home-editorial-logo" href={window.RIFNOTE_SEARCH?.homeUrl || '/'} aria-label="Rifnote home">
+      {logo ? <img src={logo} alt="Rifnote" /> : <strong>Rifnote</strong>}
+    </a>
+  );
+}
+
 function HomeEditorialLead({ story = null, loading = false, live = {}, onLiveChange = () => {} }) {
   const canManage = Boolean(window.RIFNOTE_SEARCH?.canManageOptions);
   const [editing, setEditing] = useState(false);
@@ -5863,8 +5873,8 @@ function HomeEditorialLead({ story = null, loading = false, live = {}, onLiveCha
   const headline = decodeText(story.headline || story.title || 'Latest from Rifnote');
   const excerpt = decodeText(story.excerpt || story.summary || story.description || '');
   const source = decodeText(story.source_name || story.source_domain || 'Rifnote');
-  const status = String(story.live_status || 'live').toLowerCase();
-  const statusLabel = status === 'empty' ? 'Live' : status;
+  const status = String(story.live_status || '').toLowerCase();
+  const statusLabel = status && status !== 'empty' ? status : '';
 
   const openEditor = () => {
     setForm({ status: live?.enabled ? (live.status || 'live') : 'empty', title: live?.title || '', excerpt: live?.excerpt || '', content: live?.content || '', image_url: live?.image_url || '', url: live?.url || '' });
@@ -5907,12 +5917,7 @@ function HomeEditorialLead({ story = null, loading = false, live = {}, onLiveCha
         {image ? <img src={image} alt="" loading="eager" fetchPriority="high" /> : <Newspaper size={48} aria-hidden="true" />}
       </a>
       <div className="rs-home-editorial-lead-copy">
-        <div className="rs-home-editorial-lead-meta">
-          <span className={`rs-home-editorial-live is-${status}`}><i /> {statusLabel}</span>
-          <span>{source}</span>
-          {story.published_at_human || story.published_at ? <time>{story.published_at_human || formatDate(story.published_at)}</time> : null}
-        </div>
-        <h1><a href={storyUrl} {...linkPropsForUrl(storyUrl)} onClick={(event) => { if (storyUrl === '#') event.preventDefault(); else trackStoryClick(story, 'homepage_editorial_lead_click', 'Lead story'); }}>{headline}</a></h1>
+        <h1><a href={storyUrl} {...linkPropsForUrl(storyUrl)} onClick={(event) => { if (storyUrl === '#') event.preventDefault(); else trackStoryClick(story, 'homepage_editorial_lead_click', 'Lead story'); }}>{statusLabel ? <span className={`rs-home-editorial-live is-${status}`}><i /> {statusLabel}</span> : null}{headline}</a></h1>
         {excerpt ? <p>{excerpt}</p> : null}
         {story.content ? <div className="rs-home-editorial-content" dangerouslySetInnerHTML={{ __html: story.content }} /> : null}
       </div>

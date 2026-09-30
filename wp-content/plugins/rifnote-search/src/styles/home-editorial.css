@@ -1,23 +1,25 @@
 .rs-google-home.rs-home-editorial-layout{gap:clamp(18px,2.8vw,34px);min-height:0;padding:clamp(18px,3vw,42px) 18px 34px;overflow:visible;text-align:left}
-.rs-home-editorial-lead{display:grid;gap:clamp(18px,2vw,28px);width:min(1240px,94vw);margin:0 auto}
-.rs-home-editorial-lead-image{display:grid;place-items:center;width:100%;aspect-ratio:16/8.15;overflow:hidden;background:#eef1f5;color:#98a2b3;text-decoration:none}
+.rs-home-editorial-logo{display:grid;place-items:center;width:clamp(480px,40vw,620px);min-height:54px;margin:0 auto;color:#101828;text-decoration:none}
+.rs-home-editorial-logo img{display:block;width:auto;max-width:min(230px,70%);height:auto;max-height:64px;object-fit:contain}
+.rs-home-editorial-logo strong{font-family:Outfit,sans-serif;font-size:2rem;font-weight:950;letter-spacing:-.055em}
+.rs-home-editorial-lead{position:relative;display:grid;gap:14px;width:clamp(480px,40vw,620px);margin:0 auto}
+.rs-home-editorial-lead-image{display:grid;place-items:center;width:100%;aspect-ratio:16/9;overflow:hidden;background:#eef1f5;color:#98a2b3;text-decoration:none}
 .rs-home-editorial-lead-image img{width:100%;height:100%;object-fit:cover;transition:transform .45s ease}
 .rs-home-editorial-lead-image:hover img,.rs-home-editorial-lead-image:focus-visible img{transform:scale(1.012)}
 .rs-home-editorial-lead-copy{display:grid;gap:10px}
 .rs-home-editorial-lead-meta{display:flex;flex-wrap:wrap;align-items:center;gap:8px 12px;color:#667085;font-size:.78rem;font-weight:800}
-.rs-home-editorial-live{display:inline-flex;align-items:center;gap:8px;color:#e00000;font-family:Outfit,sans-serif;font-size:clamp(1.2rem,2.2vw,2rem);font-weight:950;letter-spacing:-.025em;line-height:1;text-transform:uppercase}
+.rs-home-editorial-live{display:inline-flex;align-items:center;gap:7px;margin-right:.22em;color:#e00000;font-family:Outfit,sans-serif;font-size:.72em;font-weight:950;letter-spacing:-.025em;line-height:1;text-transform:uppercase;vertical-align:.08em}
 .rs-home-editorial-live i{width:.72em;height:.72em;border:.16em solid currentColor;border-radius:50%;background:currentColor;box-shadow:inset 0 0 0 .12em #fff;animation:rsHomeLivePulse 1.4s ease-in-out infinite}
 .rs-home-editorial-live.is-breaking{color:#d60000}
 .rs-home-editorial-live.is-update{color:#1769e0}
 .rs-home-editorial-live.is-developing{color:#b26a00}
-.rs-home-editorial-lead h1{max-width:1180px;margin:0;color:#17191d;font-family:Georgia,'Times New Roman',serif;font-size:clamp(2.25rem,5.3vw,5.35rem);font-weight:800;letter-spacing:-.055em;line-height:.98}
+.rs-home-editorial-lead h1{margin:0;color:#17191d;font-family:Georgia,'Times New Roman',serif;font-size:clamp(2rem,2.8vw,3rem);font-weight:800;letter-spacing:-.045em;line-height:1.02}
 .rs-home-editorial-lead h1 a{color:inherit;text-decoration:none}
 .rs-home-editorial-lead h1 a:hover,.rs-home-editorial-lead h1 a:focus-visible{color:#d71920}
-.rs-home-editorial-lead p{max-width:1080px;margin:2px 0 0;color:#33363b;font-family:Montserrat,sans-serif;font-size:clamp(1rem,1.65vw,1.42rem);font-weight:560;line-height:1.5}
+.rs-home-editorial-lead p{margin:2px 0 0;color:#33363b;font-family:Montserrat,sans-serif;font-size:clamp(.92rem,1.05vw,1.08rem);font-weight:560;line-height:1.5}
 .rs-home-editorial-content{max-width:980px;color:#475467;font-size:.95rem;line-height:1.65}
 .rs-home-editorial-content p{margin:0 0 8px;font-size:inherit}
 .rs-home-live-edit{position:absolute;z-index:4;top:14px;right:14px;display:inline-flex;align-items:center;gap:7px;padding:9px 13px;border:1px solid rgba(255,255,255,.6);border-radius:999px;background:rgba(16,24,40,.86);color:#fff;font:inherit;font-size:.75rem;font-weight:850;cursor:pointer;backdrop-filter:blur(10px)}
-.rs-home-editorial-lead{position:relative}
 .rs-home-live-editor-backdrop{position:fixed;z-index:2147483000;inset:0;display:grid;place-items:center;padding:20px;background:rgba(16,24,40,.62);backdrop-filter:blur(8px)}
 .rs-home-live-editor{display:grid;gap:14px;width:min(680px,100%);max-height:92vh;padding:22px;border-radius:24px;background:#fff;box-shadow:0 32px 100px rgba(0,0,0,.35);overflow:auto}
 .rs-home-live-editor header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}
@@ -47,10 +49,12 @@
 .rs-home-match-strip .rs-home-featured-football.is-story-channel .rs-home-scoreboard-score:after{content:'';position:absolute;top:calc(100% + 5px);left:50%;width:2px;height:12px;background:#f4c400;transform:translateX(-50%)}
 @media(max-width:720px){
   .rs-google-home.rs-home-editorial-layout{gap:17px;padding:8px 10px 25px}
-  .rs-home-editorial-lead,.rs-home-match-strip{width:100%}
+  .rs-home-editorial-logo,.rs-home-editorial-lead,.rs-home-match-strip{width:100%;min-width:0}
+  .rs-home-editorial-logo{min-height:46px}
+  .rs-home-editorial-logo img{max-width:180px;max-height:52px}
   .rs-home-editorial-lead{gap:14px}
-  .rs-home-editorial-lead-image{aspect-ratio:16/10.5}
-  .rs-home-editorial-lead h1{font-size:clamp(2rem,10.6vw,3.45rem);line-height:1}
+  .rs-home-editorial-lead-image{aspect-ratio:16/9}
+  .rs-home-editorial-lead h1{font-size:clamp(1.85rem,9vw,3rem);line-height:1.02}
   .rs-home-editorial-lead p{font-size:.98rem;line-height:1.48}
   .rs-home-editorial-lead-meta>span:not(.rs-home-editorial-live),.rs-home-editorial-lead-meta time{font-size:.7rem}
   .rs-home-match-strip{grid-template-columns:1fr;min-height:0}
