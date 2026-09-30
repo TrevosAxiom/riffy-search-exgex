@@ -3058,6 +3058,10 @@ class Rifnote_Search_Admin {
         register_setting('rifnote_search_settings', 'rifnote_home_live_source_type', array('type' => 'string', 'sanitize_callback' => array(__CLASS__, 'sanitize_home_live_source_type'), 'default' => 'custom'));
         register_setting('rifnote_search_settings', 'rifnote_home_live_title', array('type' => 'string', 'sanitize_callback' => 'sanitize_text_field', 'default' => ''));
         register_setting('rifnote_search_settings', 'rifnote_home_live_url', array('type' => 'string', 'sanitize_callback' => 'esc_url_raw', 'default' => ''));
+        register_setting('rifnote_search_settings', 'rifnote_home_live_status', array('type' => 'string', 'sanitize_callback' => 'sanitize_key', 'default' => 'live'));
+        register_setting('rifnote_search_settings', 'rifnote_home_live_excerpt', array('type' => 'string', 'sanitize_callback' => 'sanitize_textarea_field', 'default' => ''));
+        register_setting('rifnote_search_settings', 'rifnote_home_live_content', array('type' => 'string', 'sanitize_callback' => 'wp_kses_post', 'default' => ''));
+        register_setting('rifnote_search_settings', 'rifnote_home_live_image_url', array('type' => 'string', 'sanitize_callback' => 'esc_url_raw', 'default' => ''));
         register_setting('rifnote_search_settings', 'rifnote_home_live_page_id', array('type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 0));
         register_setting('rifnote_search_settings', 'rifnote_home_live_story_id', array('type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 0));
         register_setting('rifnote_search_settings', 'rifnote_home_live_warehouse_id', array('type' => 'integer', 'sanitize_callback' => 'absint', 'default' => 0));

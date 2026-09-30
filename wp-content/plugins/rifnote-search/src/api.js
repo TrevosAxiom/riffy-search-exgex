@@ -224,6 +224,20 @@ export async function updateLiveTrending(payload = {}) {
   return data;
 }
 
+export async function updateHomeLive(payload = {}) {
+  const baseUrl = restBaseUrl();
+  if (!baseUrl) throw new Error('Rifnote REST is not available yet.');
+  const response = await fetch(new URL('rifnote/v1/admin/home-live', baseUrl), {
+    method: 'POST',
+    credentials: 'same-origin',
+    headers: { ...headers(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.message || 'Could not update the homepage live story.');
+  return data;
+}
+
 export async function getWeblist() {
   const baseUrl = restBaseUrl();
   if (!baseUrl) return { groups: [], can_manage: false };

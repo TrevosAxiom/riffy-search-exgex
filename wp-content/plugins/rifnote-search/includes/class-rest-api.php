@@ -652,6 +652,12 @@ class Rifnote_Search_REST_API {
             'callback' => array(__CLASS__, 'update_live_trending'),
             'permission_callback' => array(__CLASS__, 'manage_options_permission'),
         ));
+
+        register_rest_route('rifnote/v1', '/admin/home-live', array(
+            'methods' => WP_REST_Server::CREATABLE,
+            'callback' => array(__CLASS__, 'update_home_live'),
+            'permission_callback' => array(__CLASS__, 'manage_options_permission'),
+        ));
     }
 
     public static function manage_options_permission() {
@@ -2273,6 +2279,42 @@ class Rifnote_Search_REST_API {
             'mode' => 'manual',
             'topics' => $topics,
             'expires_at' => gmdate(DATE_ATOM, $expires_at),
+        ));
+    }
+
+    public static function update_home_live(WP_REST_Request $request) {
+        $data = $request->get_json_params();
+        $data = is_array($data) ? $data : array();
+        $allowed_statuses = array('empty', 'live', 'breaking', 'update', 'developing');
+        $status = sanitize_key((string) ($data['status'] ?? 'empty'));
+        if (!in_array($status, $allowed_statuses, true)) $status = 'empty';
+
+        $title = sanitize_text_field((string) ($data['title'] ?? ''));
+        if ('empty' !== $status && !$title) {
+            return new WP_Error('rifnote_home_live_title_required', __('Add a title or set the status to Empty.', 'rifnote-search'), array('status' => 400));
+        }
+
+        update_option('rifnote_home_live_enabled', 'empty' !== $status, false);
+        update_option('rifnote_home_live_source_type', 'custom', false);
+        update_option('rifnote_home_live_status', $status, false);
+        update_option('rifnote_home_live_title', $title, false);
+        update_option('rifnote_home_live_excerpt', sanitize_textarea_field((string) ($data['excerpt'] ?? '')), false);
+        update_option('rifnote_home_live_content', wp_kses_post((string) ($data['content'] ?? '')), false);
+        update_option('rifnote_home_live_image_url', esc_url_raw((string) ($data['image_url'] ?? '')), false);
+        update_option('rifnote_home_live_url', esc_url_raw((string) ($data['url'] ?? '')), false);
+
+        return rest_ensure_response(array(
+            'success' => true,
+            'live' => array(
+                'enabled' => 'empty' !== $status,
+                'status' => $status,
+                'title' => $title,
+                'excerpt' => sanitize_textarea_field((string) ($data['excerpt'] ?? '')),
+                'content' => wp_kses_post((string) ($data['content'] ?? '')),
+                'image_url' => esc_url_raw((string) ($data['image_url'] ?? '')),
+                'url' => esc_url_raw((string) ($data['url'] ?? '')),
+                'source' => __('Rifnote', 'rifnote-search'),
+            ),
         ));
     }
 }

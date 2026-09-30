@@ -3,7 +3,7 @@
  * Plugin Name: Rifnote Search
  * Plugin URI: https://rifnote.com/
  * Description: AI-powered news search and publisher discovery plugin for Rifnote.
- * Version: 0.2.62
+ * Version: 0.2.63
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Rifnote
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RIFNOTE_SEARCH_VERSION', '0.2.62');
+define('RIFNOTE_SEARCH_VERSION', '0.2.63');
 define('RIFNOTE_SEARCH_FILE', __FILE__);
 define('RIFNOTE_SEARCH_DIR', plugin_dir_path(__FILE__));
 define('RIFNOTE_SEARCH_URL', plugin_dir_url(__FILE__));
@@ -568,7 +568,7 @@ JS;
 
     private function homepage_live_context() {
         if (!(bool) get_option('rifnote_home_live_enabled', false)) {
-            return array('enabled' => false);
+            return array('enabled' => false, 'status' => 'empty');
         }
 
         $type = class_exists('Rifnote_Search_Admin')
@@ -609,11 +609,15 @@ JS;
         }
 
         return array(
-            'enabled' => (bool) ($title && $url),
+            'enabled' => (bool) $title,
             'type' => $type,
+            'status' => sanitize_key((string) get_option('rifnote_home_live_status', 'live')),
             'title' => $title,
             'url' => $url,
             'source' => $source,
+            'excerpt' => sanitize_textarea_field((string) get_option('rifnote_home_live_excerpt', '')),
+            'content' => wp_kses_post((string) get_option('rifnote_home_live_content', '')),
+            'image_url' => esc_url_raw((string) get_option('rifnote_home_live_image_url', '')),
         );
     }
 

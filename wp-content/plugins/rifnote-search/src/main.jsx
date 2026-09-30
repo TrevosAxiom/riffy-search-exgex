@@ -2,9 +2,10 @@ import React, { Component, useCallback, useEffect, useMemo, useRef, useState } f
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { ArrowLeft, ArrowRight, Bookmark, CalendarDays, Clock3, Cloud, CloudRain, CloudSun, DollarSign, ExternalLink, Flame, Globe2, Goal, Home, Landmark, Mail, Map as MapIcon, Menu, Newspaper, Pencil, Phone, Play, Radio, RotateCcw, Search, Shield, Sun, Trash2, TrendingUp, Trophy, UserRound, Volume2, VolumeX } from 'lucide-react';
-import { getAdInventory, getAdvertiserDashboard, getAnonKey, getDailyBriefing, getFeedDiagnostics, getFootballCompetition, getFootballFinished, getFootballFixtureDetails, getFootballFixtures, getFootballLive, getFootballPlayerProfile, getFootballPlayers, getFootballTeamProfile, getFootballTeams, getFootballTransfers, getFootballUpcoming, getForYou, getHomeLeadStory, getHomeNotes, getLiveMarkets, getLiveWeather, getNotifications, getPublisherStats, getRifnoteAiAnswer, getSocialEmbed, getSourceProfile, getStoryChannel, getStoryCluster, getSuggestions, getTrendingTopics, getWeblist, getWidget, getWorldWeather, registerDevice, saveAlert, savePreference, searchRifnote, subscribeNewsletter, submitAdvertiserPaymentProof, submitAdvertiserSignup, submitBetaFeedback, submitContactMessage, submitLegalRequest, submitPublisherSignup, submitPublisherStory, submitSponsorRequest, subscribeNoResult, trackAnalyticsEvent, trackSponsoredClick, trashStory, updateAdvertiserProfile, updateLiveTrending, updateNotification, updateWeblist, uploadMedia } from './api.js';
+import { getAdInventory, getAdvertiserDashboard, getAnonKey, getDailyBriefing, getFeedDiagnostics, getFootballCompetition, getFootballFinished, getFootballFixtureDetails, getFootballFixtures, getFootballLive, getFootballPlayerProfile, getFootballPlayers, getFootballTeamProfile, getFootballTeams, getFootballTransfers, getFootballUpcoming, getForYou, getHomeLeadStory, getHomeNotes, getLiveMarkets, getLiveWeather, getNotifications, getPublisherStats, getRifnoteAiAnswer, getSocialEmbed, getSourceProfile, getStoryChannel, getStoryCluster, getSuggestions, getTrendingTopics, getWeblist, getWidget, getWorldWeather, registerDevice, saveAlert, savePreference, searchRifnote, subscribeNewsletter, submitAdvertiserPaymentProof, submitAdvertiserSignup, submitBetaFeedback, submitContactMessage, submitLegalRequest, submitPublisherSignup, submitPublisherStory, submitSponsorRequest, subscribeNoResult, trackAnalyticsEvent, trackSponsoredClick, trashStory, updateAdvertiserProfile, updateHomeLive, updateLiveTrending, updateNotification, updateWeblist, uploadMedia } from './api.js';
 import { rifnoteCategories, searchTabs } from './data/rifnote.js';
 import './styles/index.css';
+import './styles/home-editorial.css';
 
 const defaultHomePills = [
   { label: 'Notes', category: 'Notes', is_notes: true },
@@ -614,6 +615,7 @@ function App({ mode }) {
   const [homeLeadStory, setHomeLeadStory] = useState(null);
   const [homeNotes, setHomeNotes] = useState(null);
   const [homeNotesArchiveUrl, setHomeNotesArchiveUrl] = useState('');
+  const [homeLive, setHomeLive] = useState(window.RIFNOTE_SEARCH?.homeLive || { enabled: false, status: 'empty' });
   const homepagePills = useMemo(() => runtimeHomePills(), []);
   const siteCategories = useMemo(() => runtimeSiteCategories(), []);
   const [homePill, setHomePill] = useState(homepagePills[0]?.category || 'Notes');
@@ -823,17 +825,27 @@ function App({ mode }) {
   }
 
   const featuredFootballMatches = Array.isArray(window.RIFNOTE_SEARCH?.featuredFootballMatches) ? window.RIFNOTE_SEARCH.featuredFootballMatches : [];
-  const activeFeaturedFootballMatches = featuredFootballMatches.filter((fixture) => fixture && !isFootballFixtureFinished(fixture));
+  const liveFeaturedFootballMatches = featuredFootballMatches.filter(isFootballFixtureOngoing);
   const transferDeadline = window.RIFNOTE_SEARCH?.transferDeadline || null;
   const hasTransferDeadlineTakeover = Boolean(transferDeadline?.enabled);
   const storyChannels = window.RIFNOTE_SEARCH?.storyChannels || {};
   const hasEditorialTakeover = Boolean(storyChannels.trending || storyChannels.football);
   const isElectionTakeoverActive = Boolean(window.RIFNOTE_SEARCH?.electionTakeover?.enabled);
-  const hasFeaturedFootballTakeover = activeFeaturedFootballMatches.length > 0;
+  const hasFeaturedFootballTakeover = liveFeaturedFootballMatches.length > 0;
   const hasAdminHomepageMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl) && !hasTransferDeadlineTakeover && !isElectionTakeoverActive && !hasEditorialTakeover && !hasFeaturedFootballTakeover;
   const hasHomeSearchMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl || hasTransferDeadlineTakeover || isElectionTakeoverActive || hasEditorialTakeover || hasFeaturedFootballTakeover);
-  const homeLive = window.RIFNOTE_SEARCH?.homeLive || null;
   const showMobileTakeoverLogo = hasHomeSearchMedia && !hasAdminHomepageMedia;
+  const homepageEditorialStory = homeLive?.enabled ? {
+    headline: homeLive.title,
+    excerpt: homeLive.excerpt,
+    content: homeLive.content,
+    image: homeLive.image_url,
+    permalink: homeLive.url || '#',
+    source_name: homeLive.source || 'Rifnote',
+    live_status: homeLive.status || 'live',
+  } : (homeLeadStory || homeStories[0] || (window.RIFNOTE_SEARCH?.canManageOptions ? {
+    headline: 'Add a homepage live story', excerpt: 'Use the editor to publish a live, breaking, or developing update.', source_name: 'Rifnote',
+  } : null));
 
   useEffect(() => {
     const header = document.querySelector('.rs-plugin-header');
@@ -991,11 +1003,15 @@ function App({ mode }) {
   return (
     <main className="rs-shell rs-search-page">
       {isHome ? (
-        <section className={`rs-google-home ${hasHomeSearchMedia ? 'has-home-media' : ''}`}>
-          {hasHomeSearchMedia ? (
-            hasTransferDeadlineTakeover
-              ? <TransferDeadlineHomeTakeover deadline={transferDeadline} />
-              : <HomeSearchMedia primary featuredFootballMatches={activeFeaturedFootballMatches} storyChannels={storyChannels} />
+        <section className="rs-google-home rs-home-editorial-layout">
+          {hasTransferDeadlineTakeover ? (
+            <TransferDeadlineHomeTakeover deadline={transferDeadline} />
+          ) : isElectionTakeoverActive ? (
+            <HomeSearchMedia primary featuredFootballMatches={[]} storyChannels={{}} />
+          ) : homepageEditorialStory || homeNotes === null ? (
+            <HomeEditorialLead story={homepageEditorialStory} loading={homeNotes === null} live={homeLive} onLiveChange={setHomeLive} />
+          ) : hasAdminHomepageMedia ? (
+            <HomeSearchMedia primary featuredFootballMatches={[]} storyChannels={{}} />
           ) : (
             <div className="rs-orbit-logo" aria-label="Rifnote Search">
               <h1 className="rs-google-logo">
@@ -1014,7 +1030,7 @@ function App({ mode }) {
               ))}
             </div>
           )}
-          {homeLive?.enabled ? <HomeLiveFeature live={homeLive} /> : null}
+          {liveFeaturedFootballMatches.length ? <HomeLiveMatchStrip fixture={liveFeaturedFootballMatches[0]} /> : <HomeUtilityStrip state={state} />}
           <SearchPanel state={state} onSubmit={submitSearch} compact="home" />
           <HomeQuickLinks activePill={homePill} items={homepagePills} onSelect={updateHomePill} showCategories={Boolean(siteCategories.length)} categoriesActive={showHomeCategories} onCategoriesToggle={toggleHomeCategories} />
         </section>
@@ -5821,6 +5837,185 @@ function HomeEditorialTakeover({ featuredFootballMatches = [], channels = {} }) 
   );
 }
 
+function HomeEditorialLead({ story = null, loading = false, live = {}, onLiveChange = () => {} }) {
+  const canManage = Boolean(window.RIFNOTE_SEARCH?.canManageOptions);
+  const [editing, setEditing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [form, setForm] = useState(() => ({
+    status: live?.enabled ? (live.status || 'live') : 'empty', title: live?.title || '', excerpt: live?.excerpt || '',
+    content: live?.content || '', image_url: live?.image_url || '', url: live?.url || '',
+  }));
+  if (loading && !story) {
+    return (
+      <section className="rs-home-editorial-lead is-loading" aria-label="Loading the lead story">
+        <span className="rs-home-editorial-lead-image" />
+        <span className="rs-home-editorial-lead-line is-title" />
+        <span className="rs-home-editorial-lead-line" />
+      </section>
+    );
+  }
+
+  if (!story) return null;
+
+  const storyUrl = story.permalink || story.story_url || story.read_full_story_url || story.original_url || story.source_url || '#';
+  const image = story.image || story.image_url || story.thumbnail_url || window.RIFNOTE_SEARCH?.homeSearchMediaUrl || '';
+  const headline = decodeText(story.headline || story.title || 'Latest from Rifnote');
+  const excerpt = decodeText(story.excerpt || story.summary || story.description || '');
+  const source = decodeText(story.source_name || story.source_domain || 'Rifnote');
+  const status = String(story.live_status || 'live').toLowerCase();
+  const statusLabel = status === 'empty' ? 'Live' : status;
+
+  const openEditor = () => {
+    setForm({ status: live?.enabled ? (live.status || 'live') : 'empty', title: live?.title || '', excerpt: live?.excerpt || '', content: live?.content || '', image_url: live?.image_url || '', url: live?.url || '' });
+    setMessage('');
+    setEditing(true);
+  };
+
+  const saveLive = async (event) => {
+    event.preventDefault();
+    setSaving(true);
+    setMessage('Saving…');
+    try {
+      const payload = await updateHomeLive(form);
+      onLiveChange(payload.live || { enabled: false, status: 'empty' });
+      setMessage('Saved');
+      setEditing(false);
+    } catch (error) {
+      setMessage(error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const uploadLiveImage = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setMessage('Uploading image…');
+    try {
+      const payload = await uploadMedia(file);
+      setForm((current) => ({ ...current, image_url: payload.url || payload.source_url || '' }));
+      setMessage('Image uploaded');
+    } catch (error) {
+      setMessage(error.message);
+    }
+  };
+
+  return (
+    <article className="rs-home-editorial-lead">
+      <a className={`rs-home-editorial-lead-image ${image ? '' : 'is-fallback'} ${storyUrl === '#' ? 'is-static' : ''}`} href={storyUrl} {...linkPropsForUrl(storyUrl)} onClick={(event) => { if (storyUrl === '#') event.preventDefault(); else trackStoryClick(story, 'homepage_editorial_lead_click', 'Lead story'); }}>
+        {image ? <img src={image} alt="" loading="eager" fetchPriority="high" /> : <Newspaper size={48} aria-hidden="true" />}
+      </a>
+      <div className="rs-home-editorial-lead-copy">
+        <div className="rs-home-editorial-lead-meta">
+          <span className={`rs-home-editorial-live is-${status}`}><i /> {statusLabel}</span>
+          <span>{source}</span>
+          {story.published_at_human || story.published_at ? <time>{story.published_at_human || formatDate(story.published_at)}</time> : null}
+        </div>
+        <h1><a href={storyUrl} {...linkPropsForUrl(storyUrl)} onClick={(event) => { if (storyUrl === '#') event.preventDefault(); else trackStoryClick(story, 'homepage_editorial_lead_click', 'Lead story'); }}>{headline}</a></h1>
+        {excerpt ? <p>{excerpt}</p> : null}
+        {story.content ? <div className="rs-home-editorial-content" dangerouslySetInnerHTML={{ __html: story.content }} /> : null}
+      </div>
+      {canManage ? <button className="rs-home-live-edit" type="button" onClick={openEditor}><Pencil size={15} /> Edit live story</button> : null}
+      {editing ? createPortal((
+        <div className="rs-home-live-editor-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditing(false); }}>
+          <form className="rs-home-live-editor" onSubmit={saveLive}>
+            <header><div><span>Homepage</span><h2>Live story</h2></div><button type="button" onClick={() => setEditing(false)} aria-label="Close">×</button></header>
+            <label><span>Status</span><select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="empty">Empty</option><option value="live">Live</option><option value="breaking">Breaking</option><option value="update">Update</option><option value="developing">Developing</option></select></label>
+            <label><span>Title</span><input value={form.title} maxLength="180" onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="What is happening?" /></label>
+            <label><span>Excerpt</span><textarea rows="3" value={form.excerpt} onChange={(event) => setForm({ ...form, excerpt: event.target.value })} placeholder="A short summary for the homepage" /></label>
+            <label><span>Content <small>optional</small></span><textarea rows="6" value={form.content} onChange={(event) => setForm({ ...form, content: event.target.value })} placeholder="Additional details" /></label>
+            <label><span>Image URL</span><input type="url" value={form.image_url} onChange={(event) => setForm({ ...form, image_url: event.target.value })} placeholder="https://…" /></label>
+            <label className="rs-home-live-upload"><span>Or upload image</span><input type="file" accept="image/*" onChange={uploadLiveImage} /></label>
+            {form.image_url ? <img className="rs-home-live-preview" src={form.image_url} alt="" /> : null}
+            <label><span>Link <small>optional</small></span><input type="url" value={form.url} onChange={(event) => setForm({ ...form, url: event.target.value })} placeholder="https://…" /></label>
+            <footer><small aria-live="polite">{message}</small><button type="button" onClick={() => setEditing(false)}>Cancel</button><button className="primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save live story'}</button></footer>
+          </form>
+        </div>
+      ), document.body) : null}
+    </article>
+  );
+}
+
+function HomeLiveMatchStrip({ fixture = {} }) {
+  return (
+    <section className="rs-home-live-match-wrap">
+      <HomeFeaturedFootballScoreboards fixtures={[fixture]} compact adminControls />
+    </section>
+  );
+}
+
+function visitorLocalContext() {
+  const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Africa/Lagos';
+  const locale = navigator.language || 'en-NG';
+  const region = (locale.match(/[-_]([A-Z]{2})\b/i)?.[1] || '').toUpperCase();
+  const currencyByRegion = { NG:'NGN', GH:'GHS', KE:'KES', ZA:'ZAR', GB:'GBP', CA:'CAD', AU:'AUD', JP:'JPY', CN:'CNY', IN:'INR', US:'USD', DE:'EUR', FR:'EUR', ES:'EUR', IT:'EUR', NL:'EUR', IE:'EUR', PT:'EUR' };
+  const locations = {
+    'Africa/Lagos': [6.524, 3.379, 'Lagos'], 'Africa/Accra': [5.56, -0.205, 'Accra'], 'Africa/Nairobi': [-1.286, 36.817, 'Nairobi'],
+    'Africa/Johannesburg': [-26.204, 28.047, 'Johannesburg'], 'Europe/London': [51.507, -0.128, 'London'], 'America/New_York': [40.713, -74.006, 'New York'],
+    'America/Los_Angeles': [34.052, -118.244, 'Los Angeles'], 'Europe/Paris': [48.857, 2.352, 'Paris'], 'Asia/Tokyo': [35.677, 139.65, 'Tokyo'],
+  };
+  const location = locations[timezone] || locations['Africa/Lagos'];
+  return { currency: currencyByRegion[region] || (timezone.startsWith('Europe/') ? 'EUR' : 'NGN'), latitude: location[0], longitude: location[1], label: location[2] };
+}
+
+function HomeUtilityStrip({ state }) {
+  const context = useMemo(visitorLocalContext, []);
+  const [weather, setWeather] = useState(null);
+  const [markets, setMarkets] = useState([]);
+  const [topics, setTopics] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadWeather = (location) => getLiveWeather(location).then((payload) => {
+      if (!cancelled) setWeather(normalizeSignalItems(payload?.items)[0] || null);
+    }).catch(() => {});
+
+    loadWeather(context);
+    getLiveMarkets().then((payload) => !cancelled && setMarkets(normalizeSignalItems(payload?.items))).catch(() => {});
+    getTrendingTopics({ limit: 8 }).then((payload) => !cancelled && setTopics(payload?.topics || [])).catch(() => {});
+
+    if (navigator.geolocation && navigator.permissions?.query) {
+      navigator.permissions.query({ name: 'geolocation' }).then((permission) => {
+        if (cancelled || permission.state !== 'granted') return;
+        navigator.geolocation.getCurrentPosition((position) => loadWeather({
+          latitude: Number(position.coords.latitude.toFixed(3)),
+          longitude: Number(position.coords.longitude.toFixed(3)),
+          label: 'Near you',
+        }), () => {}, { maximumAge: 900000, timeout: 3000 });
+      }).catch(() => {});
+    }
+
+    return () => { cancelled = true; };
+  }, [context]);
+
+  const desiredPair = context.currency === 'USD' ? 'USD/EUR' : `${context.currency}/USD`;
+  const market = markets.find((item) => String(item.label).toUpperCase() === desiredPair)
+    || markets.find((item) => String(item.label).toUpperCase().startsWith(`${context.currency}/`))
+    || markets[0];
+
+  return (
+    <section className="rs-home-utilities" aria-label="Local information">
+      <article className="rs-home-utility-box">
+        <span className="rs-home-utility-icon">{weather ? signalIcon('weather', weather.status, weather.icon) : <CloudSun size={22} />}</span>
+        <span><small>{weather?.label || context.label}</small><strong>{weather?.value || 'Weather'}</strong></span>
+        {weather?.status ? <em>{weather.status}</em> : null}
+      </article>
+      <article className="rs-home-utility-box">
+        <span className="rs-home-utility-icon">{marketSymbol(market?.label || desiredPair)}</span>
+        <span><small>{market?.label || desiredPair}</small><strong>{market?.value || '—'}</strong></span>
+      </article>
+      <details className="rs-home-trending-box">
+        <summary><span><TrendingUp size={20} /> Trending</span><b>{topics.length}</b></summary>
+        <div>
+          {topics.map((topic) => <button type="button" key={topic.slug || topic.topic} onClick={() => state.setQuery(topic.topic)}>{topic.topic}</button>)}
+          {!topics.length ? <small>Topics are updating…</small> : null}
+        </div>
+      </details>
+    </section>
+  );
+}
+
 function HomeSearchMedia({ primary = false, featuredFootballMatches = [], storyChannels = {} }) {
   const [takeover, setTakeover] = useState(window.RIFNOTE_SEARCH?.electionTakeover || null);
   const [soundOn, setSoundOn] = useState(false);
@@ -5946,10 +6141,10 @@ function mergeFeaturedFixtureDetails(fixture = {}, payload = {}) {
   };
 }
 
-function useFeaturedFootballFixtures(fixtures = []) {
+function useFeaturedFootballFixtures(fixtures = [], includeFinished = false) {
   const initialFixtures = useMemo(() => (
-    Array.isArray(fixtures) ? fixtures.filter((fixture) => fixture && !isFootballFixtureFinished(fixture)) : []
-  ), [fixtures]);
+    Array.isArray(fixtures) ? fixtures.filter((fixture) => fixture && (includeFinished || !isFootballFixtureFinished(fixture))) : []
+  ), [fixtures, includeFinished]);
   const [liveFixtures, setLiveFixtures] = useState(initialFixtures);
   const liveFixturesRef = useRef(initialFixtures);
   const initialFixturesRef = useRef(initialFixtures);
@@ -5997,15 +6192,15 @@ function useFeaturedFootballFixtures(fixtures = []) {
               const id = getFixtureDeepLinkId(fixture);
               return id && nextById.has(String(id)) ? nextById.get(String(id)) : fixture;
             })
-            .filter((fixture) => fixture && !isFootballFixtureFinished(fixture));
+            .filter((fixture) => fixture && (includeFinished || !isFootballFixtureFinished(fixture)));
         });
       })
       .catch(() => {});
-  }, []);
+  }, [includeFinished]);
 
   useLiveInterval(refreshFeaturedFixtures, 30000, initialFixtures.length > 0);
 
-  return liveFixtures.filter((fixture) => fixture && !isFootballFixtureFinished(fixture));
+  return liveFixtures.filter((fixture) => fixture && (includeFinished || !isFootballFixtureFinished(fixture)));
 }
 
 function getFixtureRedCards(fixture = {}) {
@@ -6069,8 +6264,8 @@ function HalftimeStatsMotion({ fixture = {} }) {
   );
 }
 
-function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false, compact = false }) {
-  const cleanFixtures = useFeaturedFootballFixtures(fixtures);
+function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false, compact = false, includeFinished = false, adminControls = false }) {
+  const cleanFixtures = useFeaturedFootballFixtures(fixtures, includeFinished);
   const [active, setActive] = useState(0);
   const [scoreMemory, setScoreMemory] = useState({});
   const [goalFlash, setGoalFlash] = useState(null);
@@ -6329,7 +6524,7 @@ function HomeFeaturedFootballScoreboards({ fixtures = [], primary = false, compa
       {!compact && isHalfTime ? <HalftimeStatsMotion fixture={fixture} /> : null}
       {!compact && goalScorers.length ? <FeaturedGoalScorers goals={goalScorers} /> : null}
       {!compact && venue ? <div className="rs-home-football-venue">Venue: <b>{venue}</b></div> : null}
-      {!compact && canTestGoalAnimation ? (
+      {canTestGoalAnimation && (!compact || adminControls) ? (
         <div className="rs-home-goal-test-row">
           <button className="rs-home-goal-test" type="button" onClick={testGoalAnimation}>
             Test goal animation
@@ -6369,6 +6564,11 @@ function isFootballFixtureFinished(fixture) {
   const goalsAway = fixture?.goals?.away;
 
   return elapsed >= 120 && goalsHome !== null && goalsHome !== undefined && goalsAway !== null && goalsAway !== undefined;
+}
+
+function isFootballFixtureOngoing(fixture = {}) {
+  const status = String(fixture.status_short || fixture.fixture?.status?.short || '').toUpperCase();
+  return ['1H', 'HT', '2H', 'ET', 'BT', 'P', 'LIVE', 'INT'].includes(status);
 }
 
 function getFootballFixtureUrl(fixture = {}) {
