@@ -1031,8 +1031,8 @@ function App({ mode }) {
               ))}
             </div>
           )}
-          <SearchPanel state={state} onSubmit={submitSearch} compact="home" />
           {liveFeaturedFootballMatches.length ? <HomeLiveMatchStrip fixture={liveFeaturedFootballMatches[0]} /> : <HomeUtilityStrip state={state} />}
+          <SearchPanel state={state} onSubmit={submitSearch} compact="home" />
           <HomeQuickLinks activePill={homePill} items={homepagePills} onSelect={updateHomePill} showCategories={Boolean(siteCategories.length)} categoriesActive={showHomeCategories} onCategoriesToggle={toggleHomeCategories} />
         </section>
       ) : null}
@@ -6003,15 +6003,15 @@ function HomeUtilityStrip({ state }) {
     <section className="rs-home-utilities" aria-label="Local information">
       <article className="rs-home-utility-box">
         <span className="rs-home-utility-icon">{weather ? signalIcon('weather', weather.status, weather.icon) : <CloudSun size={22} />}</span>
-        <span><small>{weather?.label || context.label}</small><strong>{weather?.value || 'Weather'}</strong></span>
+        <span><small>Weather in {weather?.label || context.label}</small><strong>{weather?.value || 'Checking weather…'}</strong></span>
         {weather?.status ? <em>{weather.status}</em> : null}
       </article>
       <article className="rs-home-utility-box">
         <span className="rs-home-utility-icon">{marketSymbol(market?.label || desiredPair)}</span>
-        <span><small>{market?.label || desiredPair}</small><strong>{market?.value || '—'}</strong></span>
+        <span><small>1 US dollar in {context.currency === 'USD' ? 'euros' : context.currency}</small><strong>{market?.value || 'Checking rate…'}</strong></span>
       </article>
       <details className="rs-home-trending-box">
-        <summary><span><TrendingUp size={20} /> Trending</span><b>{topics.length}</b></summary>
+        <summary><span><TrendingUp size={20} /> Trending topics</span><b>{topics.length}</b></summary>
         <div>
           {topics.map((topic) => <button type="button" key={topic.slug || topic.topic} onClick={() => state.setQuery(topic.topic)}>{topic.topic}</button>)}
           {!topics.length ? <small>Topics are updating…</small> : null}
