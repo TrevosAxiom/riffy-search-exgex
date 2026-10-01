@@ -20,7 +20,10 @@
 .rs-home-editorial-lead p{margin:2px 0 0;color:#33363b;font-family:Montserrat,sans-serif;font-size:clamp(.92rem,1.05vw,1.08rem);font-weight:560;line-height:1.5}
 .rs-home-editorial-content{max-width:980px;color:#475467;font-size:.95rem;line-height:1.65}
 .rs-home-editorial-content p{margin:0 0 8px;font-size:inherit}
-.rs-home-live-edit{position:absolute;z-index:4;top:14px;right:14px;display:inline-flex;align-items:center;gap:7px;padding:9px 13px;border:1px solid rgba(255,255,255,.6);border-radius:999px;background:rgba(16,24,40,.86);color:#fff;font:inherit;font-size:.75rem;font-weight:850;cursor:pointer;backdrop-filter:blur(10px)}
+.rs-home-live-actions{position:absolute;z-index:4;top:14px;right:14px;display:flex;align-items:center;gap:7px}
+.rs-home-live-actions button{display:inline-flex;align-items:center;gap:6px;padding:9px 12px;border:1px solid rgba(255,255,255,.62);border-radius:999px;color:#fff;font:inherit;font-size:.72rem;font-weight:850;cursor:pointer;backdrop-filter:blur(10px)}
+.rs-home-live-add{background:#d71920}
+.rs-home-live-edit{background:rgba(16,24,40,.86)}
 .rs-home-live-editor-backdrop{position:fixed;z-index:2147483000;inset:0;display:grid;place-items:center;padding:20px;background:rgba(16,24,40,.62);backdrop-filter:blur(8px)}
 .rs-home-live-editor{display:grid;gap:14px;width:min(680px,100%);max-height:92vh;padding:22px;border-radius:24px;background:#fff;box-shadow:0 32px 100px rgba(0,0,0,.35);overflow:auto}
 .rs-home-live-editor header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px}

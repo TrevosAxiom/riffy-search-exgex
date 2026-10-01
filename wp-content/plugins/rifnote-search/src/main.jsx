@@ -5895,6 +5895,7 @@ function HomeLiveRichTextEditor({ value = '', onChange }) {
 function HomeEditorialLead({ story = null, loading = false, live = {}, onLiveChange = () => {} }) {
   const canManage = Boolean(window.RIFNOTE_SEARCH?.canManageOptions);
   const [editing, setEditing] = useState(false);
+  const [editorMode, setEditorMode] = useState('edit');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [form, setForm] = useState(() => ({
@@ -5922,7 +5923,15 @@ function HomeEditorialLead({ story = null, loading = false, live = {}, onLiveCha
   const statusLabel = status && status !== 'empty' ? status : '';
 
   const openEditor = () => {
+    setEditorMode('edit');
     setForm({ status: live?.enabled ? (live.status || 'live') : 'empty', title: live?.title || '', excerpt: live?.excerpt || '', content: live?.raw_content || live?.content || '', image_url: live?.image_url || '', url: live?.url || '' });
+    setMessage('');
+    setEditing(true);
+  };
+
+  const openNewEditor = () => {
+    setEditorMode('new');
+    setForm({ status: 'live', title: '', excerpt: '', content: '', image_url: '', url: '' });
     setMessage('');
     setEditing(true);
   };
@@ -5966,11 +5975,11 @@ function HomeEditorialLead({ story = null, loading = false, live = {}, onLiveCha
         {excerpt ? <p>{excerpt}</p> : null}
         {story.content ? <div className="rs-home-editorial-content" dangerouslySetInnerHTML={{ __html: story.content }} /> : null}
       </div>
-      {canManage ? <button className="rs-home-live-edit" type="button" onClick={openEditor}><Pencil size={15} /> Edit live story</button> : null}
+      {canManage ? <div className="rs-home-live-actions"><button className="rs-home-live-add" type="button" onClick={openNewEditor}>+ Add new</button><button className="rs-home-live-edit" type="button" onClick={openEditor}><Pencil size={15} /> Edit</button></div> : null}
       {editing ? createPortal((
         <div className="rs-home-live-editor-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditing(false); }}>
           <form className="rs-home-live-editor" onSubmit={saveLive}>
-            <header><div><span>Homepage</span><h2>Live story</h2></div><button type="button" onClick={() => setEditing(false)} aria-label="Close">×</button></header>
+            <header><div><span>Homepage · {editorMode === 'new' ? 'New story' : 'Editing current story'}</span><h2>{editorMode === 'new' ? 'Add live story' : 'Edit live story'}</h2></div><button type="button" onClick={() => setEditing(false)} aria-label="Close">×</button></header>
             <label><span>Status</span><select className={`rs-home-live-status-select is-${form.status}`} value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="empty">Empty</option><option value="live">Live</option><option value="breaking">Breaking</option><option value="update">Update</option><option value="developing">Developing</option></select></label>
             <label><span>Title</span><input value={form.title} maxLength="180" onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="What is happening?" /></label>
             <label><span>Excerpt</span><textarea rows="3" value={form.excerpt} onChange={(event) => setForm({ ...form, excerpt: event.target.value })} placeholder="A short summary for the homepage" /></label>
@@ -5979,7 +5988,7 @@ function HomeEditorialLead({ story = null, loading = false, live = {}, onLiveCha
             <label className="rs-home-live-upload"><span>Or upload image</span><input type="file" accept="image/*" onChange={uploadLiveImage} /></label>
             {form.image_url ? <img className="rs-home-live-preview" src={form.image_url} alt="" /> : null}
             <label><span>Link <small>optional</small></span><input type="url" value={form.url} onChange={(event) => setForm({ ...form, url: event.target.value })} placeholder="https://…" /></label>
-            <footer><small aria-live="polite">{message}</small><button type="button" onClick={() => setEditing(false)}>Cancel</button><button className="primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save live story'}</button></footer>
+            <footer><small aria-live="polite">{message}</small><button type="button" onClick={() => setEditing(false)}>Cancel</button><button className="primary" type="submit" disabled={saving}>{saving ? 'Saving…' : editorMode === 'new' ? 'Publish new story' : 'Save changes'}</button></footer>
           </form>
         </div>
       ), document.body) : null}
