@@ -5847,6 +5847,51 @@ function HomeEditorialLogo() {
   );
 }
 
+function HomeLiveRichTextEditor({ value = '', onChange }) {
+  const editorRef = useRef(null);
+
+  useEffect(() => {
+    if (editorRef.current && editorRef.current.innerHTML !== value) editorRef.current.innerHTML = value;
+  }, [value]);
+
+  const runCommand = (command, argument = null) => {
+    editorRef.current?.focus();
+    document.execCommand(command, false, argument);
+    onChange(editorRef.current?.innerHTML || '');
+  };
+  const addLink = () => {
+    const url = window.prompt('Paste the link URL');
+    if (url) runCommand('createLink', url);
+  };
+  const addEmbed = () => {
+    const url = window.prompt('Paste a social post or media URL');
+    if (!url) return;
+    const safeUrl = document.createElement('div');
+    safeUrl.textContent = url.trim();
+    const escapedUrl = safeUrl.innerHTML;
+    editorRef.current?.focus();
+    document.execCommand('insertHTML', false, `<p><a href="${escapedUrl}" target="_blank" rel="noopener noreferrer">${escapedUrl}</a></p>`);
+    onChange(editorRef.current?.innerHTML || '');
+  };
+
+  return (
+    <div className="rs-home-rich-editor">
+      <div className="rs-home-rich-toolbar" aria-label="Content formatting">
+        <button type="button" onClick={() => runCommand('bold')} aria-label="Bold"><strong>B</strong></button>
+        <button type="button" onClick={() => runCommand('italic')} aria-label="Italic"><em>I</em></button>
+        <button type="button" onClick={() => runCommand('formatBlock', 'h3')} aria-label="Heading">H</button>
+        <button type="button" onClick={() => runCommand('insertUnorderedList')} aria-label="Bulleted list">• List</button>
+        <button type="button" onClick={() => runCommand('formatBlock', 'blockquote')} aria-label="Quote">Quote</button>
+        <button type="button" onClick={addLink} aria-label="Add link">Link</button>
+        <button type="button" onClick={addEmbed} aria-label="Embed social or media URL">Embed</button>
+        <button type="button" onClick={() => runCommand('removeFormat')} aria-label="Clear formatting">Clear</button>
+      </div>
+      <div ref={editorRef} className="rs-home-rich-surface" contentEditable suppressContentEditableWarning role="textbox" aria-multiline="true" data-placeholder="Additional details, links or social embeds" onInput={(event) => onChange(event.currentTarget.innerHTML)} />
+      <small>Paste a social or video URL on its own line, or use Embed.</small>
+    </div>
+  );
+}
+
 function HomeEditorialLead({ story = null, loading = false, live = {}, onLiveChange = () => {} }) {
   const canManage = Boolean(window.RIFNOTE_SEARCH?.canManageOptions);
   const [editing, setEditing] = useState(false);
@@ -5854,7 +5899,7 @@ function HomeEditorialLead({ story = null, loading = false, live = {}, onLiveCha
   const [message, setMessage] = useState('');
   const [form, setForm] = useState(() => ({
     status: live?.enabled ? (live.status || 'live') : 'empty', title: live?.title || '', excerpt: live?.excerpt || '',
-    content: live?.content || '', image_url: live?.image_url || '', url: live?.url || '',
+    content: live?.raw_content || live?.content || '', image_url: live?.image_url || '', url: live?.url || '',
   }));
   if (loading && !story) {
     return (
@@ -5877,7 +5922,7 @@ function HomeEditorialLead({ story = null, loading = false, live = {}, onLiveCha
   const statusLabel = status && status !== 'empty' ? status : '';
 
   const openEditor = () => {
-    setForm({ status: live?.enabled ? (live.status || 'live') : 'empty', title: live?.title || '', excerpt: live?.excerpt || '', content: live?.content || '', image_url: live?.image_url || '', url: live?.url || '' });
+    setForm({ status: live?.enabled ? (live.status || 'live') : 'empty', title: live?.title || '', excerpt: live?.excerpt || '', content: live?.raw_content || live?.content || '', image_url: live?.image_url || '', url: live?.url || '' });
     setMessage('');
     setEditing(true);
   };
@@ -5926,10 +5971,10 @@ function HomeEditorialLead({ story = null, loading = false, live = {}, onLiveCha
         <div className="rs-home-live-editor-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setEditing(false); }}>
           <form className="rs-home-live-editor" onSubmit={saveLive}>
             <header><div><span>Homepage</span><h2>Live story</h2></div><button type="button" onClick={() => setEditing(false)} aria-label="Close">×</button></header>
-            <label><span>Status</span><select value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="empty">Empty</option><option value="live">Live</option><option value="breaking">Breaking</option><option value="update">Update</option><option value="developing">Developing</option></select></label>
+            <label><span>Status</span><select className={`rs-home-live-status-select is-${form.status}`} value={form.status} onChange={(event) => setForm({ ...form, status: event.target.value })}><option value="empty">Empty</option><option value="live">Live</option><option value="breaking">Breaking</option><option value="update">Update</option><option value="developing">Developing</option></select></label>
             <label><span>Title</span><input value={form.title} maxLength="180" onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="What is happening?" /></label>
             <label><span>Excerpt</span><textarea rows="3" value={form.excerpt} onChange={(event) => setForm({ ...form, excerpt: event.target.value })} placeholder="A short summary for the homepage" /></label>
-            <label><span>Content <small>optional</small></span><textarea rows="6" value={form.content} onChange={(event) => setForm({ ...form, content: event.target.value })} placeholder="Additional details" /></label>
+            <label><span>Content <small>optional</small></span><HomeLiveRichTextEditor value={form.content} onChange={(content) => setForm((current) => ({ ...current, content }))} /></label>
             <label><span>Image URL</span><input type="url" value={form.image_url} onChange={(event) => setForm({ ...form, image_url: event.target.value })} placeholder="https://…" /></label>
             <label className="rs-home-live-upload"><span>Or upload image</span><input type="file" accept="image/*" onChange={uploadLiveImage} /></label>
             {form.image_url ? <img className="rs-home-live-preview" src={form.image_url} alt="" /> : null}
@@ -6028,7 +6073,7 @@ function HomeUtilityStrip({ state }) {
   const marketBase = String(shownMarket?.base || '').toUpperCase();
   const marketQuote = String(shownMarket?.symbol || '').toUpperCase();
   const marketPair = shownMarket?.label || (marketQuote && marketBase ? `${marketQuote}/${marketBase}` : `${context.currency}/USD`);
-  const marketCaption = `Local Currency/Dollar (${marketPair})`;
+  const marketCaption = marketPair;
   const weatherValue = weather?.value || (utilityStatus.weather === 'loading' ? 'Checking weather…' : 'Weather unavailable');
   const marketValue = shownMarket?.value || (utilityStatus.market === 'loading' ? 'Checking rate…' : 'Rate unavailable');
 

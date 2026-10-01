@@ -2299,7 +2299,11 @@ class Rifnote_Search_REST_API {
         update_option('rifnote_home_live_status', $status, false);
         update_option('rifnote_home_live_title', $title, false);
         update_option('rifnote_home_live_excerpt', sanitize_textarea_field((string) ($data['excerpt'] ?? '')), false);
-        update_option('rifnote_home_live_content', wp_kses_post((string) ($data['content'] ?? '')), false);
+        $content = wp_kses_post((string) ($data['content'] ?? ''));
+        $rendered_content = class_exists('Rifnote_Search_Social')
+            ? Rifnote_Search_Social::prepare_rich_content($content)
+            : $content;
+        update_option('rifnote_home_live_content', $content, false);
         update_option('rifnote_home_live_image_url', esc_url_raw((string) ($data['image_url'] ?? '')), false);
         update_option('rifnote_home_live_url', esc_url_raw((string) ($data['url'] ?? '')), false);
 
@@ -2310,7 +2314,8 @@ class Rifnote_Search_REST_API {
                 'status' => $status,
                 'title' => $title,
                 'excerpt' => sanitize_textarea_field((string) ($data['excerpt'] ?? '')),
-                'content' => wp_kses_post((string) ($data['content'] ?? '')),
+                'content' => $rendered_content,
+                'raw_content' => $content,
                 'image_url' => esc_url_raw((string) ($data['image_url'] ?? '')),
                 'url' => esc_url_raw((string) ($data['url'] ?? '')),
                 'source' => __('Rifnote', 'rifnote-search'),

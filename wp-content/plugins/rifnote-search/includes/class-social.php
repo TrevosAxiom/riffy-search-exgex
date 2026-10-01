@@ -485,7 +485,7 @@ class Rifnote_Search_Social {
         }
 
         $content = preg_replace_callback(
-            '~<p>\s*<a[^>]+href=["\'](https?://[^"\']+)["\'][^>]*>\s*\1\s*</a>\s*</p>~i',
+            '~<(?:p|div)>\s*<a[^>]+href=["\'](https?://[^"\']+)["\'][^>]*>\s*\1\s*</a>\s*</(?:p|div)>~i',
             function ($matches) {
                 $embed = self::render_embed_for_url($matches[1], array('allow_remote_oembed' => true));
                 return $embed ? $embed : $matches[0];
@@ -494,7 +494,7 @@ class Rifnote_Search_Social {
         );
 
         $content = preg_replace_callback(
-            '~<p>\s*(https?://[^\s<]+)\s*</p>~i',
+            '~<(?:p|div)>\s*(https?://[^\s<]+)\s*</(?:p|div)>~i',
             function ($matches) {
                 $embed = self::render_embed_for_url(html_entity_decode($matches[1], ENT_QUOTES, get_bloginfo('charset')), array('allow_remote_oembed' => true));
                 return $embed ? $embed : $matches[0];
@@ -503,6 +503,17 @@ class Rifnote_Search_Social {
         );
 
         return $content;
+    }
+
+    public static function prepare_rich_content($content) {
+        $content = wp_kses_post((string) $content);
+        if ('' === trim($content)) {
+            return '';
+        }
+
+        $content = wpautop($content);
+        $content = self::filter_content_embeds($content);
+        return wp_kses($content, self::embed_allowed_html());
     }
 
     public static function render_embed_for_url($url, $args = array()) {
