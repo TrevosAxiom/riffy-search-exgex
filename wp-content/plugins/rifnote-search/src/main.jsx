@@ -2,7 +2,7 @@ import React, { Component, useCallback, useEffect, useMemo, useRef, useState } f
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { ArrowLeft, ArrowRight, Bookmark, CalendarDays, Clock3, Cloud, CloudRain, CloudSun, DollarSign, ExternalLink, Flame, Globe2, Goal, Home, Landmark, Mail, Map as MapIcon, Menu, Newspaper, Pencil, Phone, Play, Radio, RotateCcw, Search, Shield, Sun, Trash2, TrendingUp, Trophy, UserRound, Volume2, VolumeX } from 'lucide-react';
-import { getAdInventory, getAdvertiserDashboard, getAnonKey, getDailyBriefing, getFeedDiagnostics, getFootballCompetition, getFootballFinished, getFootballFixtureDetails, getFootballFixtures, getFootballLive, getFootballPlayerProfile, getFootballPlayers, getFootballTeamProfile, getFootballTeams, getFootballTransfers, getFootballUpcoming, getForYou, getHomeLeadStory, getHomeNotes, getLiveMarkets, getLiveWeather, getNotifications, getPublisherStats, getRifnoteAiAnswer, getSocialEmbed, getSourceProfile, getStoryChannel, getStoryCluster, getSuggestions, getTrendingTopics, getWeblist, getWidget, getWorldWeather, registerDevice, saveAlert, savePreference, searchRifnote, subscribeNewsletter, submitAdvertiserPaymentProof, submitAdvertiserSignup, submitBetaFeedback, submitContactMessage, submitLegalRequest, submitPublisherSignup, submitPublisherStory, submitSponsorRequest, subscribeNoResult, trackAnalyticsEvent, trackSponsoredClick, trashStory, updateAdvertiserProfile, updateHomeLive, updateLiveTrending, updateNotification, updateWeblist, uploadMedia } from './api.js';
+import { getAdInventory, getAdvertiserDashboard, getAnonKey, getDailyBriefing, getFeedDiagnostics, getFootballCompetition, getFootballFinished, getFootballFixtureDetails, getFootballFixtures, getFootballLive, getFootballPlayerProfile, getFootballPlayers, getFootballTeamProfile, getFootballTeams, getFootballTransfers, getFootballUpcoming, getForYou, getHomeLeadStory, getHomeNotes, getLiveMarkets, getLiveWeather, getNotifications, getPublisherStats, getRifnoteAiAnswer, getSocialEmbed, getSourceProfile, getStoryChannel, getStoryCluster, getSuggestions, getTrendingTopics, getVisitorContext, getWeblist, getWidget, getWorldWeather, registerDevice, saveAlert, savePreference, searchRifnote, subscribeNewsletter, submitAdvertiserPaymentProof, submitAdvertiserSignup, submitBetaFeedback, submitContactMessage, submitLegalRequest, submitPublisherSignup, submitPublisherStory, submitSponsorRequest, subscribeNoResult, trackAnalyticsEvent, trackSponsoredClick, trashStory, updateAdvertiserProfile, updateHomeLive, updateLiveTrending, updateNotification, updateWeblist, uploadMedia } from './api.js';
 import { rifnoteCategories, searchTabs } from './data/rifnote.js';
 import './styles/index.css';
 import './styles/home-editorial.css';
@@ -6019,11 +6019,30 @@ function visitorLocalContext() {
 }
 
 function HomeUtilityStrip({ state }) {
-  const context = useMemo(visitorLocalContext, []);
+  const fallbackContext = useMemo(visitorLocalContext, []);
+  const [context, setContext] = useState(fallbackContext);
   const [weather, setWeather] = useState(null);
   const [markets, setMarkets] = useState([]);
   const [topics, setTopics] = useState([]);
   const [utilityStatus, setUtilityStatus] = useState({ weather: 'loading', market: 'loading', topics: 'loading' });
+
+  useEffect(() => {
+    let cancelled = false;
+    getVisitorContext().then((payload) => {
+      if (cancelled || !payload?.detected) return;
+      const latitude = Number(payload.latitude);
+      const longitude = Number(payload.longitude);
+      setContext((current) => ({
+        ...current,
+        currency: payload.currency || current.currency,
+        latitude: Number.isFinite(latitude) ? latitude : current.latitude,
+        longitude: Number.isFinite(longitude) ? longitude : current.longitude,
+        label: payload.city || payload.region || current.label,
+        detected: true,
+      }));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -6041,7 +6060,7 @@ function HomeUtilityStrip({ state }) {
       .catch(() => getLiveWeather().then(applyWeather).catch(() => updateStatus('weather', 'error')));
     const refreshUtilities = () => {
       loadWeather(context);
-      getLiveMarkets().then((payload) => {
+      getLiveMarkets({ currency: context.currency }).then((payload) => {
         const items = normalizeSignalItems(payload?.items);
         if (!cancelled) setMarkets(items);
         updateStatus('market', items.length ? 'ready' : 'error');
@@ -6063,7 +6082,7 @@ function HomeUtilityStrip({ state }) {
         navigator.geolocation.getCurrentPosition((position) => loadWeather({
           latitude: Number(position.coords.latitude.toFixed(3)),
           longitude: Number(position.coords.longitude.toFixed(3)),
-          label: 'Near you',
+          label: context.label || 'Near you',
         }), () => {}, { maximumAge: 900000, timeout: 3000 });
       }).catch(() => {});
     }

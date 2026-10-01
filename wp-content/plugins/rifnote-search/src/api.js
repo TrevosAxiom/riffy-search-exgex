@@ -588,7 +588,15 @@ export async function getWorldWeather({ force = false } = {}) {
   return response.json();
 }
 
-export async function getLiveMarkets({ force = false } = {}) {
+export async function getVisitorContext() {
+  const baseUrl = restBaseUrl();
+  if (!baseUrl) return { detected: false };
+  const response = await fetch(new URL('rifnote/v1/live/location', baseUrl), { headers: headers() });
+  if (!response.ok) throw new Error(`Rifnote location failed: ${response.status}`);
+  return response.json();
+}
+
+export async function getLiveMarkets({ force = false, currency = '' } = {}) {
   const baseUrl = restBaseUrl();
 
   if (!baseUrl) {
@@ -597,6 +605,7 @@ export async function getLiveMarkets({ force = false } = {}) {
 
   const url = new URL('rifnote/v1/live/markets', baseUrl);
   if (force) url.searchParams.set('force', '1');
+  if (currency) url.searchParams.set('currency', currency);
 
   const response = await fetch(url, { headers: headers() });
   if (!response.ok) throw new Error(`Rifnote markets failed: ${response.status}`);

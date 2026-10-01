@@ -479,12 +479,19 @@ class Rifnote_Search_REST_API {
             ),
         ));
 
+        register_rest_route('rifnote/v1', '/live/location', array(
+            'methods' => WP_REST_Server::READABLE,
+            'callback' => array(__CLASS__, 'live_location'),
+            'permission_callback' => '__return_true',
+        ));
+
         register_rest_route('rifnote/v1', '/live/weather/world', array(
             'methods' => WP_REST_Server::READABLE,
             'callback' => array(__CLASS__, 'live_weather_world'),
             'permission_callback' => '__return_true',
             'args' => array(
                 'force' => array('sanitize_callback' => 'rest_sanitize_boolean'),
+                'currency' => array('sanitize_callback' => 'sanitize_key'),
             ),
         ));
 
@@ -1969,8 +1976,15 @@ class Rifnote_Search_REST_API {
         return rest_ensure_response(Rifnote_Search_Live_Data::world_weather_payload((bool) $request->get_param('force')));
     }
 
+    public static function live_location() {
+        $response = rest_ensure_response(Rifnote_Search_Live_Data::visitor_context());
+        $response->header('Cache-Control', 'private, no-store, max-age=0');
+        $response->header('Vary', 'CF-Connecting-IP');
+        return $response;
+    }
+
     public static function live_markets(WP_REST_Request $request) {
-        return rest_ensure_response(Rifnote_Search_Live_Data::markets_payload((bool) $request->get_param('force')));
+        return rest_ensure_response(Rifnote_Search_Live_Data::markets_payload((bool) $request->get_param('force'), (string) $request->get_param('currency')));
     }
 
     public static function sponsored_click(WP_REST_Request $request) {

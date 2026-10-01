@@ -130,20 +130,36 @@ class Rifnote_Search_Live_Data {
         return $payload;
     }
 
-    public static function markets_payload($force = false) {
+    public static function markets_payload($force = false, $visitor_currency = '') {
         $settings = self::settings();
-        $cached = self::cached_payload('markets', false);
+        $visitor_currency = strtoupper(sanitize_key((string) $visitor_currency));
+        if (!preg_match('/^[A-Z]{3}$/', $visitor_currency)) {
+            $visitor_currency = '';
+        }
+        $cache_key = $visitor_currency ? 'markets_' . strtolower($visitor_currency) : 'markets';
+        $cached = self::cached_payload($cache_key, false);
 
         if (!$force && $cached) {
             return $cached;
         }
 
-        $stale = self::cached_payload('markets', true);
+        $stale = self::cached_payload($cache_key, true);
         $previous = self::items_by_label($stale);
         $items = array();
         $errors = array();
+        $pairs = $settings['market_pairs'];
 
-        foreach ($settings['market_pairs'] as $pair) {
+        if ($visitor_currency) {
+            $visitor_pair = 'USD' === $visitor_currency
+                ? array('label' => 'EUR/USD', 'base' => 'EUR', 'symbol' => 'USD')
+                : array('label' => $visitor_currency . '/USD', 'base' => 'USD', 'symbol' => $visitor_currency);
+            $pairs = array_values(array_filter($pairs, function ($pair) use ($visitor_pair) {
+                return strtoupper((string) $pair['label']) !== $visitor_pair['label'];
+            }));
+            array_unshift($pairs, $visitor_pair);
+        }
+
+        foreach ($pairs as $pair) {
             $rate = null;
             $source = 'frankfurter';
             $as_of = '';
@@ -222,9 +238,86 @@ class Rifnote_Search_Live_Data {
             'errors' => $errors,
         );
 
-        self::store_payload('markets', 'market', $payload, $settings['ttl']);
+        self::store_payload($cache_key, 'market', $payload, $settings['ttl']);
 
         return $payload;
+    }
+
+    public static function visitor_context() {
+        $ip = self::visitor_ip();
+        if (!$ip) {
+            return array('detected' => false);
+        }
+
+        $cache_key = 'rifnote_visitor_context_' . hash_hmac('sha256', $ip, wp_salt('nonce'));
+        $cached = get_transient($cache_key);
+        if (is_array($cached)) {
+            return $cached;
+        }
+
+        $payload = array('detected' => false);
+        $response = wp_remote_get('https://ipapi.co/' . rawurlencode($ip) . '/json/', array(
+            'timeout' => 5,
+            'headers' => array('User-Agent' => 'Rifnote-Location/' . RIFNOTE_SEARCH_VERSION),
+        ));
+
+        if (!is_wp_error($response) && 200 === (int) wp_remote_retrieve_response_code($response)) {
+            $data = json_decode((string) wp_remote_retrieve_body($response), true);
+            if (is_array($data) && empty($data['error']) && isset($data['latitude'], $data['longitude'])) {
+                $country_code = strtoupper(sanitize_key((string) ($data['country_code'] ?? '')));
+                $currency = strtoupper(sanitize_key((string) ($data['currency'] ?? '')));
+                if (!preg_match('/^[A-Z]{3}$/', $currency)) {
+                    $currency = self::currency_for_country($country_code);
+                }
+                $payload = array(
+                    'detected' => true,
+                    'city' => sanitize_text_field((string) ($data['city'] ?? '')),
+                    'region' => sanitize_text_field((string) ($data['region'] ?? '')),
+                    'country_code' => $country_code,
+                    'currency' => preg_match('/^[A-Z]{3}$/', $currency) ? $currency : '',
+                    'latitude' => round((float) $data['latitude'], 3),
+                    'longitude' => round((float) $data['longitude'], 3),
+                    'provider' => 'ipapi',
+                );
+            }
+        }
+
+        set_transient($cache_key, $payload, 12 * HOUR_IN_SECONDS);
+        return $payload;
+    }
+
+    private static function currency_for_country($country_code) {
+        $map = array(
+            'NG' => 'NGN', 'GH' => 'GHS', 'KE' => 'KES', 'ZA' => 'ZAR', 'UG' => 'UGX', 'TZ' => 'TZS',
+            'RW' => 'RWF', 'EG' => 'EGP', 'MA' => 'MAD', 'DZ' => 'DZD', 'ET' => 'ETB', 'CM' => 'XAF',
+            'SN' => 'XOF', 'CI' => 'XOF', 'US' => 'USD', 'CA' => 'CAD', 'MX' => 'MXN', 'BR' => 'BRL',
+            'AR' => 'ARS', 'GB' => 'GBP', 'CH' => 'CHF', 'NO' => 'NOK', 'SE' => 'SEK', 'DK' => 'DKK',
+            'PL' => 'PLN', 'CZ' => 'CZK', 'RO' => 'RON', 'HU' => 'HUF', 'TR' => 'TRY', 'IN' => 'INR',
+            'CN' => 'CNY', 'JP' => 'JPY', 'KR' => 'KRW', 'SG' => 'SGD', 'MY' => 'MYR', 'ID' => 'IDR',
+            'PH' => 'PHP', 'TH' => 'THB', 'VN' => 'VND', 'AE' => 'AED', 'SA' => 'SAR', 'QA' => 'QAR',
+            'IL' => 'ILS', 'AU' => 'AUD', 'NZ' => 'NZD',
+        );
+        $euro = array('AT','BE','HR','CY','EE','FI','FR','DE','GR','IE','IT','LV','LT','LU','MT','NL','PT','SK','SI','ES');
+        if (in_array($country_code, $euro, true)) {
+            return 'EUR';
+        }
+        return $map[$country_code] ?? '';
+    }
+
+    private static function visitor_ip() {
+        $candidates = array(
+            $_SERVER['HTTP_CF_CONNECTING_IP'] ?? '',
+            $_SERVER['REMOTE_ADDR'] ?? '',
+        );
+
+        foreach ($candidates as $candidate) {
+            $candidate = trim((string) $candidate);
+            if (filter_var($candidate, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+                return $candidate;
+            }
+        }
+
+        return '';
     }
 
     private static function cached_payload($key, $allow_stale = false) {
