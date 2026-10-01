@@ -5964,15 +5964,6 @@ function visitorLocalContext() {
   return { currency: currencyByRegion[region] || (timezone.startsWith('Europe/') ? 'EUR' : 'NGN'), latitude: location[0], longitude: location[1], label: location[2] };
 }
 
-function currencyDisplayName(code = '') {
-  const currency = String(code).toUpperCase();
-  try {
-    return new Intl.DisplayNames([navigator.language || 'en'], { type: 'currency' }).of(currency) || currency;
-  } catch (_) {
-    return currency;
-  }
-}
-
 function HomeUtilityStrip({ state }) {
   const context = useMemo(visitorLocalContext, []);
   const [weather, setWeather] = useState(null);
@@ -6036,9 +6027,8 @@ function HomeUtilityStrip({ state }) {
   const shownMarket = market || markets[0] || null;
   const marketBase = String(shownMarket?.base || '').toUpperCase();
   const marketQuote = String(shownMarket?.symbol || '').toUpperCase();
-  const marketCaption = shownMarket
-    ? `1 ${currencyDisplayName(marketBase)} in ${currencyDisplayName(marketQuote)}`
-    : 'Local exchange rate';
+  const marketPair = shownMarket?.label || (marketQuote && marketBase ? `${marketQuote}/${marketBase}` : `${context.currency}/USD`);
+  const marketCaption = `Local Currency/Dollar (${marketPair})`;
   const weatherValue = weather?.value || (utilityStatus.weather === 'loading' ? 'Checking weather…' : 'Weather unavailable');
   const marketValue = shownMarket?.value || (utilityStatus.market === 'loading' ? 'Checking rate…' : 'Rate unavailable');
 
@@ -6046,7 +6036,7 @@ function HomeUtilityStrip({ state }) {
     <section className="rs-home-utilities" aria-label="Local information">
       <article className="rs-home-utility-box">
         <span className="rs-home-utility-icon">{weather ? signalIcon('weather', weather.status, weather.icon) : <CloudSun size={22} />}</span>
-        <span><small>Weather in {weather?.label || context.label}</small><strong>{weatherValue}</strong></span>
+        <span><small>{weather?.label || context.label}</small><strong>{weatherValue}</strong></span>
         {weather?.status ? <em>{weather.status}</em> : null}
       </article>
       <article className="rs-home-utility-box">
@@ -6054,7 +6044,7 @@ function HomeUtilityStrip({ state }) {
         <span><small>{marketCaption}</small><strong>{marketValue}</strong></span>
       </article>
       <details className="rs-home-trending-box">
-        <summary><span><TrendingUp size={20} /> Trending topics</span><b>{topics.length}</b></summary>
+        <summary><span><TrendingUp size={20} /> Trending</span><b>{topics.length}</b></summary>
         <div>
           {topics.map((topic) => <button type="button" key={topic.slug || topic.topic} onClick={() => state.setQuery(topic.topic)}>{topic.topic}</button>)}
           {!topics.length ? <small>{utilityStatus.topics === 'loading' ? 'Topics are updating…' : 'Topics unavailable'}</small> : null}
