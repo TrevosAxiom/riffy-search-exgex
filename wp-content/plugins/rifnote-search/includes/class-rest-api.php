@@ -2233,7 +2233,7 @@ class Rifnote_Search_REST_API {
             $ids = array_values(array_diff($ids, array($post_id)));
         }
 
-        $ids = array_slice($ids, 0, 12);
+        $ids = array_slice($ids, 0, 5);
         update_option('rifnote_trending_now_mode', 'manual', false);
         update_option('rifnote_trending_now_override_ids', $ids, false);
 

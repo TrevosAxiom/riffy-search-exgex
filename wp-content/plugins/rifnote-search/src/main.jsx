@@ -5964,21 +5964,53 @@ function visitorLocalContext() {
   return { currency: currencyByRegion[region] || (timezone.startsWith('Europe/') ? 'EUR' : 'NGN'), latitude: location[0], longitude: location[1], label: location[2] };
 }
 
+function currencyDisplayName(code = '') {
+  const currency = String(code).toUpperCase();
+  try {
+    return new Intl.DisplayNames([navigator.language || 'en'], { type: 'currency' }).of(currency) || currency;
+  } catch (_) {
+    return currency;
+  }
+}
+
 function HomeUtilityStrip({ state }) {
   const context = useMemo(visitorLocalContext, []);
   const [weather, setWeather] = useState(null);
   const [markets, setMarkets] = useState([]);
   const [topics, setTopics] = useState([]);
+  const [utilityStatus, setUtilityStatus] = useState({ weather: 'loading', market: 'loading', topics: 'loading' });
 
   useEffect(() => {
     let cancelled = false;
-    const loadWeather = (location) => getLiveWeather(location).then((payload) => {
-      if (!cancelled) setWeather(normalizeSignalItems(payload?.items)[0] || null);
-    }).catch(() => {});
+    const updateStatus = (key, value) => {
+      if (!cancelled) setUtilityStatus((current) => ({ ...current, [key]: value }));
+    };
+    const applyWeather = (payload) => {
+      const item = normalizeSignalItems(payload?.items)[0] || null;
+      if (!cancelled) setWeather(item);
+      updateStatus('weather', item ? 'ready' : 'error');
+      return item;
+    };
+    const loadWeather = (location) => getLiveWeather(location)
+      .then((payload) => applyWeather(payload) || getLiveWeather().then(applyWeather))
+      .catch(() => getLiveWeather().then(applyWeather).catch(() => updateStatus('weather', 'error')));
+    const refreshUtilities = () => {
+      loadWeather(context);
+      getLiveMarkets().then((payload) => {
+        const items = normalizeSignalItems(payload?.items);
+        if (!cancelled) setMarkets(items);
+        updateStatus('market', items.length ? 'ready' : 'error');
+      }).catch(() => updateStatus('market', 'error'));
+      getTrendingTopics({ limit: 8 }).then((payload) => {
+        const items = Array.isArray(payload?.topics) ? payload.topics : [];
+        if (!cancelled) setTopics(items);
+        updateStatus('topics', items.length ? 'ready' : 'error');
+      }).catch(() => updateStatus('topics', 'error'));
+    };
 
-    loadWeather(context);
-    getLiveMarkets().then((payload) => !cancelled && setMarkets(normalizeSignalItems(payload?.items))).catch(() => {});
-    getTrendingTopics({ limit: 8 }).then((payload) => !cancelled && setTopics(payload?.topics || [])).catch(() => {});
+    refreshUtilities();
+    const refreshTimer = window.setInterval(refreshUtilities, 15 * 60 * 1000);
+    document.addEventListener('rifnote:pwa-resume', refreshUtilities);
 
     if (navigator.geolocation && navigator.permissions?.query) {
       navigator.permissions.query({ name: 'geolocation' }).then((permission) => {
@@ -5991,30 +6023,41 @@ function HomeUtilityStrip({ state }) {
       }).catch(() => {});
     }
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      window.clearInterval(refreshTimer);
+      document.removeEventListener('rifnote:pwa-resume', refreshUtilities);
+    };
   }, [context]);
 
-  const desiredPair = context.currency === 'USD' ? 'USD/EUR' : `${context.currency}/USD`;
-  const market = markets.find((item) => String(item.label).toUpperCase() === desiredPair)
-    || markets.find((item) => String(item.label).toUpperCase().startsWith(`${context.currency}/`))
-    || markets[0];
+  const market = context.currency === 'USD'
+    ? markets.find((item) => String(item.base).toUpperCase() === 'EUR' && String(item.symbol).toUpperCase() === 'USD')
+    : markets.find((item) => String(item.base).toUpperCase() === 'USD' && String(item.symbol).toUpperCase() === context.currency);
+  const shownMarket = market || markets[0] || null;
+  const marketBase = String(shownMarket?.base || '').toUpperCase();
+  const marketQuote = String(shownMarket?.symbol || '').toUpperCase();
+  const marketCaption = shownMarket
+    ? `1 ${currencyDisplayName(marketBase)} in ${currencyDisplayName(marketQuote)}`
+    : 'Local exchange rate';
+  const weatherValue = weather?.value || (utilityStatus.weather === 'loading' ? 'Checking weather…' : 'Weather unavailable');
+  const marketValue = shownMarket?.value || (utilityStatus.market === 'loading' ? 'Checking rate…' : 'Rate unavailable');
 
   return (
     <section className="rs-home-utilities" aria-label="Local information">
       <article className="rs-home-utility-box">
         <span className="rs-home-utility-icon">{weather ? signalIcon('weather', weather.status, weather.icon) : <CloudSun size={22} />}</span>
-        <span><small>Weather in {weather?.label || context.label}</small><strong>{weather?.value || 'Checking weather…'}</strong></span>
+        <span><small>Weather in {weather?.label || context.label}</small><strong>{weatherValue}</strong></span>
         {weather?.status ? <em>{weather.status}</em> : null}
       </article>
       <article className="rs-home-utility-box">
-        <span className="rs-home-utility-icon">{marketSymbol(market?.label || desiredPair)}</span>
-        <span><small>1 US dollar in {context.currency === 'USD' ? 'euros' : context.currency}</small><strong>{market?.value || 'Checking rate…'}</strong></span>
+        <span className="rs-home-utility-icon">{marketSymbol(marketQuote || shownMarket?.label || context.currency)}</span>
+        <span><small>{marketCaption}</small><strong>{marketValue}</strong></span>
       </article>
       <details className="rs-home-trending-box">
         <summary><span><TrendingUp size={20} /> Trending topics</span><b>{topics.length}</b></summary>
         <div>
           {topics.map((topic) => <button type="button" key={topic.slug || topic.topic} onClick={() => state.setQuery(topic.topic)}>{topic.topic}</button>)}
-          {!topics.length ? <small>Topics are updating…</small> : null}
+          {!topics.length ? <small>{utilityStatus.topics === 'loading' ? 'Topics are updating…' : 'Topics unavailable'}</small> : null}
         </div>
       </details>
     </section>

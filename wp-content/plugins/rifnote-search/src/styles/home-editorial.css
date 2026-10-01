@@ -131,3 +131,26 @@
   .rs-home-trending-box summary{min-height:58px;padding:10px 13px}
   .rs-home-trending-box>div{left:0;right:auto;width:100%}
 }
+
+/* Android standalone mode must keep the document as the vertical scroller. */
+@media(max-width:720px){
+  html.rs-pwa-standalone:not(.rs-menu-is-open),
+  html.rs-pwa-standalone:not(.rs-menu-is-open) body.rifnote-search-plugin-page{
+    height:auto!important;
+    min-height:100%!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    overscroll-behavior-y:auto!important;
+    touch-action:pan-y!important;
+    -webkit-overflow-scrolling:touch
+  }
+  html.rs-pwa-standalone:not(.rs-menu-is-open) body.rifnote-search-plugin-page .rs-plugin-page,
+  html.rs-pwa-standalone:not(.rs-menu-is-open) body.rifnote-search-plugin-page .rs-plugin-main,
+  html.rs-pwa-standalone:not(.rs-menu-is-open) body.rifnote-search-plugin-page .rs-search-page{
+    height:auto!important;
+    min-height:var(--rs-app-height,100dvh)!important;
+    max-height:none!important;
+    overflow:visible!important;
+    touch-action:pan-y!important
+  }
+}

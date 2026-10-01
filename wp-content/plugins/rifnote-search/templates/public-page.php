@@ -184,7 +184,7 @@ $trending_now_posts = static function ($exclude = 0) use ($latest_sidebar_posts)
     if ('manual' === get_option('rifnote_trending_now_mode', 'wpp')) {
         $manual_ids = array_values(array_unique(array_filter(array_map('absint', (array) get_option('rifnote_trending_now_override_ids', array())))));
         if ($exclude) $manual_ids = array_values(array_diff($manual_ids, array($exclude)));
-        return $published_posts($manual_ids);
+        return array_slice($published_posts($manual_ids), 0, 5);
     }
 
     $cache_key = 'rifnote_public_wpp_trending_' . $exclude;
@@ -192,7 +192,7 @@ $trending_now_posts = static function ($exclude = 0) use ($latest_sidebar_posts)
 
     if (is_array($cached_ids)) {
         $cached_posts = $published_posts($cached_ids);
-        if ($cached_posts) return $cached_posts;
+        if ($cached_posts) return array_slice($cached_posts, 0, 5);
     }
 
     $ids = array();
@@ -214,7 +214,7 @@ $trending_now_posts = static function ($exclude = 0) use ($latest_sidebar_posts)
                AND wpp.view_datetime >= %s{$exclude_sql}
              GROUP BY p.ID
              ORDER BY SUM(wpp.pageviews) DESC, MAX(wpp.view_datetime) DESC
-             LIMIT 6",
+             LIMIT 5",
             $since
         ));
     }
@@ -229,13 +229,14 @@ $trending_now_posts = static function ($exclude = 0) use ($latest_sidebar_posts)
                AND p.post_status = 'publish'
                AND p.post_password = ''{$exclude_sql}
              ORDER BY wpp.pageviews DESC, wpp.last_viewed DESC
-             LIMIT 6"
+             LIMIT 5"
         );
     }
 
     $posts = $published_posts($ids);
-    if (!$posts) $posts = $latest_sidebar_posts($exclude);
+    if (!$posts) $posts = array_slice($latest_sidebar_posts($exclude), 0, 5);
 
+    $posts = array_slice($posts, 0, 5);
     set_transient($cache_key, wp_list_pluck($posts, 'ID'), 10 * MINUTE_IN_SECONDS);
     return $posts;
 };
@@ -502,7 +503,7 @@ if (is_singular()) {
                                         </div>
                                     <?php endif; ?>
                                     <ul>
-                                        <?php foreach (array_slice($news_now_posts, 0, 4) as $news_post) : ?>
+                                        <?php foreach (array_slice($news_now_posts, 0, 5) as $news_post) : ?>
                                             <li data-rs-trending-post="<?php echo esc_attr($news_post->ID); ?>"><a href="<?php echo esc_url(get_permalink($news_post)); ?>"><?php echo esc_html(get_the_title($news_post)); ?></a><?php if (current_user_can('manage_options')) : ?><button type="button" data-rs-trending-remove="<?php echo esc_attr($news_post->ID); ?>" aria-label="<?php echo esc_attr(sprintf(__('Remove %s from Trending Now', 'rifnote-search'), get_the_title($news_post))); ?>">×</button><?php endif; ?></li>
                                         <?php endforeach; ?>
                                     </ul>
