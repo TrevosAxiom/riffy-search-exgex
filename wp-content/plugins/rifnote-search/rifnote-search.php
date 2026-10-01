@@ -3,7 +3,7 @@
  * Plugin Name: Rifnote Search
  * Plugin URI: https://rifnote.com/
  * Description: AI-powered news search and publisher discovery plugin for Rifnote.
- * Version: 0.2.68
+ * Version: 0.2.69
  * Requires at least: 6.0
  * Requires PHP: 7.4
  * Author: Rifnote
@@ -15,7 +15,7 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
-define('RIFNOTE_SEARCH_VERSION', '0.2.68');
+define('RIFNOTE_SEARCH_VERSION', '0.2.69');
 define('RIFNOTE_SEARCH_FILE', __FILE__);
 define('RIFNOTE_SEARCH_DIR', plugin_dir_path(__FILE__));
 define('RIFNOTE_SEARCH_URL', plugin_dir_url(__FILE__));
@@ -567,6 +567,32 @@ JS;
     }
 
     private function homepage_live_context() {
+        $frontend_lock = get_option('rifnote_home_live_frontend_lock', array());
+        if (is_array($frontend_lock) && !empty($frontend_lock['locked'])) {
+            $status = sanitize_key((string) ($frontend_lock['status'] ?? 'empty'));
+            $allowed_statuses = array('empty', 'live', 'breaking', 'update', 'developing');
+            if (!in_array($status, $allowed_statuses, true)) {
+                $status = 'empty';
+            }
+            $live_content = wp_kses_post((string) ($frontend_lock['content'] ?? ''));
+
+            return array(
+                'enabled' => 'empty' !== $status,
+                'type' => 'frontend',
+                'status' => $status,
+                'title' => sanitize_text_field((string) ($frontend_lock['title'] ?? '')),
+                'url' => esc_url_raw((string) ($frontend_lock['url'] ?? '')),
+                'source' => __('Rifnote', 'rifnote-search'),
+                'excerpt' => sanitize_textarea_field((string) ($frontend_lock['excerpt'] ?? '')),
+                'content' => class_exists('Rifnote_Search_Social')
+                    ? Rifnote_Search_Social::prepare_rich_content($live_content)
+                    : $live_content,
+                'raw_content' => $live_content,
+                'image_url' => esc_url_raw((string) ($frontend_lock['image_url'] ?? '')),
+                'frontend_locked' => true,
+            );
+        }
+
         if (!(bool) get_option('rifnote_home_live_enabled', false)) {
             return array('enabled' => false, 'status' => 'empty');
         }

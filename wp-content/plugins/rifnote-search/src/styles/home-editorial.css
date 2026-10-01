@@ -1,6 +1,6 @@
 .rs-google-home.rs-home-editorial-layout{gap:clamp(18px,2.8vw,34px);min-height:0;padding:clamp(18px,3vw,42px) 18px 34px;overflow:visible;text-align:left}
 .rs-home-editorial-logo{display:grid;place-items:center;width:clamp(480px,40vw,620px);min-height:54px;margin:0 auto;color:#101828;text-decoration:none}
-.rs-home-editorial-logo img{display:block;width:auto;max-width:min(130px,48%);height:auto;max-height:44px;object-fit:contain}
+.rs-home-editorial-logo img{display:block;width:auto;max-width:min(163px,60%);height:auto;max-height:55px;object-fit:contain}
 .rs-home-editorial-logo strong{font-family:Outfit,sans-serif;font-size:2rem;font-weight:950;letter-spacing:-.055em}
 .rs-home-editorial-lead{position:relative;display:grid;gap:14px;width:clamp(480px,40vw,620px);margin:0 auto}
 .rs-home-editorial-lead-image{display:grid;place-items:center;width:100%;aspect-ratio:16/9;overflow:hidden;background:#eef1f5;color:#98a2b3;text-decoration:none}
@@ -72,7 +72,7 @@
   .rs-google-home.rs-home-editorial-layout{gap:17px;padding:8px 10px 25px}
   .rs-home-editorial-logo,.rs-home-editorial-lead,.rs-home-match-strip{width:100%;min-width:0}
   .rs-home-editorial-logo{min-height:46px}
-  .rs-home-editorial-logo img{max-width:110px;max-height:38px}
+  .rs-home-editorial-logo img{max-width:138px;max-height:48px}
   .rs-home-editorial-lead{gap:14px}
   .rs-home-editorial-lead-image{aspect-ratio:16/9}
   .rs-home-editorial-lead h1{font-size:clamp(1.85rem,9vw,3rem);line-height:1.02}

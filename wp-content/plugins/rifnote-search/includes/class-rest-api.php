@@ -2306,6 +2306,17 @@ class Rifnote_Search_REST_API {
         update_option('rifnote_home_live_content', $content, false);
         update_option('rifnote_home_live_image_url', esc_url_raw((string) ($data['image_url'] ?? '')), false);
         update_option('rifnote_home_live_url', esc_url_raw((string) ($data['url'] ?? '')), false);
+        update_option('rifnote_home_live_frontend_lock', array(
+            'locked' => true,
+            'status' => $status,
+            'title' => $title,
+            'excerpt' => sanitize_textarea_field((string) ($data['excerpt'] ?? '')),
+            'content' => $content,
+            'image_url' => esc_url_raw((string) ($data['image_url'] ?? '')),
+            'url' => esc_url_raw((string) ($data['url'] ?? '')),
+            'updated_at' => time(),
+            'updated_by' => get_current_user_id(),
+        ), false);
 
         return rest_ensure_response(array(
             'success' => true,
@@ -2319,6 +2330,7 @@ class Rifnote_Search_REST_API {
                 'image_url' => esc_url_raw((string) ($data['image_url'] ?? '')),
                 'url' => esc_url_raw((string) ($data['url'] ?? '')),
                 'source' => __('Rifnote', 'rifnote-search'),
+                'frontend_locked' => true,
             ),
         ));
     }
