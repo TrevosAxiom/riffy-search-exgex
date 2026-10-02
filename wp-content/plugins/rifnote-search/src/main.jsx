@@ -834,7 +834,7 @@ function App({ mode }) {
   const hasFeaturedFootballTakeover = liveFeaturedFootballMatches.length > 0;
   const hasAdminHomepageMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl) && !hasTransferDeadlineTakeover && !isElectionTakeoverActive && !hasEditorialTakeover && !hasFeaturedFootballTakeover;
   const hasHomeSearchMedia = Boolean(window.RIFNOTE_SEARCH?.homeSearchMediaUrl || hasTransferDeadlineTakeover || isElectionTakeoverActive || hasEditorialTakeover || hasFeaturedFootballTakeover);
-  const showMobileTakeoverLogo = hasHomeSearchMedia && !hasAdminHomepageMedia;
+  const showMobileTakeoverLogo = hasHomeSearchMedia && !hasAdminHomepageMedia && !hasFeaturedFootballTakeover;
   const homepageEditorialStory = homeLive?.enabled ? {
     headline: homeLive.title,
     excerpt: homeLive.excerpt,
